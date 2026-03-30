@@ -16,6 +16,9 @@
 3. `src/lib/valuation-timeseries.ts`
 4. `src/components/app-provider.tsx`
 5. `src/app/globals.css`
+6. `src/app/dashboard/page.tsx`
+7. `src/components/fund-detail-view.tsx`
+8. `src/components/fund-manage-view.tsx`
 
 ## 调试顺序
 
@@ -24,6 +27,8 @@
 3. 检查小屏宽度下是否出现横向滚动
 4. 检查基金搜索、加入、刷新、持仓计算是否仍然闭环
 5. 检查页面切换动画是否影响触控体验
+6. 检查持仓详情 → 持仓操作页路由跳转是否正确
+7. 检查 Dashboard 图表视图切换（曲线/分布/日历）是否无布局抖动
 
 ## 修改原则
 
@@ -35,9 +40,17 @@
 
 ## 已知边界
 
-- 当前交易日判断只做了轻量逻辑，没有接入节假日历
+- 当前未接入交易所法定节假日 API；日历休市标记基于周末 + 无交易数据推断
 - PWA 目前是基础缓存策略，不是完整离线优先
 - 图形资源暂时使用代码原生 SVG
+
+## 当前页面结构约定
+
+- Dashboard 固定四段：页头、概览总卡、统一图表卡、最佳持仓摘要卡
+- 图表信息应优先在一个容器内部切换，不要继续纵向堆叠多个同类大卡
+- Portfolio 详情与操作分离：
+  - 详情页：`/portfolio/[code]`
+  - 操作页：`/portfolio/[code]/manage`
 
 ## 如果你要继续完善
 
