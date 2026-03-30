@@ -1,30 +1,20 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
-import { ChevronLeft, Clock3, ReceiptText, TrendingUp, Trash2, Wallet } from "lucide-react";
+import { ChevronLeft, TrendingUp, Wallet } from "lucide-react";
 
-import { HoldingEditor } from "@/components/holding-editor";
 import { PerformanceLineChart } from "@/components/performance-line-chart";
 import { Sparkline } from "@/components/sparkline";
 import { useAppState } from "@/components/app-provider";
 import { formatCurrency, formatPercent, formatSignedCurrency, getHoldingMetrics, summarizeTransactions } from "@/lib/portfolio";
 import { nowInMarket, toMarketDay } from "@/lib/time";
-import type { FundTransactionType } from "@/lib/types";
 
 type FundDetailViewProps = {
   code: string;
   onBack?: () => void;
   asModal?: boolean;
 };
-
-const createDefaultForm = () => ({
-  date: new Date().toISOString().slice(0, 10),
-  type: "buy" as FundTransactionType,
-  share: "",
-  price: "",
-  fee: "",
-  note: "",
-});
 
 const getMetricValueClass = (value: string) => {
   const length = value.replace(/\s+/g, "").length;
@@ -35,8 +25,7 @@ const getMetricValueClass = (value: string) => {
 };
 
 export function FundDetailView({ code, onBack, asModal = false }: FundDetailViewProps) {
-  const { state, valuationSeries, updateHolding, addTransaction, removeTransaction } = useAppState();
-  const [form, setForm] = useState(createDefaultForm());
+  const { state, valuationSeries } = useAppState();
   const [chartType, setChartType] = useState<"history" | "intraday">("history");
 
   const fund = state.funds.find((item) => item.code === code);
@@ -88,23 +77,11 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
   const returnRateText = formatPercent(returnRate);
   const firstPurchaseText = holding?.firstPurchaseDate || "未记录";
   const holdingDaysText = holdingDays == null ? "—" : `${holdingDays} 天`;
-  const shareText = holding?.share != null ? holding.share.toFixed(2) : "—";
-  const costText = holding?.cost != null ? Number(holding.cost).toFixed(4) : "—";
+  const shareText = transactionSummary.netShare ? transactionSummary.netShare.toFixed(2) : "—";
+  const costText = formatCurrency(transactionSummary.averageCost);
+  const realizedProfitText = formatSignedCurrency(transactionSummary.realizedProfit);
   const totalFeesText = formatCurrency(transactionSummary.totalFees);
   const tradeCountText = `${transactions.length}`;
-
-  const submitTransaction = () => {
-    if (!form.date || !form.share || !form.price) return;
-    addTransaction(fund.code, {
-      date: form.date,
-      type: form.type,
-      share: Number(form.share),
-      price: Number(form.price),
-      fee: form.fee ? Number(form.fee) : 0,
-      note: form.note || null,
-    });
-    setForm(createDefaultForm());
-  };
 
   const content = (
     <>
@@ -122,59 +99,63 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
         </header>
       ) : null}
 
-      <section className="detail-metrics-stack">
-        <div className="detail-metrics-row detail-metrics-row--2-1">
-          <article className="detail-metric-card detail-metric-card--wide">
-            <span>持仓金额</span>
-            <strong className={getMetricValueClass(amountText)}>{amountText}</strong>
-          </article>
-          <article className="detail-metric-card">
-            <span>当日收益</span>
-            <strong className={`${getMetricValueClass(todayProfitText)} ${(metrics?.profitToday || 0) >= 0 ? "is-up" : "is-down"}`}>{todayProfitText}</strong>
-          </article>
+      <section className="detail-summary-hero">
+        <div className="detail-summary-hero__head">
+          <p className="detail-summary-hero__eyebrow">持仓总览</p>
+          <Link href={`/portfolio/${fund.code}/manage`} className="detail-summary-hero__action">
+            修改持仓
+          </Link>
+        </div>
+        <div className="detail-summary-hero__headline">
+          <span>持仓金额</span>
+          <strong className={getMetricValueClass(amountText)}>{amountText}</strong>
+          <small>首次买入 {firstPurchaseText} · 持有 {holdingDaysText}</small>
         </div>
 
-        <div className="detail-metrics-row detail-metrics-row--1-1">
-          <article className="detail-metric-card">
+        <div className="detail-summary-hero__pills">
+          <span className="detail-state-pill">
+            <em>当日收益</em>
+            <b className={`${getMetricValueClass(todayProfitText)} ${(metrics?.profitToday || 0) >= 0 ? "is-up" : "is-down"}`}>{todayProfitText}</b>
+          </span>
+          <span className="detail-state-pill">
+            <em>持仓收益率</em>
+            <b className={`${getMetricValueClass(returnRateText)} ${returnRate >= 0 ? "is-up" : "is-down"}`}>{returnRateText}</b>
+          </span>
+        </div>
+
+        <div className="detail-summary-hero__result-grid">
+          <article>
             <span>累计收益</span>
-            <strong className={`${getMetricValueClass(totalProfitText)} ${(metrics?.profitTotal || 0) >= 0 ? "is-up" : "is-down"}`}>{totalProfitText}</strong>
+            <b className={`${getMetricValueClass(totalProfitText)} ${(metrics?.profitTotal || 0) >= 0 ? "is-up" : "is-down"}`}>{totalProfitText}</b>
           </article>
-          <article className="detail-metric-card">
-            <span>持仓收益率</span>
-            <strong className={`${getMetricValueClass(returnRateText)} ${returnRate >= 0 ? "is-up" : "is-down"}`}>{returnRateText}</strong>
-          </article>
-        </div>
-
-        <div className="detail-metrics-row detail-metrics-row--1-1">
-          <article className="detail-metric-card">
-            <span>首次买入</span>
-            <strong className={getMetricValueClass(firstPurchaseText)}>{firstPurchaseText}</strong>
-          </article>
-          <article className="detail-metric-card">
-            <span>持有天数</span>
-            <strong className={getMetricValueClass(holdingDaysText)}>{holdingDaysText}</strong>
+          <article>
+            <span>已实现收益</span>
+            <b className={`${getMetricValueClass(realizedProfitText)} ${transactionSummary.realizedProfit >= 0 ? "is-up" : "is-down"}`}>{realizedProfitText}</b>
           </article>
         </div>
+      </section>
 
-        <div className="detail-metrics-row detail-metrics-row--1-1">
-          <article className="detail-metric-card">
-            <span>持有份额</span>
+      <section className="detail-group">
+        <div className="detail-group__head">
+          <p className="section-heading__eyebrow">Transaction Info</p>
+          <h2>交易信息</h2>
+        </div>
+        <div className="detail-info-grid">
+          <article className="detail-info-card">
+            <span>交易推导份额</span>
             <strong className={getMetricValueClass(shareText)}>{shareText}</strong>
           </article>
-          <article className="detail-metric-card">
-            <span>持仓成本</span>
+          <article className="detail-info-card">
+            <span>交易推导成本</span>
             <strong className={getMetricValueClass(costText)}>{costText}</strong>
           </article>
-        </div>
-
-        <div className="detail-metrics-row detail-metrics-row--1-1">
-          <article className="detail-metric-card">
-            <span>累计手续费</span>
-            <strong className={getMetricValueClass(totalFeesText)}>{totalFeesText}</strong>
-          </article>
-          <article className="detail-metric-card">
+          <article className="detail-info-card">
             <span>交易笔数</span>
             <strong className={getMetricValueClass(tradeCountText)}>{tradeCountText}</strong>
+          </article>
+          <article className="detail-info-card">
+            <span>累计手续费</span>
+            <strong className={getMetricValueClass(totalFeesText)}>{totalFeesText}</strong>
           </article>
         </div>
       </section>
@@ -220,85 +201,6 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
           </>
         )}
       </section>
-
-      <section className="insight-card">
-        <div className="insight-card__head">
-          <div>
-            <p className="section-heading__eyebrow">Transaction Model</p>
-            <h2>买入 / 卖出记录</h2>
-          </div>
-          <span className="insight-chip"><ReceiptText size={14} /> 独立模型</span>
-        </div>
-        <div className="transaction-form">
-          <label>
-            <span>日期</span>
-            <input type="date" value={form.date} onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))} />
-          </label>
-          <label>
-            <span>方向</span>
-            <select value={form.type} onChange={(event) => setForm((current) => ({ ...current, type: event.target.value as FundTransactionType }))}>
-              <option value="buy">买入</option>
-              <option value="sell">卖出</option>
-            </select>
-          </label>
-          <label>
-            <span>份额</span>
-            <input inputMode="decimal" value={form.share} onChange={(event) => setForm((current) => ({ ...current, share: event.target.value }))} placeholder="1000" />
-          </label>
-          <label>
-            <span>成交净值</span>
-            <input inputMode="decimal" value={form.price} onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))} placeholder="1.2356" />
-          </label>
-          <label>
-            <span>手续费</span>
-            <input inputMode="decimal" value={form.fee} onChange={(event) => setForm((current) => ({ ...current, fee: event.target.value }))} placeholder="0" />
-          </label>
-          <label className="transaction-form__full">
-            <span>备注</span>
-            <input value={form.note} onChange={(event) => setForm((current) => ({ ...current, note: event.target.value }))} placeholder="可选" />
-          </label>
-          <button type="button" className="primary-button transaction-form__submit" onClick={submitTransaction}>
-            记录一笔交易
-          </button>
-        </div>
-      </section>
-
-      <section className="insight-card">
-        <div className="insight-card__head">
-          <div>
-            <p className="section-heading__eyebrow">Operation Log</p>
-            <h2>交易流水</h2>
-          </div>
-          <span className="insight-chip"><Clock3 size={14} /> {transactions.length} 笔</span>
-        </div>
-        <div className="record-list">
-          {transactions.length ? (
-            transactions.map((item) => (
-              <div key={item.id} className="record-item record-item--transaction">
-                <div className="record-item__icon">
-                  <Clock3 size={14} />
-                </div>
-                <div className="record-item__content">
-                  <div className="record-item__head">
-                    <strong>{item.type === "buy" ? "买入" : "卖出"} · {item.date}</strong>
-                    <div className="record-item__actions">
-                      <b className={item.type === "buy" ? "is-up" : "is-down"}>{item.share.toFixed(2)} 份</b>
-                      <button type="button" className="icon-action icon-action--small" onClick={() => removeTransaction(fund.code, item.id)} aria-label="删除交易记录">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                  <p>净值 {Number(item.price).toFixed(4)} · 金额 {formatCurrency(item.share * item.price)} · 手续费 {formatCurrency(item.fee || 0)}{item.note ? ` · ${item.note}` : ""}</p>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="chart-empty">还没有交易记录，先录入买入或卖出流水。</div>
-          )}
-        </div>
-      </section>
-
-      <HoldingEditor fund={fund} holding={holding} onSave={updateHolding} />
     </>
   );
 
