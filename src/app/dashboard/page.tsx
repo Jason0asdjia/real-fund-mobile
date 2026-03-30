@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { CalendarDays, ChevronRight, LineChart, RefreshCcw, Wallet } from "lucide-react";
+import { BarChart3, CalendarDays, ChevronRight, LineChart, RefreshCcw } from "lucide-react";
 
-import { PerformanceHeatmap } from "@/components/performance-heatmap";
+import { MonthlyReturnCalendar } from "@/components/monthly-return-calendar";
 import { PerformanceLineChart } from "@/components/performance-line-chart";
-import { ReturnDistribution } from "@/components/return-distribution";
+import { ReturnTrendChart } from "@/components/return-trend-chart";
 import { useAppState } from "@/components/app-provider";
 import { formatCurrency, formatSignedCurrency, getHoldingMetrics, summarizeTransactions } from "@/lib/portfolio";
-import { formatClock } from "@/lib/time";
+import { formatClock, nowInMarket } from "@/lib/time";
 import type { ValuationPoint } from "@/lib/types";
 
 type SeriesPoint = {
@@ -66,6 +66,7 @@ const latestPointsByDay = (series: ValuationPoint[]) => {
 export default function DashboardPage() {
   const { state, refreshing, error, valuationSeries, refreshFunds } = useAppState();
   const [period, setPeriod] = useState<"day" | "month" | "year">("day");
+  const [chartView, setChartView] = useState<"trend" | "distribution" | "calendar">("trend");
 
   const principal = state.funds.reduce((sum, fund) => {
     const holding = state.holdings[fund.code];
@@ -180,20 +181,7 @@ export default function DashboardPage() {
   const monthlyDrawdown = computeDrawdown(monthSeries);
   const accountReturnRate = principal > 0 ? (totalProfit / principal) * 100 : 0;
 
-  const heatmapData = monthSeries.slice(-35).map((item, index, source) => {
-    const previous = index === 0 ? 0 : source[index - 1].value;
-    return {
-      label: item.label,
-      value: item.value - previous,
-    };
-  });
-
   const weeklyDistribution = monthSeries.slice(-7).map((item, index, source) => ({
-    label: item.label,
-    value: item.value - (index === 0 ? 0 : source[index - 1].value),
-  }));
-
-  const monthlyDistribution = monthSeries.slice(-12).map((item, index, source) => ({
     label: item.label,
     value: item.value - (index === 0 ? 0 : source[index - 1].value),
   }));
@@ -202,149 +190,193 @@ export default function DashboardPage() {
     .map((fund) => ({ fund, metrics: getHoldingMetrics(fund, state.holdings[fund.code]) }))
     .sort((a, b) => (b.metrics?.profitTotal || -Infinity) - (a.metrics?.profitTotal || -Infinity))[0];
 
+  const fundsWithTransactions = Object.values(state.transactions).filter((items) => items.length > 0).length;
+  const chartTitle = chartView === "trend"
+    ? (period === "day" ? "账户日内盈亏曲线" : period === "month" ? "账户月度盈亏曲线" : "账户年度盈亏曲线")
+    : chartView === "distribution"
+      ? "收益分布"
+      : "当月收益日历";
+  const chartEyebrow = chartView === "trend" ? "Profit Curve" : chartView === "distribution" ? "Return Distribution" : "Profit Calendar";
+  const distributionData = weeklyDistribution;
+  const distributionTotal = distributionData.reduce((sum, item) => sum + item.value, 0);
+  const updatedLabel = state.lastUpdatedAt ? `今日已更新 ${formatClock(state.lastUpdatedAt)}` : "等待更新";
+  const hasFunds = state.funds.length > 0;
+  const calendarMonth = nowInMarket().format("YYYY-MM");
+  const monthlyReturnPoints = useMemo(() => {
+    const series = trendData.dailySeries;
+    if (!series.length) return [] as { date: string; rate: number }[];
+
+    return series
+      .map((item, index) => {
+        const previous = index === 0 ? 0 : series[index - 1].value;
+        const change = item.value - previous;
+        const rate = principal > 0 ? (change / principal) * 100 : 0;
+        return {
+          date: item.date,
+          rate,
+        };
+      })
+      .filter((item) => item.date.startsWith(calendarMonth));
+  }, [trendData.dailySeries, principal, calendarMonth]);
+
   return (
-    <div className="screen">
-      <section className="account-hero">
-        <div className="account-hero__top">
-          <div>
-            <p className="section-heading__eyebrow">Account Center</p>
-            <h1>账户盈亏</h1>
-            <span className="account-hero__sub">把日内波动、阶段收益、已实现收益和回撤拆开看，决策会更稳。</span>
-          </div>
-          <button type="button" className="hero-card__action" onClick={() => refreshFunds()} disabled={refreshing}>
-            <RefreshCcw size={15} className={refreshing ? "is-spinning" : ""} />
-            <span>{refreshing ? "刷新中" : "刷新"}</span>
-          </button>
+    <div className="screen dashboard-cockpit">
+      <section className="dashboard-headline">
+        <div>
+          <p className="section-heading__eyebrow">Account Center</p>
+          <h1>账户盈亏</h1>
+          <span className="dashboard-headline__sub">核心盈亏、风险和结构一屏内快速查看。</span>
         </div>
-
-        <div className="account-balance-card">
-          <div className="account-balance-card__main">
-            <span>账户总市值</span>
-            <strong>{formatCurrency(totalAmount)}</strong>
-            <small>本金 {formatCurrency(principal)} · 累计回报 {accountReturnRate.toFixed(2)}%</small>
-          </div>
-          <div className="account-balance-card__side">
-            <div>
-              <span>今日</span>
-              <b className={totalProfitToday >= 0 ? "is-up" : "is-down"}>{formatSignedCurrency(totalProfitToday)}</b>
-            </div>
-            <div>
-              <span>累计</span>
-              <b className={totalProfit >= 0 ? "is-up" : "is-down"}>{formatSignedCurrency(totalProfit)}</b>
-            </div>
-          </div>
-        </div>
-
-        <div className="overview-summary-grid overview-summary-grid--hero">
-          <article className="overview-summary-card is-primary">
-            <span>本周最大回撤</span>
-            <strong className={weeklyDrawdown >= 0 ? "is-up" : "is-down"}>{formatSignedCurrency(weeklyDrawdown)}</strong>
-            <small>以近 7 个日度点位测算</small>
-          </article>
-          <article className="overview-summary-card">
-            <span>本月最大回撤</span>
-            <strong className={monthlyDrawdown >= 0 ? "is-up" : "is-down"}>{formatSignedCurrency(monthlyDrawdown)}</strong>
-            <small>以近 30 个日度点位测算</small>
-          </article>
-          <article className="overview-summary-card">
-            <span>已实现收益 / 手续费</span>
-            <strong className={transactionSnapshot.realized >= 0 ? "is-up" : "is-down"}>{formatSignedCurrency(transactionSnapshot.realized)}</strong>
-            <small>手续费 {formatCurrency(transactionSnapshot.fees)} · 最后刷新 {formatClock(state.lastUpdatedAt)}</small>
-          </article>
-        </div>
+        <button type="button" className="dashboard-headline__refresh" onClick={() => refreshFunds()} disabled={refreshing} aria-label="刷新账户数据">
+          <RefreshCcw size={16} className={refreshing ? "is-spinning" : ""} />
+        </button>
       </section>
 
-      <section className="period-switcher" aria-label="盈亏周期切换">
-        {[
-          { id: "day", label: "日" },
-          { id: "month", label: "月" },
-          { id: "year", label: "年" },
-        ].map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`period-switcher__item ${period === item.id ? "is-active" : ""}`}
-            onClick={() => setPeriod(item.id as "day" | "month" | "year")}
-          >
-            {item.label}
-          </button>
-        ))}
-      </section>
-
-      <section className="insight-card">
-        <div className="insight-card__head">
-          <div>
-            <p className="section-heading__eyebrow">Profit Curve</p>
-            <h2>{period === "day" ? "账户日内盈亏曲线" : period === "month" ? "账户月度盈亏曲线" : "账户年度盈亏曲线"}</h2>
-          </div>
-          <span className="insight-chip"><LineChart size={14} /> 当前 {formatSignedCurrency(activeValue)}</span>
-        </div>
-        <PerformanceLineChart data={activeSeries} />
-      </section>
-
-      <section className="distribution-grid">
-        <ReturnDistribution title="近 7 日收益分布" data={weeklyDistribution} />
-        <ReturnDistribution title="近 12 个交易日收益分布" data={monthlyDistribution} />
-      </section>
-
-      <section className="insight-grid">
-        <article className="insight-card">
-          <div className="insight-card__head">
-            <div>
-              <p className="section-heading__eyebrow">Profit Calendar</p>
-              <h2>近 35 日盈亏日历</h2>
-            </div>
-            <span className="insight-chip"><CalendarDays size={14} /> 热力视图</span>
-          </div>
-          <PerformanceHeatmap data={heatmapData} />
-        </article>
-
-        <article className="insight-card">
-          <div className="insight-card__head">
-            <div>
-              <p className="section-heading__eyebrow">Best Position</p>
-              <h2>当前贡献最高的持仓</h2>
-            </div>
-            <span className="insight-chip"><Wallet size={14} /> 盈亏贡献</span>
-          </div>
-
-          {bestFund?.fund ? (
-            <Link href={`/portfolio/${bestFund.fund.code}`} className="best-position-card">
+      {hasFunds ? (
+        <>
+          <section className="dashboard-overview-card">
+            <div className="dashboard-overview-card__top">
               <div>
-                <strong>{bestFund.fund.name}</strong>
-                <span>{bestFund.fund.code}</span>
+                <span>账户总市值</span>
+                <strong>{formatCurrency(totalAmount)}</strong>
+                <small>本金 {formatCurrency(principal)} · 累计回报 {accountReturnRate.toFixed(2)}%</small>
               </div>
-              <div className="best-position-card__meta">
-                <b className={(bestFund.metrics?.profitTotal || 0) >= 0 ? "is-up" : "is-down"}>
-                  {formatSignedCurrency(bestFund.metrics?.profitTotal)}
-                </b>
-                <ChevronRight size={16} />
-              </div>
-            </Link>
-          ) : (
-            <div className="chart-empty">先添加并录入持仓后，这里会显示最强贡献项。</div>
-          )}
+              <em>{updatedLabel}</em>
+            </div>
 
-          <div className="mini-stat-list">
-            <div className="mini-stat-item">
-              <span>总基金数</span>
-              <strong>{state.funds.length}</strong>
+            <div className="dashboard-key-metrics">
+              <article>
+                <span>今日盈亏</span>
+                <strong className={totalProfitToday >= 0 ? "is-up" : "is-down"}>{formatSignedCurrency(totalProfitToday)}</strong>
+                <small>日内波动结果</small>
+              </article>
+              <article>
+                <span>累计收益</span>
+                <strong className={totalProfit >= 0 ? "is-up" : "is-down"}>{formatSignedCurrency(totalProfit)}</strong>
+                <small>当前持仓总贡献</small>
+              </article>
+              <article>
+                <span>本周最大回撤</span>
+                <strong className={weeklyDrawdown >= 0 ? "is-up" : "is-down"}>{formatSignedCurrency(weeklyDrawdown)}</strong>
+                <small>近 7 日测算</small>
+              </article>
+              <article>
+                <span>本月最大回撤</span>
+                <strong className={monthlyDrawdown >= 0 ? "is-up" : "is-down"}>{formatSignedCurrency(monthlyDrawdown)}</strong>
+                <small>近 30 日测算</small>
+              </article>
             </div>
-            <div className="mini-stat-item">
-              <span>账户回报</span>
-              <strong className={accountReturnRate >= 0 ? "is-up" : "is-down"}>{accountReturnRate.toFixed(2)}%</strong>
+
+            <div className="dashboard-overview-card__meta">
+              <span>已实现收益 {formatSignedCurrency(transactionSnapshot.realized)}</span>
+              <span>手续费 {formatCurrency(transactionSnapshot.fees)}</span>
+              <span>更新时间 {formatClock(state.lastUpdatedAt)}</span>
             </div>
-            <div className="mini-stat-item">
-              <span>有交易记录</span>
-              <strong>{Object.values(state.transactions).filter((items) => items.length > 0).length}</strong>
+          </section>
+
+          <section className="dashboard-chart-zone">
+            <article className="insight-card dashboard-chart-card">
+              <div className="dashboard-period-inline">
+                {[
+                  { id: "day", label: "日" },
+                  { id: "month", label: "月" },
+                  { id: "year", label: "年" },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`period-switcher__item ${period === item.id ? "is-active" : ""}`}
+                    onClick={() => setPeriod(item.id as "day" | "month" | "year")}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="dashboard-chart-card__head">
+                <div>
+                  <p className="section-heading__eyebrow">{chartEyebrow}</p>
+                  <h2>{chartTitle}</h2>
+                </div>
+              </div>
+
+              <div className="dashboard-chart-card__toolbar">
+                <span className="insight-chip">
+                  {chartView === "trend" ? <LineChart size={14} /> : chartView === "distribution" ? <BarChart3 size={14} /> : <CalendarDays size={14} />}
+                  {chartView === "trend" ? `当前 ${formatSignedCurrency(activeValue)}` : chartView === "distribution" ? formatSignedCurrency(distributionTotal) : "35 日热力"}
+                </span>
+                <div className="chart-mode-switch" role="tablist" aria-label="切换图表视图">
+                  <button type="button" role="tab" aria-selected={chartView === "trend"} className={`chart-mode-switch__item ${chartView === "trend" ? "is-active" : ""}`} onClick={() => setChartView("trend")}>曲线</button>
+                  <button type="button" role="tab" aria-selected={chartView === "distribution"} className={`chart-mode-switch__item ${chartView === "distribution" ? "is-active" : ""}`} onClick={() => setChartView("distribution")}>分布</button>
+                  <button type="button" role="tab" aria-selected={chartView === "calendar"} className={`chart-mode-switch__item ${chartView === "calendar" ? "is-active" : ""}`} onClick={() => setChartView("calendar")}>日历</button>
+                </div>
+              </div>
+
+              {chartView === "trend" ? (
+                <PerformanceLineChart data={activeSeries} height={236} />
+              ) : null}
+
+              {chartView === "distribution" ? (
+                <div className="dashboard-distribution-card">
+                  <div className="dashboard-distribution-card__head">
+                    <small>近 7 日收益分布</small>
+                  </div>
+                  <ReturnTrendChart data={distributionData} height={212} />
+                </div>
+              ) : null}
+
+              {chartView === "calendar" ? (
+                <div className="dashboard-calendar-card">
+                  <MonthlyReturnCalendar month={calendarMonth} points={monthlyReturnPoints} />
+                </div>
+              ) : null}
+            </article>
+          </section>
+
+          <section className="insight-card dashboard-best-card">
+            <div className="dashboard-best-card__head">
+              <div>
+                <p className="section-heading__eyebrow">Best Position</p>
+                <h2>当前贡献最高的持仓</h2>
+              </div>
             </div>
-          </div>
-        </article>
-      </section>
+
+            {bestFund?.fund ? (
+              <Link href={`/portfolio/${bestFund.fund.code}`} className="dashboard-best-card__main">
+                <div>
+                  <strong>{bestFund.fund.name}</strong>
+                  <span>{bestFund.fund.code}</span>
+                </div>
+                <div className="dashboard-best-card__amount">
+                  <b className={(bestFund.metrics?.profitTotal || 0) >= 0 ? "is-up" : "is-down"}>{formatSignedCurrency(bestFund.metrics?.profitTotal)}</b>
+                  <ChevronRight size={15} />
+                </div>
+              </Link>
+            ) : (
+              <div className="chart-empty">先添加并录入持仓后，这里会显示最强贡献项。</div>
+            )}
+
+            <div className="dashboard-best-card__stats">
+              <div>
+                <span>总基金数</span>
+                <strong>{state.funds.length}</strong>
+              </div>
+              <div>
+                <span>账户回报</span>
+                <strong className={accountReturnRate >= 0 ? "is-up" : "is-down"}>{accountReturnRate.toFixed(2)}%</strong>
+              </div>
+              <div>
+                <span>有交易记录</span>
+                <strong>{fundsWithTransactions}</strong>
+              </div>
+            </div>
+          </section>
+        </>
+      ) : null}
 
       {error ? <p className="status-banner status-banner--error">{error}</p> : null}
 
-      {!state.funds.length ? (
+      {!hasFunds ? (
         <section className="empty-panel">
           <h2>还没有加入基金</h2>
           <p>先去发现页搜索基金代码或名称，加入后这里会开始生成账户曲线和盈亏日历。</p>

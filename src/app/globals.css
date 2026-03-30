@@ -1292,6 +1292,460 @@ button {
   height: 176px;
 }
 
+.dashboard-cockpit {
+  gap: 10px;
+}
+
+.dashboard-headline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dashboard-headline h1 {
+  margin: 4px 0 0;
+  font-size: 1.02rem;
+  line-height: 1.25;
+}
+
+.dashboard-headline__sub {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.dashboard-headline__refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-elevated);
+  color: var(--accent-strong);
+}
+
+.dashboard-overview-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface-strong) 92%, transparent);
+  box-shadow: var(--shadow);
+}
+
+.dashboard-overview-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dashboard-overview-card__top span,
+.dashboard-overview-card__top small {
+  display: block;
+}
+
+.dashboard-overview-card__top strong {
+  display: block;
+  margin-top: 7px;
+  font-size: 1.24rem;
+  line-height: 1.08;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-overview-card__top small {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.dashboard-overview-card__top em {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--bg-soft);
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-style: normal;
+}
+
+.dashboard-key-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dashboard-key-metrics article {
+  min-height: 88px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+}
+
+.dashboard-key-metrics span,
+.dashboard-key-metrics small {
+  display: block;
+}
+
+.dashboard-key-metrics strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-key-metrics small {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 0.66rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dashboard-overview-card__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.dashboard-chart-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dashboard-period-inline {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 4px;
+  margin-bottom: 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+}
+
+.dashboard-chart-card {
+  padding: 12px;
+}
+
+.dashboard-chart-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.dashboard-chart-card__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.dashboard-chart-card__toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.dashboard-chart-card__toolbar .chart-mode-switch {
+  margin-left: auto;
+}
+
+.dashboard-distribution-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dashboard-distribution-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dashboard-distribution-card__head small {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.dashboard-distribution-bars {
+  height: 132px;
+}
+
+.return-trend-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.return-trend-chart__body {
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.return-trend-chart__axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.66rem;
+}
+
+.return-trend-chart svg {
+  width: 100%;
+}
+
+.return-trend-chart__line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.return-trend-chart__dot {
+  fill: currentColor;
+}
+
+.return-trend-chart__labels {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.return-trend-chart__labels span:nth-child(2) {
+  text-align: center;
+}
+
+.return-trend-chart__labels span:nth-child(3) {
+  text-align: right;
+}
+
+.dashboard-calendar-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.monthly-return-calendar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.monthly-return-calendar__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.monthly-return-calendar__weekdays span {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 600;
+}
+
+.monthly-return-calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.monthly-return-calendar__cell {
+  min-height: 48px;
+  padding: 5px 6px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+}
+
+.monthly-return-calendar__cell strong,
+.monthly-return-calendar__cell small {
+  display: block;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.monthly-return-calendar__cell strong {
+  font-size: clamp(0.62rem, 2vw, 0.72rem);
+}
+
+.monthly-return-calendar__rate {
+  font-size: clamp(0.56rem, 1.8vw, 0.64rem);
+}
+
+.monthly-return-calendar__rate--sm {
+  font-size: clamp(0.52rem, 1.65vw, 0.58rem);
+}
+
+.monthly-return-calendar__rate--xs {
+  font-size: clamp(0.5rem, 1.5vw, 0.54rem);
+}
+
+.monthly-return-calendar__cell.is-empty {
+  background: transparent;
+}
+
+.monthly-return-calendar__cell.is-closed {
+  border-color: #d5dae4;
+  background: #edf1f6;
+  color: #7a879b;
+}
+
+.monthly-return-calendar__cell.is-profit {
+  border-color: rgba(210, 88, 73, 0.28);
+  background: rgba(210, 88, 73, 0.16);
+  color: #b84a3a;
+}
+
+.monthly-return-calendar__cell.is-loss {
+  border-color: rgba(35, 148, 103, 0.28);
+  background: rgba(35, 148, 103, 0.16);
+  color: #1f8f65;
+}
+
+.dashboard-calendar-card .heatmap-grid {
+  gap: 4px;
+}
+
+.dashboard-calendar-card .heatmap-cell {
+  border-radius: 5px;
+}
+
+.dashboard-calendar-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.dashboard-calendar-legend .heatmap-cell {
+  width: 12px;
+  height: 12px;
+  aspect-ratio: auto;
+}
+
+.dashboard-best-card {
+  padding: 12px;
+}
+
+.dashboard-best-card__head {
+  margin-bottom: 9px;
+}
+
+.dashboard-best-card__main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 62px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(45, 108, 223, 0.08), transparent);
+}
+
+.dashboard-best-card__main strong,
+.dashboard-best-card__main span {
+  display: block;
+}
+
+.dashboard-best-card__main span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.dashboard-best-card__amount {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.dashboard-best-card__amount b {
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-best-card__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.dashboard-best-card__stats div {
+  min-height: 58px;
+  padding: 8px 9px;
+  border-radius: 10px;
+  background: var(--bg-soft);
+}
+
+.dashboard-best-card__stats span,
+.dashboard-best-card__stats strong {
+  display: block;
+}
+
+.dashboard-best-card__stats span {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.dashboard-best-card__stats strong {
+  margin-top: 6px;
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 720px) {
+  .dashboard-key-metrics,
+  .dashboard-best-card__stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .dashboard-chart-card__head,
+  .dashboard-distribution-card__head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .dashboard-chart-card__actions {
+    width: 100%;
+    align-items: stretch;
+  }
+}
+
 .record-list {
   display: flex;
   flex-direction: column;
