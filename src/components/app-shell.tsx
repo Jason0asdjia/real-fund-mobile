@@ -6,11 +6,11 @@ import { useEffect, useRef } from "react";
 
 import { BottomNav } from "@/components/bottom-nav";
 
-const routeOrder = ["/dashboard", "/discover", "/portfolio", "/settings"];
+const routeOrder = ["/portfolio", "/discover", "/settings", "/dashboard"];
 
 const getSectionPath = (pathname: string) => {
   const matched = routeOrder.find((item) => pathname.startsWith(item));
-  return matched || "/dashboard";
+  return matched || "/portfolio";
 };
 
 const getRouteIndex = (pathname: string) => {

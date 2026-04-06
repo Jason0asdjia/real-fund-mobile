@@ -14,12 +14,12 @@ export default function PortfolioModalDetailPage({ params }: { params: { code: s
 
     document.body.style.overflow = "hidden";
     document.body.style.overscrollBehavior = "none";
-    document.body.classList.add("has-detail-overlay");
+    document.body.classList.add("app-modal-open");
 
     return () => {
       document.body.style.overflow = previousOverflow;
       document.body.style.overscrollBehavior = previousOverscroll;
-      document.body.classList.remove("has-detail-overlay");
+      document.body.classList.remove("app-modal-open");
     };
   }, []);
 

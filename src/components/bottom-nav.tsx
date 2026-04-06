@@ -1,14 +1,13 @@
 "use client";
 
 import clsx from "clsx";
-import { BarChart3, Compass, LayoutGrid, Settings2 } from "lucide-react";
+import { BarChart3, Compass, Settings2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const items = [
-  { href: "/dashboard", label: "总览", icon: LayoutGrid },
+  { href: "/portfolio", label: "持仓总览", icon: BarChart3 },
   { href: "/discover", label: "发现", icon: Compass },
-  { href: "/portfolio", label: "持仓", icon: BarChart3 },
   { href: "/settings", label: "设置", icon: Settings2 },
 ];
 

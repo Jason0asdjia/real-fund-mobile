@@ -285,7 +285,7 @@ export default function DashboardPage() {
                   <button
                     key={item.id}
                     type="button"
-                    className={`period-switcher__item ${period === item.id ? "is-active" : ""}`}
+                    className={`period-switcher__item dashboard-period-inline__item ${period === item.id ? "is-active" : ""}`}
                     onClick={() => setPeriod(item.id as "day" | "month" | "year")}
                   >
                     {item.label}
@@ -301,14 +301,14 @@ export default function DashboardPage() {
               </div>
 
               <div className="dashboard-chart-card__toolbar">
-                <span className="insight-chip">
+                <span className="insight-chip dashboard-chart-toolbar__chip">
                   {chartView === "trend" ? <LineChart size={14} /> : chartView === "distribution" ? <BarChart3 size={14} /> : <CalendarDays size={14} />}
                   {chartView === "trend" ? `当前 ${formatSignedCurrency(activeValue)}` : chartView === "distribution" ? formatSignedCurrency(distributionTotal) : "35 日热力"}
                 </span>
                 <div className="chart-mode-switch" role="tablist" aria-label="切换图表视图">
-                  <button type="button" role="tab" aria-selected={chartView === "trend"} className={`chart-mode-switch__item ${chartView === "trend" ? "is-active" : ""}`} onClick={() => setChartView("trend")}>曲线</button>
-                  <button type="button" role="tab" aria-selected={chartView === "distribution"} className={`chart-mode-switch__item ${chartView === "distribution" ? "is-active" : ""}`} onClick={() => setChartView("distribution")}>分布</button>
-                  <button type="button" role="tab" aria-selected={chartView === "calendar"} className={`chart-mode-switch__item ${chartView === "calendar" ? "is-active" : ""}`} onClick={() => setChartView("calendar")}>日历</button>
+                  <button type="button" role="tab" aria-selected={chartView === "trend"} className={`chart-mode-switch__item dashboard-chart-toolbar__mode ${chartView === "trend" ? "is-active" : ""}`} onClick={() => setChartView("trend")}>曲线</button>
+                  <button type="button" role="tab" aria-selected={chartView === "distribution"} className={`chart-mode-switch__item dashboard-chart-toolbar__mode ${chartView === "distribution" ? "is-active" : ""}`} onClick={() => setChartView("distribution")}>分布</button>
+                  <button type="button" role="tab" aria-selected={chartView === "calendar"} className={`chart-mode-switch__item dashboard-chart-toolbar__mode ${chartView === "calendar" ? "is-active" : ""}`} onClick={() => setChartView("calendar")}>日历</button>
                 </div>
               </div>
 

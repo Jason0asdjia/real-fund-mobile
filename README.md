@@ -20,6 +20,7 @@
 - 移动端底部导航和页面切换动画
 - Dashboard / Discover / Portfolio / Settings 四个主页面
 - PWA manifest、service worker、离线页
+- Tailwind CSS（utility + `@layer components` 兼容层）
 - 项目说明文档与 AI 协作说明
 
 ## 最近重点更新（2026-03）
@@ -35,6 +36,7 @@
 - Next.js 14
 - React 18
 - TypeScript
+- Tailwind CSS 3（UI utility + components layer）
 - Framer Motion
 - Day.js
 - Lucide React
@@ -45,11 +47,13 @@
 ```text
 src/
   app/
+    README.md
     dashboard/
     discover/
     portfolio/
     settings/
   components/
+    README.md
     app-provider.tsx
     app-shell.tsx
     bottom-nav.tsx
@@ -57,6 +61,7 @@ src/
     holding-editor.tsx
     sparkline.tsx
   lib/
+    README.md
     fund-api.ts
     portfolio.ts
     storage.ts
@@ -64,6 +69,7 @@ src/
     types.ts
     valuation-timeseries.ts
 public/
+  README.md
   sw.js
   offline.html
   project-map.svg
@@ -128,6 +134,11 @@ npm run build
 
 - 当前图标与结构图是代码原生生成资源，没有调用在线生图接口
 - 如果后续需要补品牌插画、启动页图标或分享图，可在配置 `OPENAI_API_KEY` 后继续接入图像生成流程
+- 模块详细说明已拆分到模块目录内：
+  - `src/app/README.md`
+  - `src/components/README.md`
+  - `src/lib/README.md`
+  - `public/README.md`
 
 ## 已知限制
 
