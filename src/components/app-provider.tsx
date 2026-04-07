@@ -43,6 +43,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const seedingRef = useRef(false);
   const didInitialRefreshRef = useRef(false);
   const refreshTokenRef = useRef(0);
+  const lastForegroundRefreshRef = useRef(0);
 
   useEffect(() => {
     const nextState = loadAppState();
@@ -78,7 +79,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setError("");
 
     try {
-      const refreshed = await Promise.all(
+      const refreshedResults = await Promise.allSettled(
         fundsRef.current.map(async (fund) => {
           const nextFund = await fetchFundData(fund.code, fund);
           recordValuation(nextFund.code, { gsz: nextFund.gsz, gztime: nextFund.gztime });
@@ -86,13 +87,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }),
       );
 
+      const refreshed = refreshedResults.map((result, index) => (result.status === "fulfilled" ? result.value : fundsRef.current[index]));
+      const successCount = refreshedResults.filter((item) => item.status === "fulfilled").length;
+      const failedCount = refreshedResults.length - successCount;
+
       if (token === refreshTokenRef.current) {
-        setState((current) => ({
-          ...current,
-          funds: refreshed,
-          lastUpdatedAt: new Date().toISOString(),
-        }));
-        setValuationSeries(getAllValuationSeries());
+        if (successCount > 0) {
+          setState((current) => ({
+            ...current,
+            funds: refreshed,
+            lastUpdatedAt: new Date().toISOString(),
+          }));
+          setValuationSeries(getAllValuationSeries());
+        }
+
+        if (failedCount > 0) {
+          setError(failedCount === refreshedResults.length ? "刷新失败" : `部分基金刷新失败（${failedCount}/${refreshedResults.length}）`);
+        }
       }
     } catch (nextError) {
       if (token === refreshTokenRef.current) {
@@ -124,11 +135,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (state.funds.length === 0) return;
 
     const timer = window.setInterval(() => {
+      console.info(`[refresh-ms] trigger: interval=${state.refreshMs}ms at=${new Date().toISOString()}`);
       refreshFunds();
     }, state.refreshMs);
 
     return () => window.clearInterval(timer);
   }, [hydrated, refreshFunds, state.funds.length, state.refreshMs]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (state.funds.length === 0) return;
+
+    const refreshOnForeground = () => {
+      const now = Date.now();
+      if (now - lastForegroundRefreshRef.current < 15000) return;
+      lastForegroundRefreshRef.current = now;
+      void refreshFunds();
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        refreshOnForeground();
+      }
+    };
+
+    window.addEventListener("focus", refreshOnForeground);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", refreshOnForeground);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [hydrated, refreshFunds, state.funds.length]);
 
   const addFund = useCallback(async (input: SearchFundResult) => {
     if (fundsRef.current.some((item) => item.code === input.code)) return;

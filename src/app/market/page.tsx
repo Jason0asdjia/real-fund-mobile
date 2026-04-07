@@ -1,23 +1,25 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { SlidersHorizontal } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
+import { fetchFastNews, fetchHotSectors, fetchMarketSnapshot } from "@/lib/market-api";
 import { formatPercent } from "@/lib/portfolio";
 
-const marketSnapshot = [
+const defaultMarketSnapshot = [
   { label: "上证指数", value: "3,058.22", change: 0.42 },
   { label: "恒生指数", value: "16,725.10", change: -1.15 },
   { label: "纳斯达克", value: "16,085.11", change: 0.82 },
 ];
 
-const hotSectors = [
+const defaultHotSectors = [
   { name: "半导体设备", change: 3.82, points: [7, 8, 7, 10, 9, 12, 11, 13, 14, 16, 18] },
   { name: "人工智能AI", change: 2.45, points: [9, 8, 10, 9, 12, 11, 13, 14, 13, 15, 17] },
 ];
 
-const quickNews = [
+const defaultQuickNews = [
   { time: "14:35", text: "中国央行：维持一年期及五年期LPR利率不变。" },
   { time: "14:12", text: "光伏组件出海超预期，机构调高行业评级。" },
   { time: "13:45", text: "港股午后走低，恒生科技指数跌幅扩大至2%。" },
@@ -30,7 +32,50 @@ const toNumber = (value: string | number | null | undefined) => {
 };
 
 export default function MarketPage() {
-  const { state } = useAppState();
+  const { state, refreshFunds } = useAppState();
+  const [marketSnapshot, setMarketSnapshot] = useState(defaultMarketSnapshot);
+  const [hotSectors, setHotSectors] = useState(defaultHotSectors);
+  const [quickNews, setQuickNews] = useState(defaultQuickNews);
+
+  useEffect(() => {
+    if (state.funds.length === 0) return;
+    void refreshFunds();
+  }, [refreshFunds, state.funds.length]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadMarketData = async () => {
+      try {
+        const [nextSnapshot, nextSectors, nextQuickNews] = await Promise.all([fetchMarketSnapshot(), fetchHotSectors(2), fetchFastNews(4)]);
+        if (!active) return;
+        if (nextSnapshot.length > 0) {
+          setMarketSnapshot(nextSnapshot);
+        }
+        if (nextSectors.length > 0) {
+          setHotSectors(nextSectors);
+        }
+        if (nextQuickNews.length > 0) {
+          setQuickNews(nextQuickNews);
+        }
+      } catch (error) {
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("Market API request failed", error);
+        }
+      }
+    };
+
+    void loadMarketData();
+    const refreshEvery = state.refreshMs;
+    const timer = window.setInterval(() => {
+      void loadMarketData();
+    }, refreshEvery);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [state.refreshMs]);
 
   const topFunds = [...state.funds]
     .map((fund) => ({ ...fund, change: toNumber(fund.gszzl), nav: toNumber(fund.gsz) ?? toNumber(fund.dwjz) }))

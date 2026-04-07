@@ -5,6 +5,7 @@ import { ChevronLeft, Repeat2 } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 import { formatCurrency, formatSignedCurrency, getHoldingMetrics } from "@/lib/portfolio";
+import { holdingDaysInMarket } from "@/lib/time";
 
 type FundManageViewProps = {
   code: string;
@@ -32,11 +33,7 @@ export function FundManageView({ code, onBack, asModal = false }: FundManageView
   const holding = fund ? state.holdings[fund.code] : undefined;
   const metrics = useMemo(() => (fund ? getHoldingMetrics(fund, holding) : null), [fund, holding]);
   const holdingDays = useMemo(() => {
-    if (!holding?.firstPurchaseDate) return null;
-    const start = new Date(`${holding.firstPurchaseDate}T00:00:00`);
-    const now = new Date();
-    const diff = now.getTime() - start.getTime();
-    return diff >= 0 ? Math.floor(diff / (24 * 60 * 60 * 1000)) : null;
+    return holdingDaysInMarket(holding?.firstPurchaseDate || null);
   }, [holding?.firstPurchaseDate]);
 
   const [mode, setMode] = useState<EditMode>("amount");

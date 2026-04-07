@@ -61,6 +61,21 @@ const buildSeries = (code: string, base: number, drift: number, wave: number) =>
   return points;
 };
 
+const buildDemoHoldings = (seed: number) => {
+  const list = [
+    { code: "600519", name: "贵州茅台" },
+    { code: "300750", name: "宁德时代" },
+    { code: "601318", name: "中国平安" },
+    { code: "600036", name: "招商银行" },
+    { code: "000333", name: "美的集团" },
+  ];
+  return list.map((item, index) => ({
+    ...item,
+    weight: `${(9.2 - index * 1.1 + (seed % 3) * 0.2).toFixed(2)}%`,
+    change: Number((Math.sin(seed + index * 0.73) * 1.8).toFixed(2)),
+  }));
+};
+
 const fundConfigs: FundSeedConfig[] = [
   {
     code: "003333",
@@ -252,6 +267,11 @@ export const buildDemoSeed = (): DemoSeed => {
     gszzl: item.gszzl,
     zzl: item.zzl,
     lastNav: item.lastNav,
+    holdings: buildDemoHoldings(Number(item.code.slice(-2))),
+    holdingsReportDate: lastTradeDay,
+    holdingsIsLastQuarter: true,
+    source: "eastmoney",
+    quoteStatus: "estimated",
   }));
 
   const transactions: Record<string, FundTransaction[]> = Object.fromEntries(

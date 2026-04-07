@@ -7,6 +7,7 @@ import { ArrowDownLeft, ArrowUpRight, Loader2, Sparkles } from "lucide-react";
 import { useAppState } from "@/components/app-provider";
 import { TwSelect } from "@/components/ui/tw-select";
 import { formatCurrency } from "@/lib/portfolio";
+import { nowInMarket, toMarketDay, toMarketTime } from "@/lib/time";
 import type { FundTransaction, FundTransactionType } from "@/lib/types";
 
 type TxItem = FundTransaction & {
@@ -42,16 +43,19 @@ export default function HistoryPage() {
       });
     });
 
-    const now = new Date();
-    const rangeStart = new Date(now);
-    if (timeRange === "3m") rangeStart.setMonth(now.getMonth() - 3);
-    if (timeRange === "6m") rangeStart.setMonth(now.getMonth() - 6);
-    if (timeRange === "12m") rangeStart.setFullYear(now.getFullYear() - 1);
+    const now = nowInMarket();
+    const rangeStart = timeRange === "3m"
+      ? now.subtract(3, "month")
+      : timeRange === "6m"
+        ? now.subtract(6, "month")
+        : timeRange === "12m"
+          ? now.subtract(1, "year")
+          : now;
 
     const filteredByTime = list.filter((item) => {
       if (timeRange === "all") return true;
-      const txDate = new Date(`${item.date}T00:00:00`);
-      return txDate >= rangeStart;
+      const txDate = toMarketDay(`${item.date}T00:00:00`);
+      return txDate.isSame(rangeStart, "day") || txDate.isAfter(rangeStart, "day");
     });
 
     return filteredByTime.filter((item) => (filter === "all" ? true : item.type === filter)).sort((a, b) => `${b.date}`.localeCompare(`${a.date}`));
@@ -76,12 +80,7 @@ export default function HistoryPage() {
 
   const handleSeedDemoData = () => {
     seedDemoData();
-    setSeededAt(
-      new Date().toLocaleTimeString("zh-CN", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    );
+    setSeededAt(toMarketTime(undefined, "HH:mm"));
   };
 
   return (

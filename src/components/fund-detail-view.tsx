@@ -23,14 +23,6 @@ const PERIOD_OPTIONS: Array<{ key: PeriodKey; label: string; points?: number }> 
   { key: "max", label: "最大" },
 ];
 
-const TOP_HOLDINGS = [
-  { name: "英伟达 (NVIDIA)", ratio: "9.42%", change: 2.4 },
-  { name: "微软 (Microsoft)", ratio: "8.15%", change: 0.8 },
-  { name: "苹果 (Apple)", ratio: "7.92%", change: -0.4 },
-  { name: "亚马逊 (Amazon)", ratio: "6.21%", change: 1.1 },
-  { name: "谷歌 (Alphabet)", ratio: "5.88%", change: 0.5 },
-];
-
 const toNumber = (value: string | number | null | undefined) => {
   const next = Number(value);
   return Number.isFinite(next) ? next : 0;
@@ -93,6 +85,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
   const navValue = toNumber(fund.gsz ?? fund.dwjz);
   const navChange = toNumber(fund.gszzl);
   const latestTrades = transactions.slice(0, 6);
+  const holdings = Array.isArray(fund.holdings) ? fund.holdings : [];
   const handleClearHolding = () => {
     clearHolding(fund.code);
     setClearModalOpen(false);
@@ -176,7 +169,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
         <section className="border-b border-[#e2e7ff] py-3">
           <div className="mb-2 flex items-center justify-between px-3">
             <h2 className="text-[10px] font-black tracking-[0.14em] text-[#747781]">前十重仓股</h2>
-            <span className="text-[10px] font-semibold text-[#747781]">截至最近披露</span>
+            <span className="text-[10px] font-semibold text-[#747781]">{fund.holdingsReportDate ? `披露日 ${fund.holdingsReportDate}` : "截至最近披露"}</span>
           </div>
           <div className="bg-[#f8f9ff] px-3 py-2">
             <div className="grid grid-cols-12 text-[10px] font-bold tracking-[0.08em] text-[#747781]">
@@ -186,15 +179,19 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
             </div>
           </div>
           <div className="divide-y divide-[#f2f3ff]">
-            {TOP_HOLDINGS.map((item) => (
-              <div key={item.name} className="grid grid-cols-12 px-3 py-3 text-sm">
-                <div className="col-span-6 truncate font-semibold">{item.name}</div>
-                <div className="col-span-3 text-right tabular-nums">{item.ratio}</div>
-                <div className={`col-span-3 text-right font-semibold tabular-nums ${item.change >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>
-                  {formatPercent(item.change)}
+            {holdings.length ? (
+              holdings.map((item) => (
+                <div key={`${item.code}-${item.name}`} className="grid grid-cols-12 px-3 py-3 text-sm">
+                  <div className="col-span-6 truncate font-semibold">{item.name || item.code || "—"}</div>
+                  <div className="col-span-3 text-right tabular-nums">{item.weight || "—"}</div>
+                  <div className={`col-span-3 text-right font-semibold tabular-nums ${toNumber(item.change) >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>
+                    {item.change == null ? "—" : formatPercent(Number(item.change))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <div className="px-3 py-6 text-center text-sm text-[#747781]">暂无重仓数据</div>
+            )}
           </div>
         </section>
 

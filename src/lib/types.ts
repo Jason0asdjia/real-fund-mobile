@@ -15,12 +15,34 @@ export type FundSnapshot = {
   zzl?: number | null;
   lastNav?: string | null;
   noValuation?: boolean;
+  source?: "eastmoney" | "fallback";
+  quoteStatus?: "estimated" | "official";
+  holdings?: FundHoldingStock[];
+  holdingsReportDate?: string | null;
+  holdingsIsLastQuarter?: boolean;
+  fundType?: string | null;
+  riskLevel?: string | null;
+  fundManager?: string | null;
+  fundCompany?: string | null;
+  fundScale?: string | null;
+  trackingTarget?: string | null;
+  inceptionDate?: string | null;
 };
 
 export type SearchFundResult = {
   code: string;
   name: string;
   shortName?: string;
+  category?: string;
+  fundType?: string;
+  spell?: string;
+};
+
+export type FundHoldingStock = {
+  code: string;
+  name: string;
+  weight: string;
+  change?: number | null;
 };
 
 export type ValuationPoint = {

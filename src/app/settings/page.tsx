@@ -6,6 +6,7 @@ import { Bell, ChevronRight, Database, HelpCircle, History, LayoutDashboard, Loa
 
 import { useAppState } from "@/components/app-provider";
 import { getHoldingMetrics } from "@/lib/portfolio";
+import { toMarketTime } from "@/lib/time";
 
 const refreshOptions = [
   { label: "15 秒", value: 15000 },
@@ -32,12 +33,7 @@ export default function SettingsPage() {
 
   const handleSeedDemoData = () => {
     seedDemoData();
-    setSeededAt(
-      new Date().toLocaleTimeString("zh-CN", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    );
+    setSeededAt(toMarketTime(undefined, "HH:mm"));
   };
 
   return (

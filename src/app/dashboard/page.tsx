@@ -151,9 +151,8 @@ export default function DashboardPage() {
         totalProfit * 0.32 + totalProfitToday * 6,
         30,
         Array.from({ length: 30 }, (_, index) => {
-          const date = new Date();
-          date.setDate(date.getDate() - (29 - index));
-          return `${date.getMonth() + 1}/${date.getDate()}`;
+          const date = nowInMarket().subtract(29 - index, "day");
+          return `${date.month() + 1}/${date.date()}`;
         }),
       );
 
@@ -169,9 +168,8 @@ export default function DashboardPage() {
         totalProfit,
         12,
         Array.from({ length: 12 }, (_, index) => {
-          const date = new Date();
-          date.setMonth(date.getMonth() - (11 - index));
-          return `${date.getMonth() + 1}月`;
+          const date = nowInMarket().subtract(11 - index, "month");
+          return `${date.month() + 1}月`;
         }),
       );
 

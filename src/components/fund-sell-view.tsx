@@ -6,6 +6,7 @@ import { CalendarDays, ChevronLeft, Info, Repeat2 } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 import { formatCurrency, formatSignedCurrency, getHoldingMetrics } from "@/lib/portfolio";
+import { holdingDaysInMarket, todayInMarket } from "@/lib/time";
 
 type FundSellViewProps = {
   code: string;
@@ -30,7 +31,7 @@ export function FundSellView({ code }: FundSellViewProps) {
   const [mode, setMode] = useState<"amount" | "share">("amount");
   const [amountInput, setAmountInput] = useState("");
   const [shareInput, setShareInput] = useState("");
-  const [tradeDate, setTradeDate] = useState(new Date().toISOString().slice(0, 10));
+  const [tradeDate, setTradeDate] = useState(todayInMarket());
   const [beforeClose, setBeforeClose] = useState(true);
 
   useEffect(() => {
@@ -118,7 +119,7 @@ export function FundSellView({ code }: FundSellViewProps) {
             <div className="border-t border-[#e2e7ff] pt-2">
               <p className="text-[10px] font-semibold tracking-[0.14em] text-[#747781]">持有天数</p>
               <p className="mt-1 text-base font-bold text-[#131b2e]">
-                {holding?.firstPurchaseDate ? `${Math.max(Math.floor((Date.now() - new Date(`${holding.firstPurchaseDate}T00:00:00`).getTime()) / 86400000), 0)}天` : "—"}
+                {holding?.firstPurchaseDate ? `${holdingDaysInMarket(holding.firstPurchaseDate) ?? 0}天` : "—"}
               </p>
             </div>
             <div className="border-t border-[#e2e7ff] pt-2 text-right">

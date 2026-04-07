@@ -1,11 +1,22 @@
-import type { FundSnapshot, SearchFundResult } from "@/lib/types";
+import type { FundHoldingStock, FundSnapshot, SearchFundResult } from "@/lib/types";
+import { nowInMarket } from "@/lib/time";
 
 const FUND_GZ_TIMEOUT_MS = 8000;
+const HOLDINGS_CACHE_MS = 60 * 60 * 1000;
+const PROFILE_CACHE_MS = 6 * 60 * 60 * 1000;
+
+type CachedData<T> = {
+  data: T;
+  ts: number;
+};
+
+const holdingsCache = new Map<string, CachedData<{ holdings: FundHoldingStock[]; holdingsReportDate: string | null; holdingsIsLastQuarter: boolean }>>();
+const profileCache = new Map<string, CachedData<Pick<FundSnapshot, "fundType" | "riskLevel" | "fundManager" | "fundCompany" | "fundScale" | "trackingTarget" | "inceptionDate">>>();
 
 const loadScript = (url: string) =>
   new Promise<any>((resolve, reject) => {
     if (typeof document === "undefined" || !document.body) {
-      reject(new Error("无浏览器环境"));
+      reject(new Error("No browser environment"));
       return;
     }
 
@@ -18,15 +29,191 @@ const loadScript = (url: string) =>
     };
     script.onerror = () => {
       if (document.body.contains(script)) document.body.removeChild(script);
-      reject(new Error("脚本加载失败"));
+      reject(new Error("Script load failed"));
     };
     document.body.appendChild(script);
   });
 
+const stripHtml = (value: string) =>
+  value
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const parseNetValuesFromHtml = (content: string) => {
+  if (!content || content.includes("暂无数据")) return [];
+  const rowMatches = content.match(/<tr[\s\S]*?<\/tr>/gi) || [];
+  const results: Array<{ date: string; nav: number; growth: number | null }> = [];
+
+  for (const row of rowMatches) {
+    const cells = row.match(/<td[^>]*>(.*?)<\/td>/gi) || [];
+    if (cells.length < 2) continue;
+    const text = cells.map((cell) => stripHtml(cell));
+    const date = text[0];
+    const nav = Number(text[1]);
+    const growthCell = text.find((item) => /%/.test(item));
+    const growth = growthCell ? Number(growthCell.replace("%", "")) : null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(nav)) {
+      results.push({ date, nav, growth: Number.isFinite(growth) ? growth : null });
+    }
+  }
+
+  return results.reverse();
+};
+
+const parseHoldingsReportDate = (content: string): string | null => {
+  if (!content) return null;
+  const text = stripHtml(content);
+  const reportMatch = text.match(/(\d{4}-\d{2}-\d{2})\s*(?:季报|年报|中报|报告期|截止)/);
+  if (reportMatch) return reportMatch[1];
+  const dateOnlyMatch = text.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+  return dateOnlyMatch ? dateOnlyMatch[1] : null;
+};
+
+const isLastQuarterReport = (reportDate: string | null): boolean => {
+  if (!reportDate) return false;
+  const now = nowInMarket();
+  const month = now.month() + 1;
+  const quarterEndMonth = month <= 3 ? 12 : month <= 6 ? 3 : month <= 9 ? 6 : 9;
+  const quarterEndYear = month <= 3 ? now.year() - 1 : now.year();
+  const quarterEndDate = `${quarterEndYear}-${String(quarterEndMonth).padStart(2, "0")}-${quarterEndMonth === 12 || quarterEndMonth === 3 ? "31" : "30"}`;
+  return reportDate >= quarterEndDate;
+};
+
+const parseHoldingsFromHtml = (content: string): FundHoldingStock[] => {
+  if (!content || content.includes("暂无数据")) return [];
+
+  const headMatch = content.match(/<thead[\s\S]*?<\/thead>/i)?.[0] || "";
+  const headCells = (headMatch.match(/<th[\s\S]*?<\/th>/gi) || []).map((item) => stripHtml(item).replace(/\s+/g, ""));
+
+  let idxCode = -1;
+  let idxName = -1;
+  let idxWeight = -1;
+  headCells.forEach((cell, index) => {
+    if (idxCode < 0 && (cell.includes("股票代码") || cell.includes("证券代码"))) idxCode = index;
+    if (idxName < 0 && (cell.includes("股票名称") || cell.includes("证券名称"))) idxName = index;
+    if (idxWeight < 0 && (cell.includes("占净值比例") || cell.includes("占比"))) idxWeight = index;
+  });
+
+  const bodyMatch = content.match(/<tbody[\s\S]*?<\/tbody>/i)?.[0] || content;
+  const rows = bodyMatch.match(/<tr[\s\S]*?<\/tr>/gi) || [];
+  const holdings: FundHoldingStock[] = [];
+
+  rows.forEach((row) => {
+    const cells = (row.match(/<td[\s\S]*?<\/td>/gi) || []).map((item) => stripHtml(item));
+    if (!cells.length) return;
+
+    let code = "";
+    let name = "";
+    let weight = "";
+
+    if (idxCode >= 0 && cells[idxCode]) {
+      code = cells[idxCode].match(/\d{5,6}/)?.[0] || cells[idxCode];
+    } else {
+      code = cells.find((item) => /^\d{5,6}$/.test(item)) || "";
+    }
+
+    if (idxName >= 0 && cells[idxName]) {
+      name = cells[idxName];
+    } else {
+      name = cells.find((item) => item && item !== code && !/%/.test(item)) || "";
+    }
+
+    if (idxWeight >= 0 && cells[idxWeight]) {
+      const weightNum = cells[idxWeight].match(/([\d.]+)\s*%/)?.[1];
+      weight = weightNum ? `${weightNum}%` : cells[idxWeight];
+    } else {
+      const matched = cells.find((item) => /[\d.]+\s*%/.test(item));
+      const weightNum = matched?.match(/([\d.]+)\s*%/)?.[1];
+      weight = weightNum ? `${weightNum}%` : "";
+    }
+
+    if (code || name || weight) {
+      holdings.push({ code, name, weight, change: null });
+    }
+  });
+
+  return holdings.slice(0, 10);
+};
+
+const fetchHistoricalNetValues = async (code: string) => {
+  const url = `https://fundf10.eastmoney.com/F10DataApi.aspx?type=lsjz&code=${code}&page=1&per=2&sdate=&edate=`;
+  const apidata = await loadScript(url);
+  return parseNetValuesFromHtml(apidata?.content || "");
+};
+
+const fetchHoldings = async (code: string): Promise<{ holdings: FundHoldingStock[]; holdingsReportDate: string | null; holdingsIsLastQuarter: boolean }> => {
+  const cached = holdingsCache.get(code);
+  if (cached && Date.now() - cached.ts < HOLDINGS_CACHE_MS) {
+    return cached.data;
+  }
+
+  const url = `https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjcc&code=${code}&topline=10&year=&month=&_=${Date.now()}`;
+  const apidata = await loadScript(url);
+  const content = apidata?.content || "";
+  const holdingsReportDate = parseHoldingsReportDate(content);
+  const holdingsIsLastQuarter = isLastQuarterReport(holdingsReportDate);
+  const holdings = parseHoldingsFromHtml(content);
+  const data = { holdings, holdingsReportDate, holdingsIsLastQuarter };
+
+  holdingsCache.set(code, { data, ts: Date.now() });
+  return data;
+};
+
+const parseProfileRows = (content: string) => {
+  const rows = content.match(/<tr[\s\S]*?<\/tr>/gi) || [];
+  const map = new Map<string, string>();
+  rows.forEach((row) => {
+    const cells = row.match(/<th[\s\S]*?<\/th>|<td[\s\S]*?<\/td>/gi) || [];
+    for (let i = 0; i < cells.length - 1; i += 1) {
+      const key = stripHtml(cells[i]).replace(/[：:]/g, "").trim();
+      const value = stripHtml(cells[i + 1]);
+      if (key && value && !map.has(key)) map.set(key, value);
+    }
+  });
+  return map;
+};
+
+const pickProfileField = (rowMap: Map<string, string>, candidates: string[]) => {
+  for (const key of candidates) {
+    if (rowMap.has(key)) return rowMap.get(key) || null;
+  }
+  return null;
+};
+
+const fetchFundProfile = async (code: string): Promise<Pick<FundSnapshot, "fundType" | "riskLevel" | "fundManager" | "fundCompany" | "fundScale" | "trackingTarget" | "inceptionDate">> => {
+  const cached = profileCache.get(code);
+  if (cached && Date.now() - cached.ts < PROFILE_CACHE_MS) {
+    return cached.data;
+  }
+
+  const url = `https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jbgk&code=${code}&_=${Date.now()}`;
+  const apidata = await loadScript(url);
+  const content = apidata?.content || "";
+  const rowMap = parseProfileRows(content);
+
+  const data = {
+    fundType: pickProfileField(rowMap, ["基金类型", "类型"]),
+    riskLevel: pickProfileField(rowMap, ["风险等级", "风险收益特征"]),
+    fundManager: pickProfileField(rowMap, ["基金经理", "基金管理人"]),
+    fundCompany: pickProfileField(rowMap, ["管理人", "基金管理人", "基金公司"]),
+    fundScale: pickProfileField(rowMap, ["基金规模", "资产规模"]),
+    trackingTarget: pickProfileField(rowMap, ["跟踪标的", "业绩比较基准"]),
+    inceptionDate: pickProfileField(rowMap, ["成立日期", "发行日期"]),
+  };
+
+  profileCache.set(code, { data, ts: Date.now() });
+  return data;
+};
+
 const requestFundEstimateData = (code: string) =>
   new Promise<FundSnapshot>((resolve, reject) => {
     if (typeof document === "undefined" || !document.body) {
-      reject(new Error("无浏览器环境"));
+      reject(new Error("No browser environment"));
       return;
     }
 
@@ -49,7 +236,7 @@ const requestFundEstimateData = (code: string) =>
       const frameWindow = iframe.contentWindow;
       const frameDocument = iframe.contentDocument || frameWindow?.document;
       if (!frameWindow || !frameDocument) {
-        done(reject, new Error("基金估值容器初始化失败"));
+        done(reject, new Error("Fund iframe init failed"));
         return;
       }
 
@@ -59,7 +246,7 @@ const requestFundEstimateData = (code: string) =>
 
       (frameWindow as any).jsonpgz = (json: any) => {
         if (!json) {
-          done(reject, new Error("基金估值数据无效"));
+          done(reject, new Error("Fund estimate data invalid"));
           return;
         }
 
@@ -71,73 +258,75 @@ const requestFundEstimateData = (code: string) =>
           gztime: json.gztime,
           jzrq: json.jzrq,
           gszzl: Number(json.gszzl),
+          source: "eastmoney",
+          quoteStatus: "estimated",
         });
       };
 
       const script = frameDocument.createElement("script");
       script.src = `https://fundgz.1234567.com.cn/js/${code}.js?rt=${Date.now()}`;
       script.async = true;
-      script.onerror = () => done(reject, new Error("基金估值加载失败"));
+      script.onerror = () => done(reject, new Error("Fund estimate load failed"));
       frameDocument.body.appendChild(script);
     };
 
     document.body.appendChild(iframe);
-    timer = window.setTimeout(() => done(reject, new Error("基金估值请求超时")), FUND_GZ_TIMEOUT_MS);
+    timer = window.setTimeout(() => done(reject, new Error("Fund estimate timeout")), FUND_GZ_TIMEOUT_MS);
   });
 
-const parseNetValuesFromHtml = (content: string) => {
-  if (!content || content.includes("暂无数据")) return [];
-  const rowMatches = content.match(/<tr[\s\S]*?<\/tr>/gi) || [];
-  const results: Array<{ date: string; nav: number; growth: number | null }> = [];
-
-  for (const row of rowMatches) {
-    const cells = row.match(/<td[^>]*>(.*?)<\/td>/gi) || [];
-    if (cells.length < 2) continue;
-    const text = cells.map((cell) => cell.replace(/<[^>]+>/g, "").trim());
-    const date = text[0];
-    const nav = Number(text[1]);
-    const growthCell = text.find((item) => /%/.test(item));
-    const growth = growthCell ? Number(growthCell.replace("%", "")) : null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(nav)) {
-      results.push({ date, nav, growth: Number.isFinite(growth) ? growth : null });
-    }
-  }
-
-  return results.reverse();
-};
-
-const fetchHistoricalNetValues = async (code: string) => {
-  const url = `https://fundf10.eastmoney.com/F10DataApi.aspx?type=lsjz&code=${code}&page=1&per=2&sdate=&edate=`;
-  const apidata = await loadScript(url);
-  return parseNetValuesFromHtml(apidata?.content || "");
-};
-
 export const fetchFundData = async (code: string, previousFund?: FundSnapshot | null): Promise<FundSnapshot> => {
-  const [history, estimate] = await Promise.allSettled([
+  const [history, estimate, holdingsResult, profileResult] = await Promise.allSettled([
     fetchHistoricalNetValues(code),
     requestFundEstimateData(code),
+    fetchHoldings(code),
+    fetchFundProfile(code),
   ]);
 
   const historyList = history.status === "fulfilled" ? history.value : [];
   const latest = historyList.at(-1);
   const previousNav = historyList.length > 1 ? historyList.at(-2) : null;
+  const holdingsData = holdingsResult.status === "fulfilled"
+    ? holdingsResult.value
+    : {
+      holdings: previousFund?.holdings || [],
+      holdingsReportDate: previousFund?.holdingsReportDate || null,
+      holdingsIsLastQuarter: previousFund?.holdingsIsLastQuarter || false,
+    };
+  const profileData = profileResult.status === "fulfilled"
+    ? profileResult.value
+    : {
+      fundType: previousFund?.fundType || null,
+      riskLevel: previousFund?.riskLevel || null,
+      fundManager: previousFund?.fundManager || null,
+      fundCompany: previousFund?.fundCompany || null,
+      fundScale: previousFund?.fundScale || null,
+      trackingTarget: previousFund?.trackingTarget || null,
+      inceptionDate: previousFund?.inceptionDate || null,
+    };
 
   if (estimate.status === "fulfilled") {
     return {
       ...(previousFund || {}),
       ...estimate.value,
+      ...profileData,
       code,
       name: estimate.value.name || previousFund?.name || "",
       dwjz: latest ? String(latest.nav) : estimate.value.dwjz,
       jzrq: latest?.date || estimate.value.jzrq,
       zzl: latest?.growth ?? estimate.value.zzl ?? null,
       lastNav: previousNav ? String(previousNav.nav) : previousFund?.lastNav ?? null,
+      holdings: holdingsData.holdings,
+      holdingsReportDate: holdingsData.holdingsReportDate,
+      holdingsIsLastQuarter: holdingsData.holdingsIsLastQuarter,
+      source: "eastmoney",
+      quoteStatus: "estimated",
     };
   }
 
   if (latest) {
     return {
       ...(previousFund || {}),
+      ...profileData,
       code,
       name: previousFund?.name || `基金 ${code}`,
       dwjz: String(latest.nav),
@@ -148,10 +337,15 @@ export const fetchFundData = async (code: string, previousFund?: FundSnapshot | 
       gszzl: null,
       lastNav: previousNav ? String(previousNav.nav) : null,
       noValuation: true,
+      holdings: holdingsData.holdings,
+      holdingsReportDate: holdingsData.holdingsReportDate,
+      holdingsIsLastQuarter: holdingsData.holdingsIsLastQuarter,
+      source: "fallback",
+      quoteStatus: "official",
     };
   }
 
-  throw new Error(`无法获取基金 ${code} 的数据`);
+  throw new Error(`Unable to fetch fund data for ${code}`);
 };
 
 export const searchFunds = async (keyword: string): Promise<SearchFundResult[]> => {
@@ -170,6 +364,9 @@ export const searchFunds = async (keyword: string): Promise<SearchFundResult[]> 
               code: item.CODE,
               name: item.NAME || item.SHORTNAME || item.CODE,
               shortName: item.SHORTNAME || "",
+              category: item.CATEGORYDESC || "",
+              fundType: item.FTYPE || "",
+              spell: item.PINYIN || "",
             }))
         : [];
       delete (window as any)[callbackName];
@@ -185,7 +382,7 @@ export const searchFunds = async (keyword: string): Promise<SearchFundResult[]> 
     script.onerror = () => {
       if (document.body.contains(script)) document.body.removeChild(script);
       delete (window as any)[callbackName];
-      reject(new Error("基金搜索失败"));
+      reject(new Error("Fund search failed"));
     };
     document.body.appendChild(script);
   });

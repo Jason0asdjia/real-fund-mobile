@@ -13,6 +13,15 @@ dayjs.tz.setDefault(MARKET_TIMEZONE);
 export const nowInMarket = () => dayjs().tz(MARKET_TIMEZONE);
 export const todayInMarket = () => nowInMarket().format("YYYY-MM-DD");
 export const toMarketDay = (value?: string | null) => value ? dayjs.tz(value, MARKET_TIMEZONE) : nowInMarket();
+export const toMarketTime = (value?: string | null, format = "HH:mm") => toMarketDay(value).format(format);
+
+export const holdingDaysInMarket = (startDate?: string | null) => {
+  if (!startDate) return null;
+  const start = toMarketDay(`${startDate}T00:00:00`).startOf("day");
+  const now = nowInMarket().startOf("day");
+  const diff = now.diff(start, "day");
+  return diff >= 0 ? diff : null;
+};
 
 export const isLikelyTradingDay = () => {
   const day = nowInMarket().day();

@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Search, SlidersHorizontal, X } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { GripVertical, Search, SlidersHorizontal, X } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 import { formatCurrency, formatSignedCurrency, getHoldingMetrics } from "@/lib/portfolio";
+import { holdingDaysInMarket, toMarketDay, todayInMarket } from "@/lib/time";
 import type { FundHolding, FundSnapshot } from "@/lib/types";
 
 const VIEW_STATE_KEY = "real-fund-mobile:portfolio-view-state";
 const COLUMN_VISIBILITY_KEY = "real-fund-mobile:portfolio-column-visibility";
+const COLUMN_ORDER_KEY = "real-fund-mobile:portfolio-column-order";
 
 type PortfolioViewState = {
   windowY: number;
@@ -41,6 +43,7 @@ type PortfolioRow = {
   todayProfit: number | null;
   holdingProfit: number | null;
   holdingAmountLabel: string;
+  updatedDate: string;
 };
 
 const COLUMN_OPTIONS = [
@@ -62,6 +65,8 @@ const defaultColumnVisibility = COLUMN_OPTIONS.reduce<Record<ColumnId, boolean>>
   return acc;
 }, {} as Record<ColumnId, boolean>);
 
+const defaultColumnOrder = COLUMN_OPTIONS.map((item) => item.id);
+
 const numberFormatter = new Intl.NumberFormat("zh-CN", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -79,23 +84,37 @@ const formatNav = (value?: string | number | null) => {
   return nav.toFixed(4);
 };
 
-const buildRows = (funds: FundSnapshot[], holdings: Record<string, FundHolding>): PortfolioRow[] => {
+const resolveUpdatedDate = (fund: FundSnapshot) => {
+  if (fund.gztime) return toMarketDay(fund.gztime).format("YYYY-MM-DD");
+  if (fund.jzrq) return toMarketDay(`${fund.jzrq}T00:00:00`).format("YYYY-MM-DD");
+  return "—";
+};
+
+const buildRows = (funds: FundSnapshot[], holdings: Record<string, FundHolding>, today: string): PortfolioRow[] => {
   return funds.map((fund) => {
     const holding = holdings[fund.code];
     const metrics = getHoldingMetrics(fund, holding);
     const amount = metrics?.amount ?? 0;
     const costBasis = holding?.cost != null && holding?.share != null ? Number(holding.cost) * Number(holding.share) : null;
-    const totalChangePercent = costBasis && costBasis > 0 && metrics?.profitTotal != null ? (metrics.profitTotal / costBasis) * 100 : null;
+    const holdingProfitPercent = costBasis && costBasis > 0 && metrics?.profitTotal != null ? (metrics.profitTotal / costBasis) * 100 : null;
+    const hasTodayData = fund.jzrq === today;
+    const hasTodayEstimate = !fund.noValuation && typeof fund.gztime === "string" && fund.gztime.startsWith(today);
+    const estimateChangePercent = fund.noValuation || fund.gszzl == null ? null : Number(fund.gszzl);
+    const totalChangePercent = hasTodayData
+      ? holdingProfitPercent
+      : hasTodayEstimate || holdingProfitPercent != null
+        ? (hasTodayEstimate && estimateChangePercent != null ? estimateChangePercent : 0) + (holdingProfitPercent ?? 0)
+        : null;
     const yesterdayChangePercent = fund.zzl == null ? null : Number(fund.zzl);
     const firstPurchaseDate = holding?.firstPurchaseDate || null;
-    const holdingDays = firstPurchaseDate ? Math.max(0, Math.floor((Date.now() - new Date(firstPurchaseDate).getTime()) / 86_400_000)) : null;
+    const holdingDays = holdingDaysInMarket(firstPurchaseDate);
 
     return {
       code: fund.code,
       fundName: fund.name,
-      estimateNav: formatNav(fund.gsz),
+      estimateNav: fund.noValuation ? "—" : formatNav(fund.gsz),
       yesterdayChangePercent,
-      estimateChangePercent: fund.gszzl == null ? null : Number(fund.gszzl),
+      estimateChangePercent,
       latestNav: formatNav(fund.dwjz),
       totalChangePercent,
       holdingAmount: amount,
@@ -103,6 +122,7 @@ const buildRows = (funds: FundSnapshot[], holdings: Record<string, FundHolding>)
       todayProfit: metrics?.profitToday ?? null,
       holdingProfit: metrics?.profitTotal ?? null,
       holdingAmountLabel: formatCurrency(amount),
+      updatedDate: resolveUpdatedDate(fund),
     };
   });
 };
@@ -119,14 +139,36 @@ const readColumnVisibility = (): Record<ColumnId, boolean> => {
   }
 };
 
+const readColumnOrder = (): ColumnId[] => {
+  if (typeof window === "undefined") return defaultColumnOrder;
+  try {
+    const raw = window.localStorage.getItem(COLUMN_ORDER_KEY);
+    if (!raw) return defaultColumnOrder;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return defaultColumnOrder;
+
+    const parsedIds = parsed.filter((item): item is ColumnId => typeof item === "string" && defaultColumnOrder.includes(item as ColumnId));
+    const deduped = Array.from(new Set(parsedIds));
+    const missing = defaultColumnOrder.filter((id) => !deduped.includes(id));
+    return [...deduped, ...missing];
+  } catch {
+    return defaultColumnOrder;
+  }
+};
+
 export default function PortfolioPage() {
-  const { state } = useAppState();
+  const { state, refreshFunds } = useAppState();
   const [restoredState, setRestoredState] = useState<PortfolioViewState>({ windowY: 0, tableTop: 0, tableLeft: 0 });
-  const [columnVisibility, setColumnVisibility] = useState<Record<ColumnId, boolean>>(defaultColumnVisibility);
+  const [columnVisibility, setColumnVisibility] = useState<Record<ColumnId, boolean>>(() => readColumnVisibility());
+  const [columnOrder, setColumnOrder] = useState<ColumnId[]>(() => readColumnOrder());
+  const [draggingColumnId, setDraggingColumnId] = useState<ColumnId | null>(null);
+  const [touchDraggingColumnId, setTouchDraggingColumnId] = useState<ColumnId | null>(null);
   const [columnModalOpen, setColumnModalOpen] = useState(false);
   const viewStateRef = useRef<PortfolioViewState>({ windowY: 0, tableTop: 0, tableLeft: 0 });
   const tableRef = useRef<HTMLDivElement | null>(null);
   const tableRestoredRef = useRef(false);
+  const columnItemRefs = useRef<Partial<Record<ColumnId, HTMLDivElement | null>>>({});
+  const previousRectsRef = useRef<Partial<Record<ColumnId, DOMRect>>>({});
 
   const totals = state.funds.reduce(
     (acc, fund) => {
@@ -143,7 +185,6 @@ export default function PortfolioPage() {
     const next = readViewState();
     viewStateRef.current = next;
     setRestoredState(next);
-    setColumnVisibility(readColumnVisibility());
 
     const frame = window.requestAnimationFrame(() => {
       window.scrollTo(0, next.windowY);
@@ -180,6 +221,11 @@ export default function PortfolioPage() {
   }, [columnVisibility]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(COLUMN_ORDER_KEY, JSON.stringify(columnOrder));
+  }, [columnOrder]);
+
+  useEffect(() => {
     if (typeof document === "undefined") return;
     document.body.classList.toggle("app-modal-open", columnModalOpen);
     return () => {
@@ -199,32 +245,130 @@ export default function PortfolioPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (state.funds.length === 0) return;
+    void refreshFunds();
+  }, [refreshFunds, state.funds.length]);
+
   const rows = useMemo(
-    () => buildRows(state.funds, state.holdings),
+    () => buildRows(state.funds, state.holdings, todayInMarket()),
     [state.funds, state.holdings],
   );
+  const totalUpdatedAt = state.lastUpdatedAt ? toMarketDay(state.lastUpdatedAt).format("MM-DD HH:mm") : "--";
   const todayBase = totals.amount - totals.today;
   const todayRate = todayBase > 0 ? (totals.today / todayBase) * 100 : null;
 
+  const orderedColumns = useMemo(() => {
+    const optionById = new Map(COLUMN_OPTIONS.map((item) => [item.id, item] as const));
+    return columnOrder.map((id) => optionById.get(id)).filter((item): item is (typeof COLUMN_OPTIONS)[number] => Boolean(item));
+  }, [columnOrder]);
+
   const visibleColumns = useMemo(
-    () => COLUMN_OPTIONS.filter((item) => columnVisibility[item.id]),
-    [columnVisibility],
+    () => orderedColumns.filter((item) => columnVisibility[item.id]),
+    [columnVisibility, orderedColumns],
+  );
+
+  const moveColumn = useCallback((sourceId: ColumnId, targetId: ColumnId) => {
+    if (sourceId === targetId) return;
+
+    const nextPreviousRects: Partial<Record<ColumnId, DOMRect>> = {};
+    defaultColumnOrder.forEach((id) => {
+      const node = columnItemRefs.current[id];
+      if (!node) return;
+      nextPreviousRects[id] = node.getBoundingClientRect();
+    });
+    previousRectsRef.current = nextPreviousRects;
+
+    setColumnOrder((prev) => {
+      const sourceIndex = prev.indexOf(sourceId);
+      const targetIndex = prev.indexOf(targetId);
+      if (sourceIndex < 0 || targetIndex < 0) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    const previousRects = previousRectsRef.current;
+    const nextRects: Partial<Record<ColumnId, DOMRect>> = {};
+
+    defaultColumnOrder.forEach((id) => {
+      const node = columnItemRefs.current[id];
+      if (!node) return;
+      nextRects[id] = node.getBoundingClientRect();
+    });
+
+    defaultColumnOrder.forEach((id) => {
+      const node = columnItemRefs.current[id];
+      const previous = previousRects[id];
+      const next = nextRects[id];
+      if (!node || !previous || !next) return;
+
+      const deltaX = previous.left - next.left;
+      const deltaY = previous.top - next.top;
+      if (!deltaX && !deltaY) return;
+
+      node.getAnimations().forEach((animation) => animation.cancel());
+      node.animate(
+        [
+          { transform: `translate(${deltaX}px, ${deltaY}px)` },
+          { transform: "translate(0, 0)" },
+        ],
+        {
+          duration: 200,
+          easing: "cubic-bezier(0.2, 0, 0, 1)",
+        },
+      );
+    });
+
+    previousRectsRef.current = nextRects;
+  }, [columnOrder]);
+
+  const handleTouchDragMove = useCallback(
+    (clientX: number, clientY: number) => {
+      if (!touchDraggingColumnId) return;
+      const target = document.elementFromPoint(clientX, clientY)?.closest("[data-column-id]") as HTMLElement | null;
+      const targetId = target?.dataset.columnId as ColumnId | undefined;
+      if (!targetId || targetId === touchDraggingColumnId) return;
+      moveColumn(touchDraggingColumnId, targetId);
+    },
+    [moveColumn, touchDraggingColumnId],
   );
 
   const renderCellValue = (row: PortfolioRow, id: ColumnId) => {
-    if (id === "latestNav") return row.latestNav;
-    if (id === "estimateNav") return row.estimateNav;
-    if (id === "yesterdayChangePercent") return formatSignedPercent(row.yesterdayChangePercent);
-    if (id === "estimateChangePercent") return formatSignedPercent(row.estimateChangePercent);
-    if (id === "totalChangePercent") return formatSignedPercent(row.totalChangePercent);
-    if (id === "holdingAmount") return formatCurrency(row.holdingAmount);
-    if (id === "holdingDays") return row.holdingDays == null ? "—" : `${row.holdingDays}天`;
-    if (id === "todayProfit") return formatSignedCurrency(row.todayProfit);
-    return formatSignedCurrency(row.holdingProfit);
+    const primaryValue =
+      id === "latestNav"
+        ? row.latestNav
+        : id === "estimateNav"
+          ? row.estimateNav
+          : id === "yesterdayChangePercent"
+            ? formatSignedPercent(row.yesterdayChangePercent)
+            : id === "estimateChangePercent"
+              ? formatSignedPercent(row.estimateChangePercent)
+              : id === "totalChangePercent"
+                ? formatSignedPercent(row.totalChangePercent)
+                : id === "holdingAmount"
+                  ? formatCurrency(row.holdingAmount)
+                  : id === "holdingDays"
+                    ? row.holdingDays == null
+                      ? "—"
+                      : `${row.holdingDays}天`
+                    : id === "todayProfit"
+                      ? formatSignedCurrency(row.todayProfit)
+                      : formatSignedCurrency(row.holdingProfit);
+
+    return (
+      <div className="flex flex-col leading-tight">
+        <span>{primaryValue}</span>
+        <span className="mt-1 text-[10px] font-medium text-[#8a90a0]">{row.updatedDate}</span>
+      </div>
+    );
   };
 
   const getCellClass = (row: PortfolioRow, id: ColumnId) => {
-    const base = "px-0 py-3 text-sm tabular-nums";
+    const base = "px-0 py-3 text-sm tabular-nums align-top";
     if (id === "yesterdayChangePercent" || id === "estimateChangePercent" || id === "totalChangePercent") {
       const value = id === "yesterdayChangePercent" ? row.yesterdayChangePercent : id === "estimateChangePercent" ? row.estimateChangePercent : row.totalChangePercent;
       if (value == null) return `${base} text-[#747781]`;
@@ -250,7 +394,10 @@ export default function PortfolioPage() {
         </header>
 
         <div className="mt-1.5">
-          <p className="mb-1 text-[9px] font-semibold tracking-[0.14em] text-[#24467c]/70">基金总资产（人民币）</p>
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <p className="text-[9px] font-semibold tracking-[0.14em] text-[#24467c]/70">基金总资产（人民币）</p>
+            <p className="text-[10px] font-semibold text-[#24467c]/75">{totalUpdatedAt}</p>
+          </div>
           <p className="text-[26px] font-extrabold leading-none tracking-tight tabular-nums">{numberFormatter.format(totals.amount)}</p>
 
           <div className="mt-4 flex items-center justify-between gap-2">
@@ -360,8 +507,33 @@ export default function PortfolioPage() {
             </div>
             <div className="app-modal-sheet__content">
               <div className="grid grid-cols-2 gap-2">
-                {COLUMN_OPTIONS.map((item) => (
-                  <label key={item.id} className="flex items-center gap-2 rounded-lg border border-[#e2e7ff] px-2.5 py-2 text-sm text-[#131b2e]">
+                {orderedColumns.map((item) => (
+                  <div
+                    key={item.id}
+                    data-column-id={item.id}
+                    ref={(node) => {
+                      columnItemRefs.current[item.id] = node;
+                    }}
+                    draggable
+                    onDragStart={(event) => {
+                      setDraggingColumnId(item.id);
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", item.id);
+                    }}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "move";
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      const sourceId = event.dataTransfer.getData("text/plain") as ColumnId;
+                      if (!sourceId) return;
+                      moveColumn(sourceId, item.id);
+                      setDraggingColumnId(null);
+                    }}
+                    onDragEnd={() => setDraggingColumnId(null)}
+                    className={`flex items-center gap-2 rounded-lg border border-[#e2e7ff] px-2.5 py-2 text-sm text-[#131b2e] will-change-transform ${draggingColumnId === item.id || touchDraggingColumnId === item.id ? "opacity-60" : "opacity-100"}`}
+                  >
                     <input
                       type="checkbox"
                       className="h-4 w-4"
@@ -373,8 +545,31 @@ export default function PortfolioPage() {
                         }))
                       }
                     />
-                    {item.label}
-                  </label>
+                    <span className="flex-1">{item.label}</span>
+                    <button
+                      type="button"
+                      onPointerDown={(event) => {
+                        if (event.pointerType !== "touch") return;
+                        event.preventDefault();
+                        setTouchDraggingColumnId(item.id);
+                      }}
+                      onPointerMove={(event) => {
+                        if (event.pointerType !== "touch") return;
+                        handleTouchDragMove(event.clientX, event.clientY);
+                      }}
+                      onPointerUp={() => {
+                        setTouchDraggingColumnId(null);
+                      }}
+                      onPointerCancel={() => {
+                        setTouchDraggingColumnId(null);
+                      }}
+                      className={`inline-flex cursor-grab text-[#8a90a0] active:cursor-grabbing ${touchDraggingColumnId === item.id ? "opacity-60" : "opacity-100"}`}
+                      aria-label="拖拽排序"
+                      style={{ touchAction: "none" }}
+                    >
+                      <GripVertical size={15} />
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
