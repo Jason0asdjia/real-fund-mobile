@@ -14,7 +14,10 @@
 - `/src/components/fund-detail-view.tsx`：基金详情视图
 - `/src/components/fund-manage-view.tsx`：持仓操作视图
 - `/src/components/portfolio-table.tsx`：持仓表格
+- `/src/components/service-worker-register.tsx`：SW 注册组件
 
 ## 约束
 - 保持组件无副作用与可组合性
 - 数值颜色使用 `is-up`/`is-down` 语义类
+- 与页面共享统一视觉约束：见 `/UI_CONSTRAINTS.md`
+- 导航组件文案需与路由语义一致（当前：持仓总览/发现/行情中心/个人中心）

@@ -14,7 +14,9 @@
 - `/src/lib/valuation-timeseries.ts`：估值序列缓存
 - `/src/lib/time.ts`：交易时间处理
 - `/src/lib/types.ts`：业务类型定义
+- `/src/lib/demo-data.ts`：演示数据生成
 
 ## 约束
 - 保持纯函数优先，减少 UI 耦合
 - 不破坏既有 localStorage 键结构
+- 计算逻辑若影响 UI 呈现（收益率、净值格式等），需同步验证 portfolio/market/settings 页面

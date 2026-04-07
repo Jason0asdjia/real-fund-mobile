@@ -6,7 +6,7 @@
 
 - 全程 `mobile-first`
 - 使用 `App Router`
-- 采用“仪表盘 / 发现 / 持仓 / 设置”四层 App 信息架构
+- 采用“持仓总览 / 发现 / 行情中心 / 个人中心”四层 App 信息架构
 - 使用 `Framer Motion` 做页面切换与卡片进入动画
 - 支持 `PWA`
 - 保留旧仓库里最有价值的内核逻辑：基金搜索、实时估值抓取、历史净值回退、本地持仓收益计算、估值分时缓存
@@ -18,7 +18,7 @@
 - 本地状态层与持久化
 - 基金数据请求封装
 - 移动端底部导航和页面切换动画
-- Dashboard / Discover / Portfolio / Settings 四个主页面
+- Portfolio / Discover / Market / Settings 四个主页面（Dashboard 代码保留，默认不暴露在主导航）
 - PWA manifest、service worker、离线页
 - Tailwind CSS（utility + `@layer components` 兼容层）
 - 项目说明文档与 AI 协作说明
@@ -102,6 +102,12 @@ agent.md
 - 清空本地数据
 - 查看项目结构图
 
+### Market（行情中心）
+- 行情指数概览
+- 热门板块
+- 基金领涨排行
+- 7x24 快讯
+
 ## 本地开发
 
 ```bash
@@ -139,6 +145,10 @@ npm run build
   - `src/components/README.md`
   - `src/lib/README.md`
   - `public/README.md`
+- 全局约束文档：
+  - `UI_CONSTRAINTS.md`
+  - `MODAL_GUIDELINES.md`
+  - `agent.md`
 
 ## 已知限制
 

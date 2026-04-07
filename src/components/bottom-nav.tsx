@@ -1,14 +1,15 @@
 "use client";
 
 import clsx from "clsx";
-import { BarChart3, Compass, Settings2 } from "lucide-react";
+import { BarChart3, Compass, Settings2, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const items = [
   { href: "/portfolio", label: "持仓总览", icon: BarChart3 },
   { href: "/discover", label: "发现", icon: Compass },
-  { href: "/settings", label: "设置", icon: Settings2 },
+  { href: "/market", label: "行情中心", icon: TrendingUp },
+  { href: "/settings", label: "个人中心", icon: Settings2 },
 ];
 
 export function BottomNav() {

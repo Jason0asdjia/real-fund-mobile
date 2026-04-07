@@ -1,0 +1,129 @@
+"use client";
+
+import { SlidersHorizontal } from "lucide-react";
+
+import { useAppState } from "@/components/app-provider";
+import { formatPercent } from "@/lib/portfolio";
+
+const marketSnapshot = [
+  { label: "上证指数", value: "3,058.22", change: 0.42 },
+  { label: "恒生指数", value: "16,725.10", change: -1.15 },
+  { label: "纳斯达克", value: "16,085.11", change: 0.82 },
+];
+
+const hotSectors = [
+  { name: "半导体设备", change: 3.82, points: [7, 8, 7, 10, 9, 12, 11, 13, 14, 16, 18] },
+  { name: "人工智能AI", change: 2.45, points: [9, 8, 10, 9, 12, 11, 13, 14, 13, 15, 17] },
+];
+
+const quickNews = [
+  { time: "14:35", text: "中国央行：维持一年期及五年期LPR利率不变。" },
+  { time: "14:12", text: "光伏组件出海超预期，机构调高行业评级。" },
+  { time: "13:45", text: "港股午后走低，恒生科技指数跌幅扩大至2%。" },
+  { time: "11:30", text: "上交所：本周对股价异常波动股票进行从严监管。" },
+];
+
+const toNumber = (value: string | number | null | undefined) => {
+  const next = Number(value);
+  return Number.isFinite(next) ? next : null;
+};
+
+export default function MarketPage() {
+  const { state } = useAppState();
+
+  const topFunds = [...state.funds]
+    .map((fund) => ({ ...fund, change: toNumber(fund.gszzl), nav: toNumber(fund.gsz) ?? toNumber(fund.dwjz) }))
+    .filter((fund) => fund.change != null)
+    .sort((a, b) => (b.change || 0) - (a.change || 0))
+    .slice(0, 6);
+
+  return (
+    <div className="-mx-3 -mt-4 min-h-[calc(100dvh-5.5rem)] bg-white text-[#131b2e] md:-mx-4 md:-mt-4">
+      <header className="sticky top-0 z-20 border-b border-[#e2e7ff] bg-white">
+        <div className="flex h-12 items-center justify-between px-3">
+          <h1 className="text-2xl font-extrabold tracking-tight">行情中心</h1>
+          <div className="flex items-center gap-3 text-[#53617a]">
+            <SlidersHorizontal size={17} />
+          </div>
+        </div>
+      </header>
+
+      <main className="pb-24">
+        <section className="flex items-stretch border-b border-[#e2e7ff]">
+          <div className="flex flex-1 items-center gap-5 overflow-x-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {marketSnapshot.map((item) => (
+              <article key={item.label} className="min-w-fit pr-3">
+                <p className="mb-1 text-[10px] font-bold text-[#747781]">{item.label}</p>
+                <p className="text-sm font-extrabold tabular-nums">{item.value}</p>
+                <p className={`text-[10px] font-bold ${item.change >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>{formatPercent(item.change)}</p>
+              </article>
+            ))}
+          </div>
+          <div className="flex items-center border-l border-[#e2e7ff] px-3 text-[#747781]">
+            <SlidersHorizontal size={16} />
+          </div>
+        </section>
+
+        <section className="border-b border-[#e2e7ff] py-3">
+          <div className="mb-2 flex items-center justify-between px-3">
+            <h2 className="text-[10px] font-black tracking-[0.12em]">热门板块</h2>
+            <span className="text-[10px] font-bold text-[#005bc0]">更多行情</span>
+          </div>
+          <div className="grid grid-cols-2 border-y border-[#f2f3ff]">
+            {hotSectors.map((sector, index) => (
+              <article key={sector.name} className={`p-3 ${index === 0 ? "border-r border-[#f2f3ff]" : ""}`}>
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <span className="text-xs font-bold">{sector.name}</span>
+                  <span className="text-xs font-bold text-[#005bc0]">{formatPercent(sector.change)}</span>
+                </div>
+                <div className="h-8">
+                  <svg viewBox="0 0 100 20" className="h-full w-full">
+                    <polyline
+                      fill="none"
+                      stroke="#005bc0"
+                      strokeWidth="2"
+                      points={sector.points.map((point, pointIndex) => `${pointIndex * 10},${20 - point}`).join(" ")}
+                    />
+                  </svg>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="border-b border-[#e2e7ff] py-3">
+          <div className="mb-2 flex items-center justify-between px-3">
+            <h2 className="text-[10px] font-black tracking-[0.12em]">基金领涨排行</h2>
+          </div>
+          <div className="divide-y divide-[#f2f3ff]">
+            {topFunds.map((item) => (
+              <article key={item.code} className="flex items-center justify-between px-3 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-bold">{item.name}</p>
+                  <p className="text-[10px] font-medium text-[#747781]">{item.code}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-bold text-[#005bc0]">{formatPercent(item.change)}</p>
+                  <p className="text-[10px] text-[#747781]">{item.nav == null ? "净值: —" : `净值: ${item.nav.toFixed(4)}`}</p>
+                </div>
+              </article>
+            ))}
+            {!topFunds.length ? <p className="px-3 py-4 text-sm text-[#747781]">暂无基金数据，先去发现页添加基金。</p> : null}
+          </div>
+        </section>
+
+        <section className="py-3">
+          <h2 className="mb-2 px-3 text-[10px] font-black tracking-[0.12em]">7x24快讯</h2>
+          <div className="divide-y divide-[#f2f3ff]">
+            {quickNews.map((item) => (
+              <article key={item.time + item.text} className="flex gap-3 px-3 py-3">
+                <span className={`pt-0.5 text-[10px] font-bold ${item.time === "14:35" ? "text-[#005bc0]" : "text-[#747781]"}`}>{item.time}</span>
+                <p className="m-0 text-xs font-bold leading-5">{item.text}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
