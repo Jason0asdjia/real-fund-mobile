@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronLeft, Repeat2 } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
@@ -28,6 +29,7 @@ const formatInputNumber = (value: number | null | undefined, digits = 2) => {
 };
 
 export function FundManageView({ code, onBack, asModal = false }: FundManageViewProps) {
+  const router = useRouter();
   const { state, updateHolding } = useAppState();
   const fund = state.funds.find((item) => item.code === code);
   const holding = fund ? state.holdings[fund.code] : undefined;
@@ -99,6 +101,18 @@ export function FundManageView({ code, onBack, asModal = false }: FundManageView
       cost,
       firstPurchaseDate: dateInput || null,
     });
+
+    if (onBack) {
+      onBack();
+      return;
+    }
+
+    if (window.history.length > 1) {
+      router.back();
+      return;
+    }
+
+    router.replace(`/portfolio/${fund.code}`);
   };
 
   return (

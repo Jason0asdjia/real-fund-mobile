@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { fetchFundData, searchFunds } from "@/lib/fund-api";
 import { defaultAppState, loadAppState, saveAppState } from "@/lib/storage";
+import { nowInMarket } from "@/lib/time";
 import type { AppState, FundHolding, FundSnapshot, FundTransaction, SearchFundResult, ValuationPoint } from "@/lib/types";
 import { clearValuationSeries, getAllValuationSeries, recordValuation } from "@/lib/valuation-timeseries";
 import { buildDemoSeed } from "@/lib/demo-data";
@@ -14,6 +15,7 @@ type AppContextValue = {
   refreshing: boolean;
   seeding: boolean;
   error: string;
+  passiveRefreshAt: number | null;
   valuationSeries: Record<string, ValuationPoint[]>;
   search: (keyword: string) => Promise<SearchFundResult[]>;
   addFund: (input: SearchFundResult) => Promise<void>;
@@ -31,12 +33,18 @@ type AppContextValue = {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
+const needsArchiveBackfill = (fund: FundSnapshot) => {
+  if (fund.archiveStatus === "ready" || fund.archiveStatus === "empty") return false;
+  return !fund.holdingsReportDate && !fund.fundType && !fund.riskLevel && !fund.fundManager && !fund.fundCompany && !fund.fundScale && !fund.trackingTarget && !fund.inceptionDate;
+};
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppState>(defaultAppState);
   const [hydrated, setHydrated] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [error, setError] = useState("");
+  const [passiveRefreshAt, setPassiveRefreshAt] = useState<number | null>(null);
   const [valuationSeries, setValuationSeries] = useState<Record<string, ValuationPoint[]>>({});
   const fundsRef = useRef<FundSnapshot[]>([]);
   const refreshingRef = useRef(false);
@@ -44,6 +52,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const didInitialRefreshRef = useRef(false);
   const refreshTokenRef = useRef(0);
   const lastForegroundRefreshRef = useRef(0);
+  const archiveBackfillCodeRef = useRef<string | null>(null);
+  const archiveBackfillAttemptRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     const nextState = loadAppState();
@@ -96,7 +106,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setState((current) => ({
             ...current,
             funds: refreshed,
-            lastUpdatedAt: new Date().toISOString(),
+            lastUpdatedAt: nowInMarket().format("YYYY-MM-DD HH:mm:ss"),
           }));
           setValuationSeries(getAllValuationSeries());
         }
@@ -135,7 +145,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (state.funds.length === 0) return;
 
     const timer = window.setInterval(() => {
-      console.info(`[refresh-ms] trigger: interval=${state.refreshMs}ms at=${new Date().toISOString()}`);
+      console.info(`[refresh-ms] trigger: interval=${state.refreshMs}ms at=${nowInMarket().format("YYYY-MM-DD HH:mm:ss")} CST`);
+      setPassiveRefreshAt(Date.now());
       refreshFunds();
     }, state.refreshMs);
 
@@ -168,6 +179,64 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, [hydrated, refreshFunds, state.funds.length]);
 
+  const backfillFundArchives = useCallback(async (fund: FundSnapshot) => {
+    if (archiveBackfillCodeRef.current || refreshingRef.current || document.hidden) return;
+
+    archiveBackfillCodeRef.current = fund.code;
+    archiveBackfillAttemptRef.current[fund.code] = Date.now();
+
+    try {
+      const nextFund = await fetchFundData(fund.code, fund);
+      setState((current) => ({
+        ...current,
+        funds: current.funds.map((item) =>
+          item.code === fund.code
+            ? {
+                ...item,
+                holdings: nextFund.holdings,
+                holdingsReportDate: nextFund.holdingsReportDate,
+                holdingsIsLastQuarter: nextFund.holdingsIsLastQuarter,
+                archiveStatus: nextFund.archiveStatus,
+                fundType: nextFund.fundType,
+                riskLevel: nextFund.riskLevel,
+                fundManager: nextFund.fundManager,
+                fundCompany: nextFund.fundCompany,
+                fundScale: nextFund.fundScale,
+                trackingTarget: nextFund.trackingTarget,
+                inceptionDate: nextFund.inceptionDate,
+              }
+            : item,
+        ),
+      }));
+    } catch {
+      setState((current) => ({
+        ...current,
+        funds: current.funds.map((item) => (item.code === fund.code ? { ...item, archiveStatus: item.archiveStatus || "pending" } : item)),
+      }));
+    } finally {
+      archiveBackfillCodeRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated || document.hidden || refreshingRef.current || state.funds.length === 0) return;
+
+    const now = Date.now();
+    const candidate = state.funds.find((fund) => {
+      if (!needsArchiveBackfill(fund)) return false;
+      const lastAttemptAt = archiveBackfillAttemptRef.current[fund.code] || 0;
+      return now - lastAttemptAt >= 60_000;
+    });
+
+    if (!candidate) return;
+
+    const timer = window.setTimeout(() => {
+      void backfillFundArchives(candidate);
+    }, 1200);
+
+    return () => window.clearTimeout(timer);
+  }, [backfillFundArchives, hydrated, state.funds]);
+
   const addFund = useCallback(async (input: SearchFundResult) => {
     if (fundsRef.current.some((item) => item.code === input.code)) return;
 
@@ -188,7 +257,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ...current,
         funds: [snapshot, ...current.funds],
         searchHistory: [input.name, ...current.searchHistory.filter((item) => item !== input.name)].slice(0, 6),
-        lastUpdatedAt: new Date().toISOString(),
+        lastUpdatedAt: nowInMarket().format("YYYY-MM-DD HH:mm:ss"),
       }));
       didInitialRefreshRef.current = true;
     } catch (nextError) {
@@ -297,6 +366,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSeeding(false);
     setError("");
     didInitialRefreshRef.current = false;
+    setPassiveRefreshAt(null);
     setState(defaultAppState);
     setValuationSeries({});
     fundsRef.current = [];
@@ -339,6 +409,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       refreshing,
       seeding,
       error,
+      passiveRefreshAt,
       valuationSeries,
       search,
       addFund,
@@ -353,7 +424,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearAll,
       seedDemoData,
     }),
-    [addFund, addTransaction, clearAll, clearHolding, error, hydrated, refreshFunds, refreshing, removeFund, removeTransaction, search, seeding, seedDemoData, setRefreshMs, state, toggleFavorite, updateHolding, valuationSeries],
+    [addFund, addTransaction, clearAll, clearHolding, error, hydrated, passiveRefreshAt, refreshFunds, refreshing, removeFund, removeTransaction, search, seeding, seedDemoData, setRefreshMs, state, toggleFavorite, updateHolding, valuationSeries],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

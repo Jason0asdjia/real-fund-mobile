@@ -27,21 +27,22 @@ export const getHoldingMetrics = (fund: FundSnapshot, holding?: FundHolding): Ho
   const today = todayInMarket();
   const hasTodayData = fund.jzrq === today;
   const hasTodayValuation = typeof fund.gztime === "string" && fund.gztime.startsWith(today);
-  const useValuation = hasEstimateWindowStarted() && !hasTodayData;
-
-  const currentNav = useValuation
-    ? Number.isFinite(Number(fund.gsz)) ? Number(fund.gsz) : Number(fund.dwjz)
-    : Number(fund.dwjz);
+  const canUseEstimate = !hasTodayData && (hasTodayValuation || hasEstimateWindowStarted()) && Number.isFinite(Number(fund.gsz));
+  const currentNav = canUseEstimate
+    ? Number(fund.gsz)
+    : Number.isFinite(Number(fund.dwjz))
+      ? Number(fund.dwjz)
+      : Number(fund.gsz);
 
   if (!Number.isFinite(currentNav) || currentNav <= 0) return null;
 
   let profitToday: number | null = null;
-  if (hasTodayData || hasTodayValuation || useValuation) {
-    const lastNav = Number(fund.lastNav);
-    if (Number.isFinite(lastNav) && lastNav > 0 && !useValuation) {
+  const lastNav = Number(fund.lastNav);
+  if (hasTodayData || hasTodayValuation || canUseEstimate || (Number.isFinite(lastNav) && lastNav > 0)) {
+    if (Number.isFinite(lastNav) && lastNav > 0) {
       profitToday = (currentNav - lastNav) * share;
     } else {
-      const changeRate = useValuation ? Number(fund.gszzl) : Number(fund.zzl ?? fund.gszzl);
+      const changeRate = canUseEstimate ? Number(fund.gszzl) : Number(fund.zzl ?? fund.gszzl);
       if (Number.isFinite(changeRate)) {
         const amount = share * currentNav;
         profitToday = amount - amount / (1 + changeRate / 100);
@@ -117,6 +118,6 @@ export const formatPercent = (value?: number | null) => {
 
 export const formatSignedCurrency = (value?: number | null) => {
   if (value == null || !Number.isFinite(value)) return "—";
-  const sign = value > 0 ? "+" : "";
+  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
   return `${sign}${formatCurrency(Math.abs(value))}`;
 };

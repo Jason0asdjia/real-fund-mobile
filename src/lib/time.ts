@@ -1,4 +1,5 @@
 import dayjs from "dayjs";
+import type { ConfigType, Dayjs } from "dayjs";
 import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
 
@@ -12,8 +13,63 @@ dayjs.tz.setDefault(MARKET_TIMEZONE);
 
 export const nowInMarket = () => dayjs().tz(MARKET_TIMEZONE);
 export const todayInMarket = () => nowInMarket().format("YYYY-MM-DD");
-export const toMarketDay = (value?: string | null) => value ? dayjs.tz(value, MARKET_TIMEZONE) : nowInMarket();
+
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const LOCAL_DATETIME_PATTERN = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/;
+
+export const toMarketDay = (value?: string | null) => {
+  if (!value) return nowInMarket();
+
+  if (DATE_ONLY_PATTERN.test(value)) {
+    return dayjs.tz(`${value}T00:00:00`, MARKET_TIMEZONE);
+  }
+
+  if (LOCAL_DATETIME_PATTERN.test(value)) {
+    return dayjs.tz(value.replace(" ", "T"), MARKET_TIMEZONE);
+  }
+
+  const parsed = dayjs(value);
+  if (parsed.isValid()) {
+    return parsed.tz(MARKET_TIMEZONE);
+  }
+
+  return nowInMarket();
+};
+
 export const toMarketTime = (value?: string | null, format = "HH:mm") => toMarketDay(value).format(format);
+export const formatMarketDate = (value?: ConfigType | null, format = "YYYY-MM-DD") => {
+  if (value == null) return nowInMarket().format(format);
+  if (typeof value === "string") return toMarketDay(value).format(format);
+
+  const parsed = dayjs(value);
+  return parsed.isValid() ? parsed.tz(MARKET_TIMEZONE).format(format) : nowInMarket().format(format);
+};
+
+export const formatClock = (value?: string | null) => {
+  if (!value) return "未刷新";
+  return toMarketDay(value).format("HH:mm");
+};
+
+export const shiftMarketDay = (value?: ConfigType | null, amount = 0, unit: dayjs.ManipulateType = "day"): Dayjs => {
+  if (value == null) return nowInMarket().add(amount, unit);
+  if (typeof value === "string") return toMarketDay(value).add(amount, unit);
+
+  const parsed = dayjs(value);
+  return parsed.isValid() ? parsed.tz(MARKET_TIMEZONE).add(amount, unit) : nowInMarket().add(amount, unit);
+};
+
+export const getDaysInMarketMonth = (month: string) => {
+  const start = toMarketDay(`${month}-01T00:00:00`).startOf("month");
+  return start.daysInMonth();
+};
+
+export const getMarketWeekday = (value?: ConfigType | null) => {
+  if (value == null) return nowInMarket().day();
+  if (typeof value === "string") return toMarketDay(value).day();
+
+  const parsed = dayjs(value);
+  return parsed.isValid() ? parsed.tz(MARKET_TIMEZONE).day() : nowInMarket().day();
+};
 
 export const holdingDaysInMarket = (startDate?: string | null) => {
   if (!startDate) return null;
@@ -32,9 +88,4 @@ export const hasEstimateWindowStarted = () => {
   if (!isLikelyTradingDay()) return false;
   const now = nowInMarket();
   return now.hour() * 60 + now.minute() >= MARKET_ESTIMATE_START_MINUTES;
-};
-
-export const formatClock = (value?: string | null) => {
-  if (!value) return "未刷新";
-  return toMarketDay(value).format("HH:mm");
 };

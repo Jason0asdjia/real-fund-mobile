@@ -16,9 +16,41 @@ type TxItem = FundTransaction & {
   amount: number;
 };
 
+const txOrderToken = (item: TxItem) => {
+  const idPrefix = String(item.id || "").split("-")[0];
+  const idTs = Number(idPrefix);
+  if (Number.isFinite(idTs) && idTs > 0) return idTs;
+  return toMarketDay(`${item.date}T00:00:00`).valueOf();
+};
+
 const monthLabel = (monthKey: string) => {
   const [year, month] = monthKey.split("-");
   return `${year}年${month}月`;
+};
+
+const isLikelyTradingDayByDate = (day: ReturnType<typeof toMarketDay>) => {
+  const weekday = day.day();
+  return weekday !== 0 && weekday !== 6;
+};
+
+const addLikelyTradingDays = (baseDate: string, days: number) => {
+  let cursor = toMarketDay(`${baseDate}T00:00:00`).startOf("day");
+  let added = 0;
+  while (added < days) {
+    cursor = cursor.add(1, "day");
+    if (isLikelyTradingDayByDate(cursor)) {
+      added += 1;
+    }
+  }
+  return cursor;
+};
+
+const isAfterCloseOrder = (note?: string | null) => (note || "").includes("15:00后");
+
+const isTransactionConfirmed = (item: FundTransaction) => {
+  const confirmOffset = isAfterCloseOrder(item.note) ? 2 : 1;
+  const confirmDate = addLikelyTradingDays(item.date, confirmOffset);
+  return nowInMarket().startOf("day").isSame(confirmDate, "day") || nowInMarket().startOf("day").isAfter(confirmDate, "day");
 };
 
 export default function HistoryPage() {
@@ -58,7 +90,13 @@ export default function HistoryPage() {
       return txDate.isSame(rangeStart, "day") || txDate.isAfter(rangeStart, "day");
     });
 
-    return filteredByTime.filter((item) => (filter === "all" ? true : item.type === filter)).sort((a, b) => `${b.date}`.localeCompare(`${a.date}`));
+    return filteredByTime
+      .filter((item) => (filter === "all" ? true : item.type === filter))
+      .sort((a, b) => {
+        const dateCmp = `${b.date}`.localeCompare(`${a.date}`);
+        if (dateCmp !== 0) return dateCmp;
+        return txOrderToken(b) - txOrderToken(a);
+      });
   }, [state.funds, state.transactions, filter, timeRange]);
 
   const grouped = useMemo(() => {
@@ -164,6 +202,7 @@ export default function HistoryPage() {
                     const iconClass = isBuy ? "bg-[#d7e2ff] text-[#24467c]" : "bg-[#ffdbd0] text-[#8c4f39]";
                     const amountClass = isBuy ? "text-[#005bc0]" : "text-[#8c4f39]";
                     const typeText = isBuy ? "申购" : "赎回";
+                    const confirmed = isTransactionConfirmed(item);
                     return (
                       <article key={item.id} className="flex items-center gap-3 px-3 py-3">
                         <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded ${iconClass}`}>
@@ -184,7 +223,9 @@ export default function HistoryPage() {
                               </Link>
                               <span className="text-[10px] text-[#747781]">{item.date}</span>
                             </div>
-                            <span className="rounded bg-[#f2f3ff] px-1.5 py-0.5 text-[10px] font-medium text-[#57657a]">已确认</span>
+                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${confirmed ? "bg-[#f2f3ff] text-[#57657a]" : "bg-[#fff1e6] text-[#a65000]"}`}>
+                              {confirmed ? "已确认" : "未确认"}
+                            </span>
                           </div>
                           <div className="mt-1 text-[10px] text-[#747781]">
                             净值 {Number(item.price).toFixed(4)} · 份额 {item.share.toFixed(2)} · 手续费 {formatCurrency(item.fee || 0)}

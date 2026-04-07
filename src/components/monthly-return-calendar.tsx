@@ -1,3 +1,5 @@
+import { getDaysInMarketMonth, getMarketWeekday, toMarketDay } from "@/lib/time";
+
 type ReturnPoint = {
   date: string;
   rate: number;
@@ -9,8 +11,6 @@ type MonthlyReturnCalendarProps = {
 };
 
 const WEEK_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
-
-const toDate = (year: number, monthIndex: number, day: number) => new Date(year, monthIndex, day);
 
 const formatRate = (value: number) => {
   const sign = value > 0 ? "+" : "";
@@ -33,9 +33,10 @@ export function MonthlyReturnCalendar({ month, points }: MonthlyReturnCalendarPr
     return <div className="chart-empty">暂无日历数据</div>;
   }
 
-  const firstDay = toDate(year, monthIndex, 1);
-  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-  const leadingEmpty = (firstDay.getDay() + 6) % 7;
+  const monthKey = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+  const firstDay = toMarketDay(`${monthKey}-01T00:00:00`);
+  const daysInMonth = getDaysInMarketMonth(monthKey);
+  const leadingEmpty = (getMarketWeekday(firstDay) + 6) % 7;
   const gridCount = Math.ceil((leadingEmpty + daysInMonth) / 7) * 7;
 
   const pointMap = new Map(points.map((item) => [item.date, item.rate]));
@@ -46,9 +47,8 @@ export function MonthlyReturnCalendar({ month, points }: MonthlyReturnCalendarPr
       return { type: "empty" as const, key: `empty-${index}` };
     }
 
-    const current = toDate(year, monthIndex, day);
     const dateText = `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    const weekend = current.getDay() === 0 || current.getDay() === 6;
+    const weekend = [0, 6].includes(getMarketWeekday(`${dateText}T00:00:00`));
     const rate = pointMap.get(dateText);
 
     if (weekend) {

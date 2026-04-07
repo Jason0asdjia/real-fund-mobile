@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { GripVertical, Search, SlidersHorizontal, X } from "lucide-react";
+import { Check, Circle, GripVertical, Search, SlidersHorizontal, X } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 import { formatCurrency, formatSignedCurrency, getHoldingMetrics } from "@/lib/portfolio";
@@ -41,6 +41,7 @@ type PortfolioRow = {
   holdingAmount: number;
   holdingDays: number | null;
   todayProfit: number | null;
+  todayProfitStatus: "estimated" | "official" | "none";
   holdingProfit: number | null;
   holdingAmountLabel: string;
   updatedDate: string;
@@ -90,6 +91,15 @@ const resolveUpdatedDate = (fund: FundSnapshot) => {
   return "—";
 };
 
+const resolveTodayProfitStatus = (fund: FundSnapshot, todayProfit: number | null, today: string): PortfolioRow["todayProfitStatus"] => {
+  if (todayProfit == null) return "none";
+
+  const hasOfficialToday = fund.jzrq === today && Number.isFinite(Number(fund.zzl ?? fund.dwjz));
+  if (hasOfficialToday || fund.quoteStatus === "official") return "official";
+
+  return "estimated";
+};
+
 const buildRows = (funds: FundSnapshot[], holdings: Record<string, FundHolding>, today: string): PortfolioRow[] => {
   return funds.map((fund) => {
     const holding = holdings[fund.code];
@@ -108,6 +118,7 @@ const buildRows = (funds: FundSnapshot[], holdings: Record<string, FundHolding>,
     const yesterdayChangePercent = fund.zzl == null ? null : Number(fund.zzl);
     const firstPurchaseDate = holding?.firstPurchaseDate || null;
     const holdingDays = holdingDaysInMarket(firstPurchaseDate);
+    const todayProfit = metrics?.profitToday ?? null;
 
     return {
       code: fund.code,
@@ -119,7 +130,8 @@ const buildRows = (funds: FundSnapshot[], holdings: Record<string, FundHolding>,
       totalChangePercent,
       holdingAmount: amount,
       holdingDays,
-      todayProfit: metrics?.profitToday ?? null,
+      todayProfit,
+      todayProfitStatus: resolveTodayProfitStatus(fund, todayProfit, today),
       holdingProfit: metrics?.profitTotal ?? null,
       holdingAmountLabel: formatCurrency(amount),
       updatedDate: resolveUpdatedDate(fund),
@@ -169,6 +181,7 @@ export default function PortfolioPage() {
   const tableRestoredRef = useRef(false);
   const columnItemRefs = useRef<Partial<Record<ColumnId, HTMLDivElement | null>>>({});
   const previousRectsRef = useRef<Partial<Record<ColumnId, DOMRect>>>({});
+  const touchDragTargetRef = useRef<ColumnId | null>(null);
 
   const totals = state.funds.reduce(
     (acc, fund) => {
@@ -257,6 +270,11 @@ export default function PortfolioPage() {
   const totalUpdatedAt = state.lastUpdatedAt ? toMarketDay(state.lastUpdatedAt).format("MM-DD HH:mm") : "--";
   const todayBase = totals.amount - totals.today;
   const todayRate = todayBase > 0 ? (totals.today / todayBase) * 100 : null;
+  const totalTodayProfitStatus = rows.some((row) => row.todayProfitStatus === "estimated")
+    ? "estimated"
+    : rows.some((row) => row.todayProfitStatus === "official")
+      ? "official"
+      : "none";
 
   const orderedColumns = useMemo(() => {
     const optionById = new Map(COLUMN_OPTIONS.map((item) => [item.id, item] as const));
@@ -317,8 +335,8 @@ export default function PortfolioPage() {
           { transform: "translate(0, 0)" },
         ],
         {
-          duration: 200,
-          easing: "cubic-bezier(0.2, 0, 0, 1)",
+          duration: 280,
+          easing: "cubic-bezier(0.22, 1, 0.36, 1)",
         },
       );
     });
@@ -329,13 +347,65 @@ export default function PortfolioPage() {
   const handleTouchDragMove = useCallback(
     (clientX: number, clientY: number) => {
       if (!touchDraggingColumnId) return;
-      const target = document.elementFromPoint(clientX, clientY)?.closest("[data-column-id]") as HTMLElement | null;
-      const targetId = target?.dataset.columnId as ColumnId | undefined;
-      if (!targetId || targetId === touchDraggingColumnId) return;
-      moveColumn(touchDraggingColumnId, targetId);
+
+      let hoveredId: ColumnId | null = null;
+
+      defaultColumnOrder.forEach((id) => {
+        if (hoveredId) return;
+        const node = columnItemRefs.current[id];
+        if (!node) return;
+        const rect = node.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const centerThresholdX = rect.width * 0.28;
+        const centerThresholdY = rect.height * 0.32;
+        const insideCenterZone = Math.abs(clientX - centerX) <= centerThresholdX && Math.abs(clientY - centerY) <= centerThresholdY;
+
+        if (insideCenterZone) {
+          hoveredId = id;
+        }
+      });
+
+      if (!hoveredId) {
+        touchDragTargetRef.current = null;
+        return;
+      }
+
+      if (hoveredId === touchDraggingColumnId) {
+        touchDragTargetRef.current = null;
+        return;
+      }
+
+      if (touchDragTargetRef.current === hoveredId) return;
+      touchDragTargetRef.current = hoveredId;
+      moveColumn(touchDraggingColumnId, hoveredId);
     },
     [moveColumn, touchDraggingColumnId],
   );
+
+  useEffect(() => {
+    if (!touchDraggingColumnId) return;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      event.preventDefault();
+      handleTouchDragMove(event.clientX, event.clientY);
+    };
+
+    const stopDragging = () => {
+      touchDragTargetRef.current = null;
+      setTouchDraggingColumnId(null);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: false });
+    window.addEventListener("pointerup", stopDragging);
+    window.addEventListener("pointercancel", stopDragging);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopDragging);
+      window.removeEventListener("pointercancel", stopDragging);
+    };
+  }, [handleTouchDragMove, touchDraggingColumnId]);
 
   const renderCellValue = (row: PortfolioRow, id: ColumnId) => {
     const primaryValue =
@@ -359,9 +429,25 @@ export default function PortfolioPage() {
                       ? formatSignedCurrency(row.todayProfit)
                       : formatSignedCurrency(row.holdingProfit);
 
+    const valueNode =
+      id === "todayProfit" && row.todayProfitStatus !== "none" ? (
+        <span className="inline-flex items-center gap-1">
+          {row.todayProfitStatus === "official" ? (
+            <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current">
+              <Check size={10} strokeWidth={3} />
+            </span>
+          ) : (
+            <Circle size={12} className="text-red-500" strokeWidth={2.2} />
+          )}
+          <span>{primaryValue}</span>
+        </span>
+      ) : (
+        <span>{primaryValue}</span>
+      );
+
     return (
       <div className="flex flex-col leading-tight">
-        <span>{primaryValue}</span>
+        {valueNode}
         <span className="mt-1 text-[10px] font-medium text-[#8a90a0]">{row.updatedDate}</span>
       </div>
     );
@@ -372,12 +458,12 @@ export default function PortfolioPage() {
     if (id === "yesterdayChangePercent" || id === "estimateChangePercent" || id === "totalChangePercent") {
       const value = id === "yesterdayChangePercent" ? row.yesterdayChangePercent : id === "estimateChangePercent" ? row.estimateChangePercent : row.totalChangePercent;
       if (value == null) return `${base} text-[#747781]`;
-      return `${base} font-bold ${value < 0 ? "text-red-600" : "text-emerald-700"}`;
+      return `${base} font-bold ${value < 0 ? "text-emerald-700" : "text-red-600"}`;
     }
     if (id === "todayProfit" || id === "holdingProfit") {
       const value = id === "todayProfit" ? row.todayProfit : row.holdingProfit;
       if (value == null) return `${base} text-[#747781]`;
-      return `${base} font-bold ${value < 0 ? "text-red-600" : "text-emerald-700"}`;
+      return `${base} font-bold ${value < 0 ? "text-emerald-700" : "text-red-600"}`;
     }
     if (id === "holdingAmount") return `${base} text-[#131b2e]`;
     return `${base} font-medium text-[#131b2e]`;
@@ -403,8 +489,17 @@ export default function PortfolioPage() {
           <div className="mt-4 flex items-center justify-between gap-2">
             <div>
               <p className="text-[9px] font-medium tracking-[0.06em] text-[#24467c]/70">今日收益</p>
-              <p className="text-lg font-bold leading-none text-[#24467c] tabular-nums">
-                {formatSignedCurrency(totals.today)} <span className="text-sm font-semibold">{`(${formatSignedPercent(todayRate)})`}</span>
+              <p className="inline-flex items-center gap-1.5 text-lg font-bold leading-none text-[#24467c] tabular-nums">
+                {totalTodayProfitStatus === "official" ? (
+                  <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current">
+                    <Check size={10} strokeWidth={3} />
+                  </span>
+                ) : totalTodayProfitStatus === "estimated" ? (
+                  <Circle size={12} className="text-red-500" strokeWidth={2.2} />
+                ) : null}
+                <span>
+                  {formatSignedCurrency(totals.today)} <span className="text-sm font-semibold">{`(${formatSignedPercent(todayRate)})`}</span>
+                </span>
               </p>
             </div>
             <div className="text-right">
@@ -549,23 +644,15 @@ export default function PortfolioPage() {
                     <button
                       type="button"
                       onPointerDown={(event) => {
-                        if (event.pointerType !== "touch") return;
+                        if (event.pointerType === "mouse") return;
+                        if (touchDraggingColumnId && touchDraggingColumnId !== item.id) return;
                         event.preventDefault();
+                        touchDragTargetRef.current = item.id;
                         setTouchDraggingColumnId(item.id);
-                      }}
-                      onPointerMove={(event) => {
-                        if (event.pointerType !== "touch") return;
-                        handleTouchDragMove(event.clientX, event.clientY);
-                      }}
-                      onPointerUp={() => {
-                        setTouchDraggingColumnId(null);
-                      }}
-                      onPointerCancel={() => {
-                        setTouchDraggingColumnId(null);
                       }}
                       className={`inline-flex cursor-grab text-[#8a90a0] active:cursor-grabbing ${touchDraggingColumnId === item.id ? "opacity-60" : "opacity-100"}`}
                       aria-label="拖拽排序"
-                      style={{ touchAction: "none" }}
+                      style={{ touchAction: "none", pointerEvents: touchDraggingColumnId && touchDraggingColumnId !== item.id ? "none" : "auto" }}
                     >
                       <GripVertical size={15} />
                     </button>

@@ -20,5 +20,5 @@
 ## 约束
 - 页面默认按移动端优先布局
 - 优先使用 Tailwind utility 与组件层类
-- 页面字体、padding、标题层级遵循 `/UI_CONSTRAINTS.md`
-- 弹窗行为遵循 `/MODAL_GUIDELINES.md`
+- 页面字体、间距、标题层级等全局约束遵循 `/agent.md`
+- 弹窗行为遵循 `/agent.md` 中的弹窗统一规范

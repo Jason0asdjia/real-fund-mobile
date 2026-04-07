@@ -146,15 +146,23 @@ const fetchHistoricalNetValues = async (code: string) => {
   return parseNetValuesFromHtml(apidata?.content || "");
 };
 
+const fetchFundArchivesContent = async (code: string, type: "jjcc" | "jbgk") => {
+  const response = await fetch(`/api/fund-archives?code=${encodeURIComponent(code)}&type=${type}`);
+  if (!response.ok) {
+    throw new Error(`Fund archives request failed: ${type}`);
+  }
+
+  const data = (await response.json()) as { content?: string };
+  return data.content || "";
+};
+
 const fetchHoldings = async (code: string): Promise<{ holdings: FundHoldingStock[]; holdingsReportDate: string | null; holdingsIsLastQuarter: boolean }> => {
   const cached = holdingsCache.get(code);
   if (cached && Date.now() - cached.ts < HOLDINGS_CACHE_MS) {
     return cached.data;
   }
 
-  const url = `https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjcc&code=${code}&topline=10&year=&month=&_=${Date.now()}`;
-  const apidata = await loadScript(url);
-  const content = apidata?.content || "";
+  const content = await fetchFundArchivesContent(code, "jjcc");
   const holdingsReportDate = parseHoldingsReportDate(content);
   const holdingsIsLastQuarter = isLastQuarterReport(holdingsReportDate);
   const holdings = parseHoldingsFromHtml(content);
@@ -185,15 +193,16 @@ const pickProfileField = (rowMap: Map<string, string>, candidates: string[]) => 
   return null;
 };
 
+const hasProfileData = (profile: Pick<FundSnapshot, "fundType" | "riskLevel" | "fundManager" | "fundCompany" | "fundScale" | "trackingTarget" | "inceptionDate">) =>
+  Boolean(profile.fundType || profile.riskLevel || profile.fundManager || profile.fundCompany || profile.fundScale || profile.trackingTarget || profile.inceptionDate);
+
 const fetchFundProfile = async (code: string): Promise<Pick<FundSnapshot, "fundType" | "riskLevel" | "fundManager" | "fundCompany" | "fundScale" | "trackingTarget" | "inceptionDate">> => {
   const cached = profileCache.get(code);
   if (cached && Date.now() - cached.ts < PROFILE_CACHE_MS) {
     return cached.data;
   }
 
-  const url = `https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jbgk&code=${code}&_=${Date.now()}`;
-  const apidata = await loadScript(url);
-  const content = apidata?.content || "";
+  const content = await fetchFundArchivesContent(code, "jbgk");
   const rowMap = parseProfileRows(content);
 
   const data = {
@@ -303,21 +312,43 @@ export const fetchFundData = async (code: string, previousFund?: FundSnapshot | 
       trackingTarget: previousFund?.trackingTarget || null,
       inceptionDate: previousFund?.inceptionDate || null,
     };
+  const archiveFetchSucceeded = holdingsResult.status === "fulfilled" || profileResult.status === "fulfilled";
+  const archiveHasData = Boolean(holdingsData.holdings.length || holdingsData.holdingsReportDate || hasProfileData(profileData));
+  const archiveStatus = archiveHasData ? "ready" : archiveFetchSucceeded ? "empty" : previousFund?.archiveStatus || "pending";
 
   if (estimate.status === "fulfilled") {
+    const estimateOfficialDate = estimate.value.jzrq || null;
+    const historyLatestDate = latest?.date || null;
+    const estimateOfficialNav = Number(estimate.value.dwjz);
+    const useEstimateOfficial = Boolean(
+      estimateOfficialDate
+        && estimateOfficialDate !== historyLatestDate
+        && Number.isFinite(estimateOfficialNav)
+        && estimateOfficialNav > 0,
+    );
+
+    const effectiveLatestNav = useEstimateOfficial ? estimateOfficialNav : latest?.nav ?? null;
+    const effectiveLatestDate = useEstimateOfficial ? estimateOfficialDate : latest?.date || estimate.value.jzrq;
+    const effectiveLastNav = useEstimateOfficial ? latest?.nav ?? Number(previousFund?.lastNav) : previousNav?.nav ?? Number(previousFund?.lastNav);
+    const effectiveOfficialGrowth =
+      useEstimateOfficial && effectiveLastNav && effectiveLastNav > 0 && effectiveLatestNav != null
+        ? ((effectiveLatestNav - effectiveLastNav) / effectiveLastNav) * 100
+        : latest?.growth ?? estimate.value.zzl ?? null;
+
     return {
       ...(previousFund || {}),
       ...estimate.value,
       ...profileData,
       code,
       name: estimate.value.name || previousFund?.name || "",
-      dwjz: latest ? String(latest.nav) : estimate.value.dwjz,
-      jzrq: latest?.date || estimate.value.jzrq,
-      zzl: latest?.growth ?? estimate.value.zzl ?? null,
-      lastNav: previousNav ? String(previousNav.nav) : previousFund?.lastNav ?? null,
+      dwjz: effectiveLatestNav != null ? String(effectiveLatestNav) : estimate.value.dwjz,
+      jzrq: effectiveLatestDate,
+      zzl: effectiveOfficialGrowth,
+      lastNav: effectiveLastNav && Number.isFinite(effectiveLastNav) ? String(effectiveLastNav) : previousFund?.lastNav ?? null,
       holdings: holdingsData.holdings,
       holdingsReportDate: holdingsData.holdingsReportDate,
       holdingsIsLastQuarter: holdingsData.holdingsIsLastQuarter,
+      archiveStatus,
       source: "eastmoney",
       quoteStatus: "estimated",
     };
@@ -340,6 +371,7 @@ export const fetchFundData = async (code: string, previousFund?: FundSnapshot | 
       holdings: holdingsData.holdings,
       holdingsReportDate: holdingsData.holdingsReportDate,
       holdingsIsLastQuarter: holdingsData.holdingsIsLastQuarter,
+      archiveStatus,
       source: "fallback",
       quoteStatus: "official",
     };

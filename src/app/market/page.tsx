@@ -7,6 +7,7 @@ import { SlidersHorizontal } from "lucide-react";
 import { useAppState } from "@/components/app-provider";
 import { fetchFastNews, fetchHotSectors, fetchMarketSnapshot } from "@/lib/market-api";
 import { formatPercent } from "@/lib/portfolio";
+import { todayInMarket } from "@/lib/time";
 
 const defaultMarketSnapshot = [
   { label: "上证指数", value: "3,058.22", change: 0.42 },
@@ -29,6 +30,13 @@ const defaultQuickNews = [
 const toNumber = (value: string | number | null | undefined) => {
   const next = Number(value);
   return Number.isFinite(next) ? next : null;
+};
+
+const getRankedFundChange = (fund: { jzrq?: string | null; zzl?: number | string | null; gszzl?: number | string | null }, today: string) => {
+  if (fund.jzrq === today) {
+    return toNumber(fund.zzl) ?? toNumber(fund.gszzl);
+  }
+  return toNumber(fund.gszzl) ?? toNumber(fund.zzl);
 };
 
 export default function MarketPage() {
@@ -77,8 +85,17 @@ export default function MarketPage() {
     };
   }, [state.refreshMs]);
 
+  const today = todayInMarket();
+
   const topFunds = [...state.funds]
-    .map((fund) => ({ ...fund, change: toNumber(fund.gszzl), nav: toNumber(fund.gsz) ?? toNumber(fund.dwjz) }))
+    .map((fund) => {
+      const officialToday = fund.jzrq === today;
+      return {
+        ...fund,
+        change: getRankedFundChange(fund, today),
+        nav: officialToday ? toNumber(fund.dwjz) : toNumber(fund.gsz) ?? toNumber(fund.dwjz),
+      };
+    })
     .filter((fund) => fund.change != null)
     .sort((a, b) => (b.change || 0) - (a.change || 0))
     .slice(0, 6);

@@ -1,4 +1,5 @@
 import type { AppState, FundSnapshot, FundTransaction, ValuationPoint } from "@/lib/types";
+import { formatMarketDate, nowInMarket, shiftMarketDay } from "@/lib/time";
 
 type DemoSeed = {
   state: AppState;
@@ -24,29 +25,25 @@ type FundSeedConfig = {
   favorite?: boolean;
 };
 
-const formatDate = (date: Date) => date.toISOString().slice(0, 10);
-const cloneDate = (date: Date) => new Date(date.getTime());
-
 const createTransactions = (items: Array<Omit<FundTransaction, "id">>) =>
   items.map((item, index) => ({ ...item, id: `demo-${item.type}-${index + 1}-${item.date}` }));
 
 const buildSeries = (code: string, base: number, drift: number, wave: number) => {
-  const now = new Date();
+  const now = nowInMarket();
   const points: ValuationPoint[] = [];
 
   for (let offset = 120; offset >= 1; offset -= 1) {
-    const date = cloneDate(now);
-    date.setDate(now.getDate() - offset);
+    const date = shiftMarketDay(now, -offset);
     const progress = (120 - offset) / 119;
     const value = base + drift * progress + Math.sin(progress * 8.6 + code.length * 0.35) * wave;
     points.push({
-      date: formatDate(date),
+      date: formatMarketDate(date),
       time: "14:50",
       value: Number(value.toFixed(4)),
     });
   }
 
-  const today = formatDate(now);
+  const today = formatMarketDate(now);
   const intradayBase = points[points.length - 1]?.value ?? base;
   const intradayOffsets = ["09:35", "10:10", "10:45", "11:20", "13:15", "13:50", "14:20", "14:50"];
   intradayOffsets.forEach((time, index) => {
@@ -247,11 +244,9 @@ const fundConfigs: FundSeedConfig[] = [
 ];
 
 export const buildDemoSeed = (): DemoSeed => {
-  const now = new Date();
-  const today = formatDate(now);
-  const yesterday = cloneDate(now);
-  yesterday.setDate(now.getDate() - 1);
-  const lastTradeDay = formatDate(yesterday);
+  const now = nowInMarket();
+  const today = formatMarketDate(now);
+  const lastTradeDay = formatMarketDate(shiftMarketDay(now, -1));
 
   const valuationSeries = Object.fromEntries(
     fundConfigs.map((item) => [item.code, buildSeries(item.code, item.base, item.drift, item.wave)]),
@@ -292,7 +287,7 @@ export const buildDemoSeed = (): DemoSeed => {
     favorites,
     refreshMs: 60000,
     searchHistory,
-    lastUpdatedAt: now.toISOString(),
+    lastUpdatedAt: nowInMarket().format("YYYY-MM-DD HH:mm:ss"),
   };
 
   return { state, valuationSeries };

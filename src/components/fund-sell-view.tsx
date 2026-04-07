@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CalendarDays, ChevronLeft, Info, Repeat2 } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
@@ -23,6 +23,7 @@ const toNumber = (value: string) => {
 
 export function FundSellView({ code }: FundSellViewProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { addTransaction, state } = useAppState();
   const fund = state.funds.find((item) => item.code === code);
   const holding = fund ? state.holdings[fund.code] : undefined;
@@ -33,6 +34,15 @@ export function FundSellView({ code }: FundSellViewProps) {
   const [shareInput, setShareInput] = useState("");
   const [tradeDate, setTradeDate] = useState(todayInMarket());
   const [beforeClose, setBeforeClose] = useState(true);
+  const returnToDetail = searchParams.get("from") === "detail";
+
+  const handleBack = () => {
+    if (returnToDetail) {
+      router.back();
+      return;
+    }
+    router.replace(`/portfolio/${code}`);
+  };
 
   useEffect(() => {
     document.body.classList.add("app-detail-open");
@@ -81,7 +91,7 @@ export function FundSellView({ code }: FundSellViewProps) {
       fee: estimatedFee,
       note: beforeClose ? "15:00前下单" : "15:00后下单",
     });
-    router.push(`/portfolio/${fund.code}`);
+    handleBack();
   };
 
   return (
@@ -91,7 +101,7 @@ export function FundSellView({ code }: FundSellViewProps) {
           <button
             type="button"
             className="absolute left-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 text-sm font-semibold text-[#24467c]"
-            onClick={() => router.back()}
+            onClick={handleBack}
           >
             <ChevronLeft size={16} />
             返回

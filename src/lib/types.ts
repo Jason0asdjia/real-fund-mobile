@@ -20,6 +20,7 @@ export type FundSnapshot = {
   holdings?: FundHoldingStock[];
   holdingsReportDate?: string | null;
   holdingsIsLastQuarter?: boolean;
+  archiveStatus?: "pending" | "ready" | "empty";
   fundType?: string | null;
   riskLevel?: string | null;
   fundManager?: string | null;
