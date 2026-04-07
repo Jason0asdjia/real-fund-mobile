@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Check, CirclePlus, Search, SlidersHorizontal, X } from "lucide-react";
+import { Check, CirclePlus, Search, X } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 
@@ -42,13 +42,8 @@ export default function DiscoverPage() {
   return (
     <div className="-mx-3 -mt-4 min-h-[calc(100dvh-5.5rem)] bg-white text-[#131b2e] md:-mx-4 md:-mt-4">
       <header className="sticky top-0 z-20 bg-white px-4 pb-3 pt-2">
-        <div className="mb-3 flex items-end justify-between">
-          <div>
-            <h1 className="m-0 text-2xl font-extrabold tracking-tight">发现基金</h1>
-          </div>
-          <button type="button" className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#f2f3ff] text-[#24467c]" aria-label="筛选基金">
-            <SlidersHorizontal size={17} />
-          </button>
+        <div className="mb-3">
+          <h1 className="m-0 text-2xl font-extrabold tracking-tight">发现基金</h1>
         </div>
 
         <label className="flex min-h-12 items-center gap-2 rounded-xl border border-[#d5dbea] bg-white px-3 shadow-[0_10px_28px_rgba(19,27,46,0.06)]">
@@ -102,7 +97,6 @@ export default function DiscoverPage() {
               <span className="text-[10px] font-bold tracking-[0.16em] text-[#747781]">
                 {loading ? "搜索中" : `搜索结果 (${results.length})`}
               </span>
-              <SlidersHorizontal size={15} className="text-[#747781]" />
             </div>
 
             {error ? <p className="m-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p> : null}

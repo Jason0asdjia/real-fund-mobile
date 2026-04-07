@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarDays, ChevronLeft, Info } from "lucide-react";
+import { CalendarDays, ChevronLeft, Info, Repeat2 } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 import { formatCurrency, formatSignedCurrency, getHoldingMetrics } from "@/lib/portfolio";
@@ -27,7 +27,9 @@ export function FundBuyView({ code }: FundBuyViewProps) {
   const holding = fund ? state.holdings[fund.code] : undefined;
   const metrics = useMemo(() => (fund ? getHoldingMetrics(fund, holding) : null), [fund, holding]);
 
+  const [mode, setMode] = useState<"amount" | "share">("amount");
   const [amountInput, setAmountInput] = useState("");
+  const [shareInput, setShareInput] = useState("");
   const [tradeDate, setTradeDate] = useState(new Date().toISOString().slice(0, 10));
   const [beforeClose, setBeforeClose] = useState(true);
 
@@ -61,15 +63,18 @@ export function FundBuyView({ code }: FundBuyViewProps) {
   }
 
   const latestNav = Number(fund.gsz ?? fund.dwjz ?? 0) || 0;
-  const amount = toNumber(amountInput) || 0;
+  const amountRaw = mode === "amount" ? toNumber(amountInput) || 0 : (toNumber(shareInput) || 0) * latestNav;
+  const shareRaw = mode === "share" ? toNumber(shareInput) || 0 : latestNav > 0 ? (toNumber(amountInput) || 0) / latestNav : 0;
+  const amount = Math.max(amountRaw, 0);
+  const share = Math.max(shareRaw, 0);
   const estimatedFee = amount * FEE_RATE;
 
   const handleConfirm = () => {
-    if (!latestNav || amount <= 0) return;
+    if (!latestNav || amount <= 0 || share <= 0) return;
     addTransaction(fund.code, {
       date: tradeDate,
       type: "buy",
-      share: amount / latestNav,
+      share,
       price: latestNav,
       fee: estimatedFee,
       note: beforeClose ? "15:00前下单" : "15:00后下单",
@@ -124,29 +129,53 @@ export function FundBuyView({ code }: FundBuyViewProps) {
 
         <section className="border-b border-[#e2e7ff] px-3 py-4">
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-sm font-bold text-[#131b2e]">加仓金额 (CNY)</label>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-bold text-[#131b2e]">{mode === "amount" ? "加仓金额 (CNY)" : "加仓份额 (SHARE)"}</label>
+              <button
+                type="button"
+                className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[#d5dbea] bg-white text-[#24467c]"
+                onClick={() => setMode((prev) => (prev === "amount" ? "share" : "amount"))}
+                aria-label="切换金额和份额"
+              >
+                <Repeat2 size={12} />
+              </button>
+            </div>
             <span className="text-[10px] font-medium text-[#747781]">费率: {(FEE_RATE * 100).toFixed(2)}%</span>
           </div>
           <div className="relative border-b border-[#d5dbea] pb-1">
-            <span className="absolute left-0 top-1/2 -translate-y-1/2 text-lg font-bold text-[#131b2e]">¥</span>
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 text-lg font-bold text-[#131b2e]">{mode === "amount" ? "¥" : "份"}</span>
             <input
               type="number"
               inputMode="decimal"
-              value={amountInput}
-              onChange={(event) => setAmountInput(event.target.value)}
+              value={mode === "amount" ? amountInput : shareInput}
+              onChange={(event) => (mode === "amount" ? setAmountInput(event.target.value) : setShareInput(event.target.value))}
               placeholder="0.00"
               className="w-full border-0 bg-transparent py-2 pl-6 pr-3 text-3xl font-extrabold tracking-tight text-[#131b2e] outline-none placeholder:text-[#9aa5bb] focus:ring-0"
             />
           </div>
           <div className="mt-3 grid grid-cols-4 gap-2">
-            {[1000, 5000, 10000].map((value) => (
-              <button key={value} type="button" className="min-h-8 rounded border border-[#d5dbea] bg-white text-xs font-bold text-[#131b2e]" onClick={() => setAmountInput(String(value))}>
+            {(mode === "amount" ? [1000, 5000, 10000] : [100, 500, 1000]).map((value) => (
+              <button
+                key={value}
+                type="button"
+                className="min-h-8 rounded border border-[#d5dbea] bg-white text-xs font-bold text-[#131b2e]"
+                onClick={() => (mode === "amount" ? setAmountInput(String(value)) : setShareInput(String(value)))}
+              >
                 {value.toLocaleString("zh-CN")}
               </button>
             ))}
-            <button type="button" className="min-h-8 rounded border border-[#d5dbea] bg-white text-xs font-bold text-[#131b2e]" onClick={() => setAmountInput(String(Math.max(Number(metrics?.amount || 0), 0)))}>
+            <button
+              type="button"
+              className="min-h-8 rounded border border-[#d5dbea] bg-white text-xs font-bold text-[#131b2e]"
+              onClick={() =>
+                mode === "amount" ? setAmountInput(String(Math.max(Number(metrics?.amount || 0), 0))) : setShareInput(String(Math.max(Number(holding?.share || 0), 0)))
+              }
+            >
               MAX
             </button>
+          </div>
+          <div className="mt-2 text-[10px] font-medium text-[#747781]">
+            {mode === "amount" ? `预计申购份额: ${share.toFixed(2)} 份` : `预计成交金额: ${formatCurrency(amount)}`}
           </div>
           <div className="mt-2 inline-flex items-center gap-1 text-[10px] font-medium text-[#747781]">
             <Info size={12} />
@@ -193,7 +222,7 @@ export function FundBuyView({ code }: FundBuyViewProps) {
         <button
           type="button"
           onClick={handleConfirm}
-          disabled={!amount || !latestNav}
+          disabled={!amount || !share || !latestNav}
           className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-[#00193c] px-3 text-sm font-bold text-white disabled:opacity-40"
         >
           确认修改

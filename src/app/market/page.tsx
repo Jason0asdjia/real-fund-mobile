@@ -43,9 +43,7 @@ export default function MarketPage() {
       <header className="sticky top-0 z-20 border-b border-[#e2e7ff] bg-white">
         <div className="flex h-12 items-center justify-between px-3">
           <h1 className="text-2xl font-extrabold tracking-tight">行情中心</h1>
-          <div className="flex items-center gap-3 text-[#53617a]">
-            <SlidersHorizontal size={17} />
-          </div>
+          <span />
         </div>
       </header>
 

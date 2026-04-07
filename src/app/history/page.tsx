@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, ChevronDown, Gift, Loader2, Sparkles } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Loader2, Sparkles } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 import { TwSelect } from "@/components/ui/tw-select";
@@ -85,28 +85,28 @@ export default function HistoryPage() {
   };
 
   return (
-    <div className="-mx-3 -mt-4 min-h-[calc(100dvh-5.5rem)] bg-white text-[#131b2e] md:-mx-4 md:-mt-4">
-      <header className="sticky top-0 z-20 border-b border-[#e2e7ff] bg-white">
+    <div className="-mx-3 -mb-24 -mt-4 flex h-[calc(100dvh-5.5rem)] flex-col overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mb-24 md:-mt-4">
+      <header className="z-20 shrink-0 border-b border-[#e2e7ff] bg-white">
         <div className="flex h-12 items-center justify-between px-3">
           <h1 className="text-2xl font-extrabold tracking-tight">历史成交</h1>
         </div>
       </header>
 
-      <main className="pb-24">
-        <section className="px-3 py-3">
-          <div className="flex items-end justify-between rounded-xl border border-[#e2e7ff] bg-[#f2f3ff] p-4">
+      <main className="flex flex-1 flex-col overflow-hidden">
+        <section className="shrink-0 bg-[#d7e2ff] px-3 pb-4 pt-3 text-[#001b3f]">
+          <div className="flex items-end justify-between gap-2">
             <div>
-              <p className="mb-1 text-[10px] font-semibold tracking-[0.14em] text-[#747781]">{periodLabel}成交额</p>
-              <p className="text-xl font-extrabold tracking-tight text-[#00193c]">{formatCurrency(periodVolume)}</p>
+              <p className="mb-1 text-[9px] font-semibold tracking-[0.14em] text-[#24467c]/70">{periodLabel}成交额</p>
+              <p className="text-[26px] font-extrabold leading-none tracking-tight tabular-nums">{formatCurrency(periodVolume)}</p>
             </div>
             <div className="text-right">
-              <p className="mb-1 text-[10px] font-semibold tracking-[0.14em] text-[#747781]">交易笔数</p>
-              <p className="text-lg font-extrabold tracking-tight text-[#131b2e]">{transactions.length}</p>
+              <p className="text-[9px] font-medium tracking-[0.06em] text-[#24467c]/70">交易笔数</p>
+              <p className="text-xs font-semibold leading-none text-[#24467c] tabular-nums">{transactions.length}</p>
             </div>
           </div>
         </section>
 
-        <section className="border-b border-[#e2e7ff] bg-white px-3 py-2.5">
+        <section className="shrink-0 border-b border-[#e2e7ff] bg-white px-3 py-2.5">
           <div className="flex flex-wrap items-center gap-2">
             <label className="sr-only" htmlFor="history-type-filter">
               交易类型
@@ -152,7 +152,7 @@ export default function HistoryPage() {
           {seededAt ? <div className="mt-2 text-[11px] text-[#57657a]">已写入（{seededAt}）</div> : null}
         </section>
 
-        <section>
+        <section className="flex-1 overflow-y-auto pb-14">
           {grouped.length === 0 ? (
             <div className="px-3 py-8 text-center text-sm text-[#747781]">暂无交易记录，先去持仓页录入交易。</div>
           ) : (
@@ -200,13 +200,6 @@ export default function HistoryPage() {
           )}
         </section>
 
-        <section className="px-3 py-4 text-center text-[10px] text-[#747781]">
-          <div className="inline-flex items-center gap-1 rounded-full border border-[#e2e7ff] bg-[#f8f9ff] px-3 py-1">
-            <Gift size={12} />
-            <span>交易历史已同步到本地存储</span>
-            <ChevronDown size={12} />
-          </div>
-        </section>
       </main>
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Repeat2 } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 import { formatCurrency, formatSignedCurrency, getHoldingMetrics } from "@/lib/portfolio";
@@ -134,31 +134,21 @@ export function FundManageView({ code, onBack, asModal = false }: FundManageView
       </header>
 
       <main className="flex-1 overflow-hidden px-3 pb-28 pt-4">
-        <section className="mb-4">
-          <p className="mb-2 truncate text-sm font-bold text-[#131b2e]">{fund.name}</p>
-          <div className="flex max-w-[210px] rounded-lg bg-[#f2f3ff] p-1">
-            <button
-              type="button"
-              className={`min-h-8 flex-1 rounded-md text-xs font-bold ${mode === "amount" ? "bg-white text-[#24467c]" : "text-[#57657a]"}`}
-              onClick={() => setMode("amount")}
-            >
-              金额
-            </button>
-            <button
-              type="button"
-              className={`min-h-8 flex-1 rounded-md text-xs font-bold ${mode === "share" ? "bg-white text-[#24467c]" : "text-[#57657a]"}`}
-              onClick={() => setMode("share")}
-            >
-              份额
-            </button>
-          </div>
-        </section>
-
         <section className="space-y-3">
           <div className="rounded-xl border border-[#e2e7ff] bg-[#f8f9ff] p-4">
             <div className="mb-1 flex items-center justify-between">
               <p className="text-[10px] font-semibold tracking-[0.14em] text-[#747781]">{mode === "amount" ? "当前持仓（元）" : "当前持仓（份额）"}</p>
-              <p className="text-[10px] font-semibold tracking-[0.14em] text-[#747781]">{mode === "amount" ? "CNY" : "SHARE"}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-[10px] font-semibold tracking-[0.14em] text-[#747781]">{mode === "amount" ? "CNY" : "SHARE"}</p>
+                <button
+                  type="button"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[#d5dbea] bg-white text-[#24467c]"
+                  onClick={() => setMode((prev) => (prev === "amount" ? "share" : "amount"))}
+                  aria-label="切换金额和份额"
+                >
+                  <Repeat2 size={12} />
+                </button>
+              </div>
             </div>
             <input
               inputMode="decimal"

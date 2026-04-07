@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CirclePlus, History, SlidersHorizontal, X } from "lucide-react";
+import { Search, SlidersHorizontal, X } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 import { formatCurrency, formatSignedCurrency, getHoldingMetrics } from "@/lib/portfolio";
@@ -244,14 +244,9 @@ export default function PortfolioPage() {
       <section className="bg-[#d7e2ff] px-3 pb-5 pt-2 text-[#001b3f]">
         <header className="flex h-11 items-center justify-between">
           <h1 className="text-2xl font-extrabold leading-none tracking-tight">基金资产概览</h1>
-          <div className="flex items-center gap-2">
-            <Link href="/discover" aria-label="添加基金" className="rounded-md p-1 text-[#24467c] transition-colors hover:bg-black/5">
-              <CirclePlus size={18} />
-            </Link>
-            <Link href="/settings" aria-label="交易记录" className="rounded-md p-1 text-[#24467c] transition-colors hover:bg-black/5">
-              <History size={18} />
-            </Link>
-          </div>
+          <Link href="/discover" aria-label="搜索基金" className="rounded-md p-1 text-[#24467c] transition-colors hover:bg-black/5">
+            <Search size={18} />
+          </Link>
         </header>
 
         <div className="mt-1.5">

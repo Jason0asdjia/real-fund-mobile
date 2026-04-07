@@ -128,15 +128,15 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
 
       <main className="flex-1 overflow-y-auto pb-28">
         {holding ? (
-          <section className="border-b border-[#e2e7ff] px-3 py-3">
-            <div className="rounded-xl border border-[#e2e7ff] bg-[#f2f3ff] p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-[10px] font-semibold tracking-[0.14em] text-[#747781]">持仓金额</p>
-                <p className="text-[10px] font-semibold tracking-[0.14em] text-[#747781]">累计收益</p>
+          <section className="border-b border-[#e2e7ff] bg-[#d7e2ff] px-3 pb-4 pt-3 text-[#001b3f]">
+            <div className="flex items-end justify-between gap-2">
+              <div>
+                <p className="mb-1 text-[9px] font-semibold tracking-[0.14em] text-[#24467c]/70">持仓金额</p>
+                <p className="text-[26px] font-extrabold leading-none tracking-tight tabular-nums">{formatCurrency(metrics?.amount)}</p>
               </div>
-              <div className="flex items-end justify-between gap-3">
-                <p className="m-0 text-2xl font-extrabold tracking-tight tabular-nums text-[#00193c]">{formatCurrency(metrics?.amount)}</p>
-                <p className={`m-0 text-2xl font-extrabold tracking-tight tabular-nums ${(metrics?.profitTotal || 0) >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>
+              <div className="text-right">
+                <p className="mb-1 text-[9px] font-medium tracking-[0.06em] text-[#24467c]/70">累计收益</p>
+                <p className={`text-xs font-semibold leading-none tabular-nums ${(metrics?.profitTotal || 0) >= 0 ? "text-[#24467c]" : "text-[#ba1a1a]"}`}>
                   {formatSignedCurrency(metrics?.profitTotal)}
                 </p>
               </div>
