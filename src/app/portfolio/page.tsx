@@ -19,6 +19,16 @@ type PortfolioViewState = {
   tableLeft: number;
 };
 
+type DragGhostState = {
+  id: ColumnId;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  offsetX: number;
+  offsetY: number;
+};
+
 const readViewState = (): PortfolioViewState => {
   if (typeof window === "undefined") return { windowY: 0, tableTop: 0, tableLeft: 0 };
   try {
@@ -175,6 +185,7 @@ export default function PortfolioPage() {
   const [columnOrder, setColumnOrder] = useState<ColumnId[]>(() => readColumnOrder());
   const [draggingColumnId, setDraggingColumnId] = useState<ColumnId | null>(null);
   const [touchDraggingColumnId, setTouchDraggingColumnId] = useState<ColumnId | null>(null);
+  const [dragGhost, setDragGhost] = useState<DragGhostState | null>(null);
   const [columnModalOpen, setColumnModalOpen] = useState(false);
   const viewStateRef = useRef<PortfolioViewState>({ windowY: 0, tableTop: 0, tableLeft: 0 });
   const tableRef = useRef<HTMLDivElement | null>(null);
@@ -388,12 +399,22 @@ export default function PortfolioPage() {
 
     const handlePointerMove = (event: PointerEvent) => {
       event.preventDefault();
+      setDragGhost((current) =>
+        current
+          ? {
+              ...current,
+              x: event.clientX,
+              y: event.clientY,
+            }
+          : current,
+      );
       handleTouchDragMove(event.clientX, event.clientY);
     };
 
     const stopDragging = () => {
       touchDragTargetRef.current = null;
       setTouchDraggingColumnId(null);
+      setDragGhost(null);
     };
 
     window.addEventListener("pointermove", handlePointerMove, { passive: false });
@@ -627,7 +648,7 @@ export default function PortfolioPage() {
                       setDraggingColumnId(null);
                     }}
                     onDragEnd={() => setDraggingColumnId(null)}
-                    className={`flex items-center gap-2 rounded-lg border border-[#e2e7ff] px-2.5 py-2 text-sm text-[#131b2e] will-change-transform ${draggingColumnId === item.id || touchDraggingColumnId === item.id ? "opacity-60" : "opacity-100"}`}
+                    className={`flex items-center gap-2 rounded-lg border border-[#e2e7ff] px-2.5 py-2 text-sm text-[#131b2e] will-change-transform ${draggingColumnId === item.id ? "opacity-60" : touchDraggingColumnId === item.id ? "opacity-25" : "opacity-100"}`}
                   >
                     <input
                       type="checkbox"
@@ -647,8 +668,21 @@ export default function PortfolioPage() {
                         if (event.pointerType === "mouse") return;
                         if (touchDraggingColumnId && touchDraggingColumnId !== item.id) return;
                         event.preventDefault();
+                        const container = event.currentTarget.closest("[data-column-id]") as HTMLDivElement | null;
+                        const rect = container?.getBoundingClientRect();
                         touchDragTargetRef.current = item.id;
                         setTouchDraggingColumnId(item.id);
+                        if (rect) {
+                          setDragGhost({
+                            id: item.id,
+                            x: event.clientX,
+                            y: event.clientY,
+                            width: rect.width,
+                            height: rect.height,
+                            offsetX: event.clientX - rect.left,
+                            offsetY: event.clientY - rect.top,
+                          });
+                        }
                       }}
                       className={`inline-flex cursor-grab text-[#8a90a0] active:cursor-grabbing ${touchDraggingColumnId === item.id ? "opacity-60" : "opacity-100"}`}
                       aria-label="拖拽排序"
@@ -660,6 +694,26 @@ export default function PortfolioPage() {
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+      ) : null}
+      {dragGhost ? (
+        <div
+          className="pointer-events-none fixed z-[90] rounded-lg border border-[#d8e3ff] bg-white px-2.5 py-2 text-sm text-[#131b2e] shadow-[0_16px_34px_rgba(0,25,60,0.2)] ring-1 ring-[#e7eeff]"
+          style={{
+            width: dragGhost.width,
+            height: dragGhost.height,
+            left: dragGhost.x - dragGhost.offsetX,
+            top: dragGhost.y - dragGhost.offsetY,
+            transform: "scale(1.03)",
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <input type="checkbox" className="h-4 w-4" checked={columnVisibility[dragGhost.id]} readOnly />
+            <span className="flex-1">{orderedColumns.find((item) => item.id === dragGhost.id)?.label || ""}</span>
+            <span className="inline-flex text-[#8a90a0]">
+              <GripVertical size={15} />
+            </span>
           </div>
         </div>
       ) : null}
