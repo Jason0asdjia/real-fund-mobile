@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { SlidersHorizontal } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
@@ -97,16 +98,16 @@ export default function MarketPage() {
           </div>
           <div className="divide-y divide-[#f2f3ff]">
             {topFunds.map((item) => (
-              <article key={item.code} className="flex items-center justify-between px-3 py-3">
+              <Link key={item.code} href={`/portfolio/${item.code}`} className="flex items-center justify-between px-3 py-3">
                 <div className="min-w-0">
                   <p className="truncate text-xs font-bold">{item.name}</p>
-                  <p className="text-[10px] font-medium text-[#747781]">{item.code}</p>
+                  <p className="text-[10px] font-semibold tabular-nums text-[#747781]">{item.code}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-xs font-bold text-[#005bc0]">{formatPercent(item.change)}</p>
                   <p className="text-[10px] text-[#747781]">{item.nav == null ? "净值: —" : `净值: ${item.nav.toFixed(4)}`}</p>
                 </div>
-              </article>
+              </Link>
             ))}
             {!topFunds.length ? <p className="px-3 py-4 text-sm text-[#747781]">暂无基金数据，先去发现页添加基金。</p> : null}
           </div>

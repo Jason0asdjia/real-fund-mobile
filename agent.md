@@ -27,6 +27,7 @@
 - 不破坏本地存储键与数据结构
 - 改动前后执行：`npm run lint`
 - UI 实现优先 Tailwind utility；仅在 Tailwind 难以表达时补少量组件层 CSS
+- 能使用 Tailwind 组件时必须使用（含项目内复用组件）；仅在无可用 Tailwind 组件时再落回原生实现
 - 页面视觉约束统一遵循 `/UI_CONSTRAINTS.md`
 
 ## 弹窗统一规范（全项目）

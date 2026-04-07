@@ -1,12 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronLeft, Clock3, ReceiptText, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronLeft } from "lucide-react";
 
-import { HoldingEditor } from "@/components/holding-editor";
 import { useAppState } from "@/components/app-provider";
-import { formatCurrency } from "@/lib/portfolio";
-import type { FundTransactionType } from "@/lib/types";
+import { formatCurrency, formatSignedCurrency, getHoldingMetrics } from "@/lib/portfolio";
 
 type FundManageViewProps = {
   code: string;
@@ -14,163 +12,207 @@ type FundManageViewProps = {
   asModal?: boolean;
 };
 
-const createDefaultForm = () => ({
-  date: new Date().toISOString().slice(0, 10),
-  type: "buy" as FundTransactionType,
-  share: "",
-  price: "",
-  fee: "",
-  note: "",
-});
+type EditMode = "amount" | "share";
+
+const toNumber = (value: string) => {
+  const normalized = value.replace(/,/g, "").trim();
+  if (!normalized) return null;
+  const next = Number(normalized);
+  return Number.isFinite(next) ? next : null;
+};
+
+const formatInputNumber = (value: number | null | undefined, digits = 2) => {
+  if (value == null || !Number.isFinite(value)) return "";
+  return value.toFixed(digits);
+};
 
 export function FundManageView({ code, onBack, asModal = false }: FundManageViewProps) {
-  const { state, updateHolding, addTransaction, removeTransaction } = useAppState();
-  const [form, setForm] = useState(createDefaultForm());
-
+  const { state, updateHolding } = useAppState();
   const fund = state.funds.find((item) => item.code === code);
+  const holding = fund ? state.holdings[fund.code] : undefined;
+  const metrics = useMemo(() => (fund ? getHoldingMetrics(fund, holding) : null), [fund, holding]);
+  const holdingDays = useMemo(() => {
+    if (!holding?.firstPurchaseDate) return null;
+    const start = new Date(`${holding.firstPurchaseDate}T00:00:00`);
+    const now = new Date();
+    const diff = now.getTime() - start.getTime();
+    return diff >= 0 ? Math.floor(diff / (24 * 60 * 60 * 1000)) : null;
+  }, [holding?.firstPurchaseDate]);
+
+  const [mode, setMode] = useState<EditMode>("amount");
+  const [amountInput, setAmountInput] = useState("");
+  const [shareInput, setShareInput] = useState("");
+  const [costInput, setCostInput] = useState("");
+  const [dateInput, setDateInput] = useState("");
+
+  useEffect(() => {
+    if (asModal) return;
+    document.body.classList.add("app-detail-open");
+    return () => {
+      document.body.classList.remove("app-detail-open");
+    };
+  }, [asModal]);
+
+  useEffect(() => {
+    const share = holding?.share ?? null;
+    const cost = holding?.cost ?? null;
+    const amount = share != null && cost != null ? share * cost : null;
+    setShareInput(formatInputNumber(share, 2));
+    setCostInput(formatInputNumber(cost, 4));
+    setAmountInput(formatInputNumber(amount, 2));
+    setDateInput(holding?.firstPurchaseDate || "");
+  }, [holding?.cost, holding?.firstPurchaseDate, holding?.share]);
 
   if (!fund) {
     return (
-      <div className={asModal ? "detail-page" : "screen"}>
-        {onBack ? (
-          <header className="detail-topbar">
-            <button type="button" className="detail-topbar__back" onClick={onBack}>
-              <ChevronLeft size={16} />
-              返回详情
-            </button>
-            <div className="detail-topbar__title">
-              <strong>持仓操作</strong>
-              <span>未找到基金</span>
-            </div>
-            <span className="detail-topbar__placeholder" />
-          </header>
-        ) : null}
-
-        <section className="empty-panel">
-          <h2>没有找到这只基金</h2>
-          <p>它可能已经被移除，或者当前地址不是有效的持仓操作页。</p>
+      <div className={asModal ? "detail-page" : "-mx-3 -mt-4 min-h-[calc(100dvh-5.5rem)] bg-white md:-mx-4 md:-mt-4"}>
+        <header className="sticky top-0 z-20 border-b border-[#e2e7ff] bg-white">
+          <div className="flex h-12 items-center justify-between px-3">
+            {onBack ? (
+              <button type="button" className="inline-flex items-center gap-1 text-sm font-semibold text-[#24467c]" onClick={onBack}>
+                <ChevronLeft size={16} />
+                返回
+              </button>
+            ) : (
+              <span />
+            )}
+            <h1 className="text-base font-bold text-[#131b2e]">编辑持仓</h1>
+            <span />
+          </div>
+        </header>
+        <section className="px-3 py-6">
+          <div className="rounded-xl border border-[#e2e7ff] bg-[#f8f9ff] p-4">
+            <h2 className="m-0 text-base font-bold text-[#131b2e]">未找到基金</h2>
+            <p className="mb-0 mt-2 text-sm text-[#57657a]">请返回持仓总览页重新进入。</p>
+          </div>
         </section>
       </div>
     );
   }
 
-  const transactions = state.transactions[fund.code] || [];
-  const holding = state.holdings[fund.code];
+  const handleConfirm = () => {
+    const cost = toNumber(costInput);
+    const inputShare = toNumber(shareInput);
+    const inputAmount = toNumber(amountInput);
 
-  const submitTransaction = () => {
-    if (!form.date || !form.share || !form.price) return;
-    addTransaction(fund.code, {
-      date: form.date,
-      type: form.type,
-      share: Number(form.share),
-      price: Number(form.price),
-      fee: form.fee ? Number(form.fee) : 0,
-      note: form.note || null,
+    const finalShare = mode === "share" ? inputShare : cost && inputAmount != null ? inputAmount / cost : inputShare;
+
+    updateHolding(fund.code, {
+      share: finalShare,
+      cost,
+      firstPurchaseDate: dateInput || null,
     });
-    setForm(createDefaultForm());
   };
 
   return (
-    <div className={asModal ? "detail-page" : "screen"}>
-      {onBack ? (
-        <header className="detail-topbar">
-          <button type="button" className="detail-topbar__back" onClick={onBack}>
-            <ChevronLeft size={16} />
-            返回详情
-          </button>
-          <div className="detail-topbar__title">
-            <strong>{fund.name}</strong>
-            <span>{fund.code}</span>
+    <div className={asModal ? "detail-page bg-white text-[#131b2e]" : "-mx-3 -mt-4 min-h-[calc(100dvh-5.5rem)] bg-white text-[#131b2e] md:-mx-4 md:-mt-4"}>
+      <header className="sticky top-0 z-20 border-b border-[#e2e7ff] bg-white">
+        <div className="relative min-h-12 px-3 py-1">
+          {onBack ? (
+            <button
+              type="button"
+              className="absolute left-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 text-sm font-semibold text-[#24467c]"
+              onClick={onBack}
+            >
+              <ChevronLeft size={16} />
+              返回
+            </button>
+          ) : (
+            <span />
+          )}
+          <div className="mx-auto max-w-[72%] text-center">
+            <h1 className="whitespace-normal break-words text-sm font-extrabold leading-tight text-[#131b2e]">{fund.name}</h1>
+            <p className="text-[10px] font-semibold text-[#747781]">{fund.code}</p>
           </div>
-          <span className="detail-topbar__placeholder" />
-        </header>
-      ) : null}
-
-      <section className="detail-group detail-manage-shell">
-        <div className="detail-group__head">
-          <p className="section-heading__eyebrow">Position Actions</p>
-          <h2>持仓编辑与加减仓操作</h2>
         </div>
+      </header>
 
-        <HoldingEditor fund={fund} holding={holding} onSave={updateHolding} />
-
-        <section className="insight-card">
-          <div className="insight-card__head">
-            <div>
-              <p className="section-heading__eyebrow">Transaction Model</p>
-              <h2>买入 / 卖出记录</h2>
-            </div>
-            <span className="insight-chip"><ReceiptText size={14} /> 操作页</span>
-          </div>
-          <div className="transaction-form">
-            <label>
-              <span>日期</span>
-              <input type="date" value={form.date} onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))} />
-            </label>
-            <label>
-              <span>方向</span>
-              <select value={form.type} onChange={(event) => setForm((current) => ({ ...current, type: event.target.value as FundTransactionType }))}>
-                <option value="buy">买入</option>
-                <option value="sell">卖出</option>
-              </select>
-            </label>
-            <label>
-              <span>份额</span>
-              <input inputMode="decimal" value={form.share} onChange={(event) => setForm((current) => ({ ...current, share: event.target.value }))} placeholder="1000" />
-            </label>
-            <label>
-              <span>成交净值</span>
-              <input inputMode="decimal" value={form.price} onChange={(event) => setForm((current) => ({ ...current, price: event.target.value }))} placeholder="1.2356" />
-            </label>
-            <label>
-              <span>手续费</span>
-              <input inputMode="decimal" value={form.fee} onChange={(event) => setForm((current) => ({ ...current, fee: event.target.value }))} placeholder="0" />
-            </label>
-            <label className="transaction-form__full">
-              <span>备注</span>
-              <input value={form.note} onChange={(event) => setForm((current) => ({ ...current, note: event.target.value }))} placeholder="可选" />
-            </label>
-            <button type="button" className="primary-button transaction-form__submit" onClick={submitTransaction}>
-              记录一笔交易
+      <main className="px-3 pb-28 pt-4">
+        <section className="mb-4">
+          <p className="mb-2 truncate text-sm font-bold text-[#131b2e]">{fund.name}</p>
+          <div className="flex max-w-[210px] rounded-lg bg-[#f2f3ff] p-1">
+            <button
+              type="button"
+              className={`min-h-8 flex-1 rounded-md text-xs font-bold ${mode === "amount" ? "bg-white text-[#24467c]" : "text-[#57657a]"}`}
+              onClick={() => setMode("amount")}
+            >
+              金额
+            </button>
+            <button
+              type="button"
+              className={`min-h-8 flex-1 rounded-md text-xs font-bold ${mode === "share" ? "bg-white text-[#24467c]" : "text-[#57657a]"}`}
+              onClick={() => setMode("share")}
+            >
+              份额
             </button>
           </div>
         </section>
 
-        <section className="insight-card">
-          <div className="insight-card__head">
-            <div>
-              <p className="section-heading__eyebrow">Operation Log</p>
-              <h2>交易流水</h2>
+        <section className="space-y-3">
+          <div className="rounded-xl border border-[#e2e7ff] bg-[#f8f9ff] p-4">
+            <div className="mb-1 flex items-center justify-between">
+              <p className="text-[10px] font-semibold tracking-[0.14em] text-[#747781]">{mode === "amount" ? "当前持仓（元）" : "当前持仓（份额）"}</p>
+              <p className="text-[10px] font-semibold tracking-[0.14em] text-[#747781]">{mode === "amount" ? "CNY" : "SHARE"}</p>
             </div>
-            <span className="insight-chip"><Clock3 size={14} /> {transactions.length} 笔</span>
+            <input
+              inputMode="decimal"
+              value={mode === "amount" ? amountInput : shareInput}
+              onChange={(event) => (mode === "amount" ? setAmountInput(event.target.value) : setShareInput(event.target.value))}
+              placeholder="0.00"
+              className="w-full border-0 bg-transparent p-0 text-2xl font-extrabold tracking-tight text-[#00193c] outline-none placeholder:text-[#9aa5bb] focus:ring-0"
+            />
           </div>
-          <div className="record-list">
-            {transactions.length ? (
-              transactions.map((item) => (
-                <div key={item.id} className="record-item record-item--transaction">
-                  <div className="record-item__icon">
-                    <Clock3 size={14} />
-                  </div>
-                  <div className="record-item__content">
-                    <div className="record-item__head">
-                      <strong>{item.type === "buy" ? "买入" : "卖出"} · {item.date}</strong>
-                      <div className="record-item__actions">
-                        <b className={item.type === "buy" ? "is-up" : "is-down"}>{item.share.toFixed(2)} 份</b>
-                        <button type="button" className="icon-action icon-action--small" onClick={() => removeTransaction(fund.code, item.id)} aria-label="删除交易记录">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                    <p>净值 {Number(item.price).toFixed(4)} · 金额 {formatCurrency(item.share * item.price)} · 手续费 {formatCurrency(item.fee || 0)}{item.note ? ` · ${item.note}` : ""}</p>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="chart-empty">还没有交易记录，先录入买入或卖出流水。</div>
-            )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="rounded-xl border border-[#e2e7ff] bg-[#f8f9ff] p-3">
+              <p className="mb-1 text-[10px] font-semibold tracking-[0.14em] text-[#747781]">持仓成本</p>
+              <input
+                inputMode="decimal"
+                value={costInput}
+                onChange={(event) => setCostInput(event.target.value)}
+                placeholder="0.0000"
+                className="w-full border-0 bg-transparent p-0 text-lg font-bold text-[#131b2e] outline-none placeholder:text-[#9aa5bb] focus:ring-0"
+              />
+            </label>
+            <label className="rounded-xl border border-[#e2e7ff] bg-[#f8f9ff] p-3">
+              <p className="mb-1 text-[10px] font-semibold tracking-[0.14em] text-[#747781]">首次买入日期</p>
+              <input
+                type="date"
+                value={dateInput}
+                onChange={(event) => setDateInput(event.target.value)}
+                className="w-full border-0 bg-transparent p-0 text-sm font-bold text-[#131b2e] outline-none focus:ring-0"
+              />
+            </label>
+          </div>
+
+          <div className="rounded-xl border border-[#e2e7ff] bg-white p-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[10px] font-semibold tracking-[0.14em] text-[#747781]">当前持仓金额</p>
+                <p className="mt-1 text-lg font-extrabold tabular-nums text-[#00193c]">{formatCurrency(metrics?.amount)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold tracking-[0.14em] text-[#747781]">当前累计收益</p>
+                <p className={`mt-1 text-lg font-extrabold tabular-nums ${(metrics?.profitTotal || 0) >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>
+                  {formatSignedCurrency(metrics?.profitTotal)}
+                </p>
+              </div>
+            </div>
+            <p className="mt-2 text-[10px] font-semibold text-[#747781]">持有天数：{holdingDays == null ? "—" : `${holdingDays} 天`}</p>
           </div>
         </section>
-      </section>
+
+      </main>
+
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-[#e2e7ff] bg-white/95 p-3 backdrop-blur">
+        <button
+          type="button"
+          onClick={handleConfirm}
+          className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-[#00193c] px-3 text-sm font-bold text-white"
+        >
+          确认修改
+        </button>
+      </div>
     </div>
   );
 }

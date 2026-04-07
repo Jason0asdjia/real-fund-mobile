@@ -4,6 +4,7 @@
 
 ## 1) 实现原则
 - 默认使用 Tailwind utility 实现 UI。
+- 能复用 Tailwind 组件时必须复用（包括项目内组件），不直接写原生控件样式分支。
 - 只有 Tailwind 难以表达时，才在 `src/app/globals.css` 中新增少量组件层样式。
 - 新页面优先复用已有语义类（如 `screen`、`search-shell`、`bottom-nav`、`is-up`、`is-down`）。
 

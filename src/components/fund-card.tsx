@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { Star, StarOff, Trash2 } from "lucide-react";
 
@@ -25,8 +26,10 @@ export function FundCard({ fund, holding, valuationSeries, favorite, onToggleFav
     <motion.article className="fund-card" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28 }}>
       <div className="fund-card__header">
         <div>
-          <p className="fund-card__eyebrow">{fund.code}</p>
-          <h2>{fund.name}</h2>
+          <Link href={`/portfolio/${fund.code}`} className="block">
+            <p className="fund-card__eyebrow">{fund.code}</p>
+            <h2>{fund.name}</h2>
+          </Link>
         </div>
         <div className="fund-card__actions">
           <button type="button" className="icon-action" aria-label={favorite ? "取消关注" : "加入关注"} onClick={() => onToggleFavorite(fund.code)}>

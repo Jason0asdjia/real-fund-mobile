@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { formatSignedCurrency, getHoldingMetrics } from "@/lib/portfolio";
@@ -28,8 +29,10 @@ export function HoldingEditor({ fund, holding, onSave }: HoldingEditorProps) {
     <section className="holding-editor">
       <div className="holding-editor__head">
         <div>
-          <p>{fund.code}</p>
-          <h3>{fund.name}</h3>
+          <Link href={`/portfolio/${fund.code}`} className="text-inherit no-underline">
+            <p>{fund.code}</p>
+            <h3>{fund.name}</h3>
+          </Link>
         </div>
         <button
           type="button"

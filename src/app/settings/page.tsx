@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
-import { Bell, ChevronRight, Database, HelpCircle, History, LayoutDashboard, ShieldCheck, Sparkles, Wallet } from "lucide-react";
+import Link from "next/link";
+import { useMemo, useState } from "react";
+import { Bell, ChevronRight, Database, HelpCircle, History, LayoutDashboard, Loader2, ShieldCheck, Sparkles, Wallet } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 import { getHoldingMetrics } from "@/lib/portfolio";
@@ -14,7 +15,8 @@ const refreshOptions = [
 ];
 
 export default function SettingsPage() {
-  const { state, setRefreshMs, clearAll, seedDemoData } = useAppState();
+  const { state, seeding, setRefreshMs, clearAll, seedDemoData } = useAppState();
+  const [seededAt, setSeededAt] = useState<string | null>(null);
   const totals = useMemo(
     () =>
       state.funds.reduce(
@@ -27,6 +29,16 @@ export default function SettingsPage() {
       ),
     [state.funds, state.holdings],
   );
+
+  const handleSeedDemoData = () => {
+    seedDemoData();
+    setSeededAt(
+      new Date().toLocaleTimeString("zh-CN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    );
+  };
 
   return (
     <div className="-mx-3 -mt-4 min-h-[calc(100dvh-5.5rem)] bg-white px-4 pb-24 pt-4 md:-mx-4">
@@ -62,7 +74,7 @@ export default function SettingsPage() {
 
       <section className="mb-6 space-y-2">
         <h2 className="px-1 text-[11px] font-bold tracking-[0.15em] text-[#747781]">资产与交易</h2>
-        <button type="button" className="flex w-full items-center justify-between rounded-xl bg-[#f2f3ff] px-4 py-3.5 text-left">
+        <Link href="/history" className="flex w-full items-center justify-between rounded-xl bg-[#f2f3ff] px-4 py-3.5 text-left">
           <div className="flex items-center gap-3">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded bg-white text-[#24467c]">
               <History size={18} />
@@ -70,16 +82,22 @@ export default function SettingsPage() {
             <span className="text-sm font-semibold text-[#131b2e]">交易记录</span>
           </div>
           <ChevronRight size={18} className="text-[#747781]" />
-        </button>
-        <button type="button" className="flex w-full items-center justify-between rounded-xl bg-[#f2f3ff] px-4 py-3.5 text-left" onClick={() => seedDemoData()}>
+        </Link>
+        <button
+          type="button"
+          className="flex w-full items-center justify-between rounded-xl bg-[#f2f3ff] px-4 py-3.5 text-left disabled:opacity-70"
+          onClick={handleSeedDemoData}
+          disabled={seeding}
+        >
           <div className="flex items-center gap-3">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded bg-white text-[#24467c]">
-              <Sparkles size={18} />
+              {seeding ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
             </span>
-            <span className="text-sm font-semibold text-[#131b2e]">写入演示数据</span>
+            <span className="text-sm font-semibold text-[#131b2e]">{seeding ? "写入中..." : "写入演示数据"}</span>
           </div>
           <ChevronRight size={18} className="text-[#747781]" />
         </button>
+        {seededAt ? <p className="px-1 text-[11px] text-[#57657a]">演示数据已写入（{seededAt}）</p> : null}
       </section>
 
       <section className="mb-6 space-y-2">

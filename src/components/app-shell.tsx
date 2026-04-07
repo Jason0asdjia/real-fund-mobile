@@ -6,7 +6,7 @@ import { useEffect, useRef } from "react";
 
 import { BottomNav } from "@/components/bottom-nav";
 
-const routeOrder = ["/portfolio", "/discover", "/market", "/settings", "/dashboard"];
+const routeOrder = ["/portfolio", "/discover", "/market", "/history", "/settings", "/dashboard"];
 
 const getSectionPath = (pathname: string) => {
   const matched = routeOrder.find((item) => pathname.startsWith(item));

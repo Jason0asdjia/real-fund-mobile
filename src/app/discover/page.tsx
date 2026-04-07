@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Check, CirclePlus, Search, SlidersHorizontal, X } from "lucide-react";
 
@@ -113,7 +114,7 @@ export default function DiscoverPage() {
 
                 return (
                   <article key={item.code} className="flex items-center gap-3 px-4 py-3">
-                    <div className="min-w-0 flex-1">
+                    <Link href={`/portfolio/${item.code}`} className="min-w-0 flex-1">
                       <div className="flex min-w-0 items-center gap-2">
                         <h2 className="m-0 truncate text-sm font-extrabold tracking-tight text-[#131b2e]">{item.name}</h2>
                         {item.shortName ? (
@@ -121,7 +122,7 @@ export default function DiscoverPage() {
                         ) : null}
                       </div>
                       <p className="m-0 mt-1 text-[11px] font-semibold tabular-nums text-[#747781]">{item.code}</p>
-                    </div>
+                    </Link>
 
                     <button
                       type="button"

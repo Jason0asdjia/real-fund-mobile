@@ -1,6 +1,5 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@config "../../tailwind.config.ts";
+@import "tailwindcss";
 
 @layer base {
   * {
@@ -409,10 +408,14 @@
   }
 
   .bottom-nav {
-    @apply fixed bottom-2 left-3 right-3 z-20 grid grid-cols-4 gap-1.5 rounded-2xl border border-slate-200 bg-white/90 p-2 shadow-soft backdrop-blur md:left-1/2 md:right-auto md:w-[420px] md:-translate-x-1/2;
+    @apply fixed bottom-2 left-3 right-3 z-20 grid grid-cols-5 gap-1.5 rounded-2xl border border-slate-200 bg-white/90 p-2 shadow-soft backdrop-blur md:left-1/2 md:right-auto md:w-[560px] md:-translate-x-1/2;
   }
 
   .app-modal-open .bottom-nav {
+    @apply hidden;
+  }
+
+  .app-detail-open .bottom-nav {
     @apply hidden;
   }
 

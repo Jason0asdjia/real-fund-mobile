@@ -12,6 +12,7 @@ type AppContextValue = {
   state: AppState;
   hydrated: boolean;
   refreshing: boolean;
+  seeding: boolean;
   error: string;
   valuationSeries: Record<string, ValuationPoint[]>;
   search: (keyword: string) => Promise<SearchFundResult[]>;
@@ -24,7 +25,7 @@ type AppContextValue = {
   toggleFavorite: (code: string) => void;
   setRefreshMs: (value: number) => void;
   clearAll: () => void;
-  seedDemoData: () => void;
+  seedDemoData: () => Promise<void>;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -33,11 +34,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppState>(defaultAppState);
   const [hydrated, setHydrated] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [seeding, setSeeding] = useState(false);
   const [error, setError] = useState("");
   const [valuationSeries, setValuationSeries] = useState<Record<string, ValuationPoint[]>>({});
   const fundsRef = useRef<FundSnapshot[]>([]);
   const refreshingRef = useRef(false);
+  const seedingRef = useRef(false);
   const didInitialRefreshRef = useRef(false);
+  const refreshTokenRef = useRef(0);
 
   useEffect(() => {
     const nextState = loadAppState();
@@ -56,6 +60,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [refreshing]);
 
   useEffect(() => {
+    seedingRef.current = seeding;
+  }, [seeding]);
+
+  useEffect(() => {
     if (!hydrated) return;
     saveAppState(state);
   }, [hydrated, state]);
@@ -63,6 +71,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const refreshFunds = useCallback(async () => {
     if (refreshingRef.current || fundsRef.current.length === 0) return;
 
+    const token = ++refreshTokenRef.current;
     refreshingRef.current = true;
     setRefreshing(true);
     setError("");
@@ -76,17 +85,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }),
       );
 
-      setState((current) => ({
-        ...current,
-        funds: refreshed,
-        lastUpdatedAt: new Date().toISOString(),
-      }));
-      setValuationSeries(getAllValuationSeries());
+      if (token === refreshTokenRef.current) {
+        setState((current) => ({
+          ...current,
+          funds: refreshed,
+          lastUpdatedAt: new Date().toISOString(),
+        }));
+        setValuationSeries(getAllValuationSeries());
+      }
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "刷新失败");
+      if (token === refreshTokenRef.current) {
+        setError(nextError instanceof Error ? nextError.message : "刷新失败");
+      }
     } finally {
-      refreshingRef.current = false;
-      setRefreshing(false);
+      if (token === refreshTokenRef.current) {
+        refreshingRef.current = false;
+        setRefreshing(false);
+      }
     }
   }, []);
 
@@ -218,23 +233,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const clearAll = useCallback(() => {
+    refreshTokenRef.current += 1;
+    refreshingRef.current = false;
+    seedingRef.current = false;
+    setRefreshing(false);
+    setSeeding(false);
+    setError("");
     didInitialRefreshRef.current = false;
     setState(defaultAppState);
     setValuationSeries({});
+    fundsRef.current = [];
     if (typeof window !== "undefined") {
       window.localStorage.clear();
     }
   }, []);
 
-  const seedDemoData = useCallback(() => {
+  const seedDemoData = useCallback(async () => {
+    if (seedingRef.current) return;
+    seedingRef.current = true;
+    setSeeding(true);
+
+    // Keep spinner visible briefly so the action has clear feedback on mobile.
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 280));
+
+    refreshTokenRef.current += 1;
+    refreshingRef.current = false;
+    setRefreshing(false);
+    setError("");
     const seed = buildDemoSeed();
     didInitialRefreshRef.current = true;
     setState(seed.state);
     setValuationSeries(seed.valuationSeries);
+    fundsRef.current = seed.state.funds;
     if (typeof window !== "undefined") {
       window.localStorage.setItem("real-fund-mobile:state", JSON.stringify(seed.state));
       window.localStorage.setItem("real-fund-mobile:valuation-timeseries", JSON.stringify(seed.valuationSeries));
     }
+    seedingRef.current = false;
+    setSeeding(false);
   }, []);
 
   const search = useCallback(async (keyword: string) => searchFunds(keyword), []);
@@ -244,6 +280,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       state,
       hydrated,
       refreshing,
+      seeding,
       error,
       valuationSeries,
       search,
@@ -258,7 +295,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearAll,
       seedDemoData,
     }),
-    [addFund, addTransaction, clearAll, error, hydrated, refreshFunds, refreshing, removeFund, removeTransaction, search, seedDemoData, setRefreshMs, state, toggleFavorite, updateHolding, valuationSeries],
+    [addFund, addTransaction, clearAll, error, hydrated, refreshFunds, refreshing, removeFund, removeTransaction, search, seeding, seedDemoData, setRefreshMs, state, toggleFavorite, updateHolding, valuationSeries],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
