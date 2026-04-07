@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, ChevronLeft, ChevronRight, CircleMinus, CirclePlus, PenSquare, Trash2 } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ChevronLeft, ChevronRight, CircleMinus, CirclePlus, PenSquare, Trash2, X } from "lucide-react";
 
 import { PerformanceLineChart } from "@/components/performance-line-chart";
 import { useAppState } from "@/components/app-provider";
@@ -37,8 +37,9 @@ const toNumber = (value: string | number | null | undefined) => {
 };
 
 export function FundDetailView({ code, onBack, asModal = false }: FundDetailViewProps) {
-  const { state, valuationSeries } = useAppState();
+  const { clearHolding, state, valuationSeries } = useAppState();
   const [period, setPeriod] = useState<PeriodKey>("1m");
+  const [clearModalOpen, setClearModalOpen] = useState(false);
   const fund = state.funds.find((item) => item.code === code);
 
   useEffect(() => {
@@ -48,6 +49,13 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
       document.body.classList.remove("app-detail-open");
     };
   }, [asModal]);
+
+  useEffect(() => {
+    document.body.classList.toggle("app-modal-open", clearModalOpen);
+    return () => {
+      document.body.classList.remove("app-modal-open");
+    };
+  }, [clearModalOpen]);
 
   if (!fund) {
     return (
@@ -85,9 +93,19 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
   const navValue = toNumber(fund.gsz ?? fund.dwjz);
   const navChange = toNumber(fund.gszzl);
   const latestTrades = transactions.slice(0, 6);
+  const handleClearHolding = () => {
+    clearHolding(fund.code);
+    setClearModalOpen(false);
+  };
   const content = (
-    <div className={asModal ? "detail-page bg-white text-[#131b2e]" : "-mx-3 -mt-4 min-h-[calc(100dvh-5.5rem)] bg-white text-[#131b2e] md:-mx-4 md:-mt-4"}>
-      <header className="sticky top-0 z-20 border-b border-[#e2e7ff] bg-white">
+    <div
+      className={
+        asModal
+          ? "detail-page flex h-[100dvh] flex-col overflow-hidden bg-white text-[#131b2e]"
+          : "-mx-3 -mb-24 -mt-4 flex h-[calc(100dvh-5.5rem)] flex-col overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mb-24 md:-mt-4"
+      }
+    >
+      <header className="z-20 shrink-0 border-b border-[#e2e7ff] bg-white">
         <div className="relative min-h-12 px-3 py-1">
           {onBack ? (
             <button
@@ -108,7 +126,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
         </div>
       </header>
 
-      <main className="pb-28">
+      <main className="flex-1 overflow-y-auto pb-28">
         {holding ? (
           <section className="border-b border-[#e2e7ff] px-3 py-3">
             <div className="rounded-xl border border-[#e2e7ff] bg-[#f2f3ff] p-4">
@@ -224,23 +242,61 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
       </main>
 
       <nav className="fixed bottom-2 left-3 right-3 z-30 grid grid-cols-4 gap-1 rounded-2xl border border-[#002366]/15 bg-[#181c21] p-2 shadow-[0_-8px_24px_rgba(0,0,0,0.15)] md:left-1/2 md:right-auto md:w-[560px] md:-translate-x-1/2">
-        <button type="button" className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-[#e0e2ea]">
+        <Link href={`/portfolio/${fund.code}/buy`} className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-[#e0e2ea]">
           <CirclePlus size={18} />
           <span className="text-[11px]">加仓</span>
-        </button>
-        <button type="button" className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-[#e0e2ea]">
+        </Link>
+        <Link href={`/portfolio/${fund.code}/sell`} className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-[#e0e2ea]">
           <CircleMinus size={18} />
           <span className="text-[11px]">减仓</span>
-        </button>
+        </Link>
         <Link href={`/portfolio/${fund.code}/manage`} className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-[#e0e2ea]">
           <PenSquare size={18} />
           <span className="text-[11px]">编辑持仓</span>
         </Link>
-        <button type="button" className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-[#e0e2ea]">
+        <button type="button" className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-[#e0e2ea]" onClick={() => setClearModalOpen(true)}>
           <Trash2 size={18} />
           <span className="text-[11px]">清空持仓</span>
         </button>
       </nav>
+
+      {clearModalOpen ? (
+        <div className="app-modal-backdrop" onClick={() => setClearModalOpen(false)}>
+          <div className="app-modal-sheet" onClick={(event) => event.stopPropagation()}>
+            <div className="app-modal-sheet__grabber" />
+            <div className="app-modal-sheet__header">
+              <h3 className="m-0 text-base font-bold text-[#131b2e]">确认清空持仓</h3>
+              <button
+                type="button"
+                onClick={() => setClearModalOpen(false)}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[#53617a] hover:bg-slate-100"
+                aria-label="关闭清空持仓确认弹窗"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="app-modal-sheet__content">
+              <p className="m-0 text-sm leading-6 text-[#57657a]">将清空该基金的持仓金额、成本、首次买入日期和全部交易记录。此操作无法撤销。</p>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setClearModalOpen(false)}
+                  className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#d5dbea] bg-white px-3 text-sm font-semibold text-[#57657a]"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearHolding}
+                  className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[#ba1a1a] px-3 text-sm font-bold text-white"
+                >
+                  确认清空
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 

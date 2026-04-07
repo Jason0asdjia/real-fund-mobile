@@ -105,8 +105,14 @@ export function FundManageView({ code, onBack, asModal = false }: FundManageView
   };
 
   return (
-    <div className={asModal ? "detail-page bg-white text-[#131b2e]" : "-mx-3 -mt-4 min-h-[calc(100dvh-5.5rem)] bg-white text-[#131b2e] md:-mx-4 md:-mt-4"}>
-      <header className="sticky top-0 z-20 border-b border-[#e2e7ff] bg-white">
+    <div
+      className={
+        asModal
+          ? "detail-page flex h-[100dvh] flex-col overflow-hidden bg-white text-[#131b2e]"
+          : "-mx-3 -mb-24 -mt-4 flex h-[calc(100dvh-5.5rem)] flex-col overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mb-24 md:-mt-4"
+      }
+    >
+      <header className="z-20 shrink-0 border-b border-[#e2e7ff] bg-white">
         <div className="relative min-h-12 px-3 py-1">
           {onBack ? (
             <button
@@ -127,7 +133,7 @@ export function FundManageView({ code, onBack, asModal = false }: FundManageView
         </div>
       </header>
 
-      <main className="px-3 pb-28 pt-4">
+      <main className="flex-1 overflow-hidden px-3 pb-28 pt-4">
         <section className="mb-4">
           <p className="mb-2 truncate text-sm font-bold text-[#131b2e]">{fund.name}</p>
           <div className="flex max-w-[210px] rounded-lg bg-[#f2f3ff] p-1">

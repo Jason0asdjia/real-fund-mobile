@@ -19,6 +19,7 @@ type AppContextValue = {
   addFund: (input: SearchFundResult) => Promise<void>;
   refreshFunds: () => Promise<void>;
   removeFund: (code: string) => void;
+  clearHolding: (code: string) => void;
   updateHolding: (code: string, next: FundHolding) => void;
   addTransaction: (code: string, next: Omit<FundTransaction, "id">) => void;
   removeTransaction: (code: string, id: string) => void;
@@ -190,6 +191,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  const clearHolding = useCallback((code: string) => {
+    setState((current) => ({
+      ...current,
+      holdings: {
+        ...current.holdings,
+        [code]: {
+          share: null,
+          cost: null,
+          firstPurchaseDate: null,
+        },
+      },
+      transactions: {
+        ...current.transactions,
+        [code]: [],
+      },
+    }));
+  }, []);
+
   const addTransaction = useCallback((code: string, next: Omit<FundTransaction, "id">) => {
     setState((current) => ({
       ...current,
@@ -287,6 +306,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addFund,
       refreshFunds,
       removeFund,
+      clearHolding,
       updateHolding,
       addTransaction,
       removeTransaction,
@@ -295,7 +315,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearAll,
       seedDemoData,
     }),
-    [addFund, addTransaction, clearAll, error, hydrated, refreshFunds, refreshing, removeFund, removeTransaction, search, seeding, seedDemoData, setRefreshMs, state, toggleFavorite, updateHolding, valuationSeries],
+    [addFund, addTransaction, clearAll, clearHolding, error, hydrated, refreshFunds, refreshing, removeFund, removeTransaction, search, seeding, seedDemoData, setRefreshMs, state, toggleFavorite, updateHolding, valuationSeries],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
