@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
-import { fetchFundData, searchFunds } from "@/lib/fund-api";
+import { fetchFundBaseData, fetchFundData, searchFunds } from "@/lib/fund-api";
 import { defaultAppState, loadAppState, saveAppState } from "@/lib/storage";
 import { isEstimateTimestampUsable, nowInMarket } from "@/lib/time";
 import type { AppState, FundHolding, FundSnapshot, FundTransaction, SearchFundResult, ValuationPoint } from "@/lib/types";
@@ -294,10 +294,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setError("");
 
     try {
-      const snapshot = await fetchFundData(input.code, {
+      const snapshot = await fetchFundBaseData(input.code, {
         code: input.code,
         name: input.name,
-      });
+      }, "interactive");
 
       recordValuation(snapshot.code, { gsz: snapshot.gsz, gztime: snapshot.gztime });
       setValuationSeries(getAllValuationSeries());
@@ -468,7 +468,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSeeding(false);
   }, []);
 
-  const search = useCallback(async (keyword: string) => searchFunds(keyword), []);
+  const search = useCallback(async (keyword: string) => searchFunds(keyword, "interactive"), []);
 
   const value = useMemo<AppContextValue>(
     () => ({

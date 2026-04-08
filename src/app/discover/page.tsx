@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Filter, Loader2, Minus, Plus, Search, Trash2, X } from "lucide-react";
+import { Filter, Loader2, Minus, Plus, Search, Trash2, X } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 import { fetchFundPreviewData } from "@/lib/fund-api";
@@ -166,14 +166,6 @@ export default function DiscoverPage() {
     <div className="-mx-3 -mt-4 flex h-[calc(100dvh-5.5rem)] flex-col overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mt-4">
       <header className="sticky top-0 z-20 border-b border-[#f0f2f7] bg-white px-4 py-3">
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#131b2e]"
-            aria-label="返回"
-          >
-            <ChevronLeft size={16} />
-          </button>
           <label className="flex min-h-9 flex-1 items-center gap-2 rounded-md border border-[#e5e8f0] bg-[#f5f7fb] px-2.5">
             <Search size={14} className="shrink-0 text-[#8a93a4]" />
             <input
@@ -245,17 +237,17 @@ export default function DiscoverPage() {
             <div className="min-h-0 flex-1 overflow-y-auto">
               <div className="divide-y divide-[#f1f3f8]">
                 {results.map((item) => {
-                const fundInState = state.funds.find((fund) => fund.code === item.code);
-                const previewFund = fundInState || resultSnapshots[item.code];
-                const change = Number(previewFund?.gszzl ?? previewFund?.zzl ?? NaN);
-                const nav = Number(previewFund?.gsz ?? previewFund?.dwjz ?? NaN);
-                const targetCode = item.resolvedCode || item.code;
-                const added = Boolean(state.funds.find((fund) => fund.code === targetCode));
-                const adding = addingCode === targetCode;
-                const previewLoading = resultLoadingCodes[item.code] && !previewFund;
-                const rawTag = item.fundType || item.category || item.shortName || defaultFundTag;
-                const tag = normalizeTag(rawTag);
-                const tagTone = tagColorMap[tag.toLowerCase()] || tagColorMap.fund;
+                  const targetCode = item.resolvedCode || item.code;
+                  const fundInState = state.funds.find((fund) => fund.code === targetCode);
+                  const previewFund = fundInState || resultSnapshots[item.code];
+                  const change = Number(previewFund?.gszzl ?? previewFund?.zzl ?? NaN);
+                  const nav = Number(previewFund?.gsz ?? previewFund?.dwjz ?? NaN);
+                  const added = Boolean(fundInState);
+                  const adding = addingCode === targetCode;
+                  const previewLoading = resultLoadingCodes[item.code] && !previewFund;
+                  const rawTag = item.fundType || item.category || item.shortName || defaultFundTag;
+                  const tag = normalizeTag(rawTag);
+                  const tagTone = tagColorMap[tag.toLowerCase()] || tagColorMap.fund;
 
                   return (
                     <article key={item.code} className="flex items-center justify-between gap-3 px-4 py-3.5">

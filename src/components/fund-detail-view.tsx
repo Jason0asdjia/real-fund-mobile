@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowDownLeft, ArrowUpRight, ChevronLeft, ChevronRight, CircleMinus, CirclePlus, PenSquare, Trash2, X } from "lucide-react";
 import { Area, Pie } from "@ant-design/charts";
 
 import { useAppState } from "@/components/app-provider";
 import { fetchFundBaseData, fetchFundData, fetchFundHistoricalNavSeries, fetchFundPreviewData } from "@/lib/fund-api";
+import { applyConfirmedTransactionsToHolding } from "@/lib/portfolio";
 import { formatCurrency, formatPercent, formatSignedCurrency, getHoldingMetrics } from "@/lib/portfolio";
 import type { FundSnapshot } from "@/lib/types";
 
@@ -43,7 +45,8 @@ const mergeNavSeries = (base: Array<{ date: string; nav: number }>, incoming: Ar
 };
 
 export function FundDetailView({ code, onBack, asModal = false }: FundDetailViewProps) {
-  const { clearHolding, state } = useAppState();
+  const { addFund, clearHolding, removeFund, state } = useAppState();
+  const router = useRouter();
   const [period, setPeriod] = useState<PeriodKey>("1m");
   const [clearModalOpen, setClearModalOpen] = useState(false);
   const [officialNavSeries, setOfficialNavSeries] = useState<Array<{ date: string; nav: number }>>([]);
@@ -51,6 +54,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
   const [remoteFund, setRemoteFund] = useState<FundSnapshot | null>(null);
   const [remoteFundLoading, setRemoteFundLoading] = useState(false);
   const [archiveLoading, setArchiveLoading] = useState(false);
+  const [navActionLoading, setNavActionLoading] = useState(false);
   const fundFromState = state.funds.find((item) => item.code === code);
   const fund = fundFromState || remoteFund;
 
@@ -227,9 +231,12 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
     );
   }
 
-  const holding = state.holdings[fund.code];
-  const metrics = getHoldingMetrics(fund, holding);
+  const rawHolding = state.holdings[fund.code];
   const transactions = (state.transactions[fund.code] || []).slice().sort((a, b) => `${b.date}`.localeCompare(`${a.date}`));
+  const holding = applyConfirmedTransactionsToHolding(rawHolding, transactions);
+  const hasHolding = typeof holding?.share === "number" && Number.isFinite(holding.share) && holding.share > 0;
+  const isInList = Boolean(fundFromState);
+  const metrics = getHoldingMetrics(fund, holding);
   const chartPoints = officialNavSeries.map((point) => ({
     date: point.date,
     label: point.date.slice(5).replace("-", "/"),
@@ -313,6 +320,43 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
   const handleClearHolding = () => {
     clearHolding(fund.code);
     setClearModalOpen(false);
+  };
+
+  const ensureFundInList = async () => {
+    if (isInList) return true;
+    const snapshot = await addFund({ code: fund.code, name: fund.name });
+    return Boolean(snapshot);
+  };
+
+  const handleNavigateWithEnsure = async (href: string, event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (isInList) return;
+    event.preventDefault();
+    if (navActionLoading) return;
+
+    setNavActionLoading(true);
+    try {
+      const ok = await ensureFundInList();
+      if (ok) {
+        router.push(href);
+      }
+    } finally {
+      setNavActionLoading(false);
+    }
+  };
+
+  const handleToggleListMembership = async () => {
+    if (navActionLoading) return;
+
+    setNavActionLoading(true);
+    try {
+      if (isInList) {
+        removeFund(fund.code);
+      } else {
+        await addFund({ code: fund.code, name: fund.name });
+      }
+    } finally {
+      setNavActionLoading(false);
+    }
   };
   const content = (
     <div
@@ -462,22 +506,59 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
       </main>
 
       <nav className="fixed bottom-2 left-3 right-3 z-30 grid grid-cols-4 gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_3px_10px_rgba(15,23,42,0.12)] md:left-1/2 md:right-auto md:w-[560px] md:-translate-x-1/2">
-        <Link href={`/portfolio/${fund.code}/buy?from=detail`} className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-600">
+        <Link
+          href={`/portfolio/${fund.code}/buy?from=detail`}
+          onClick={(event) => {
+            void handleNavigateWithEnsure(`/portfolio/${fund.code}/buy?from=detail`, event);
+          }}
+          className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-600"
+        >
           <CirclePlus size={18} />
           <span className="text-[11px]">加仓</span>
         </Link>
-        <Link href={`/portfolio/${fund.code}/sell?from=detail`} className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-600">
+        <Link
+          href={`/portfolio/${fund.code}/sell?from=detail`}
+          onClick={(event) => {
+            if (!hasHolding) {
+              event.preventDefault();
+              return;
+            }
+            void handleNavigateWithEnsure(`/portfolio/${fund.code}/sell?from=detail`, event);
+          }}
+          className={`flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-600 ${!hasHolding ? "pointer-events-none opacity-40" : ""}`}
+        >
           <CircleMinus size={18} />
           <span className="text-[11px]">减仓</span>
+          {!hasHolding ? <span className="text-[9px] text-[#9aa5bb]">暂无可减份额</span> : null}
         </Link>
-        <Link href={`/portfolio/${fund.code}/manage`} className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-600">
+        <Link
+          href={`/portfolio/${fund.code}/manage`}
+          onClick={(event) => {
+            void handleNavigateWithEnsure(`/portfolio/${fund.code}/manage`, event);
+          }}
+          className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-600"
+        >
           <PenSquare size={18} />
           <span className="text-[11px]">编辑持仓</span>
         </Link>
-        <button type="button" className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-600" onClick={() => setClearModalOpen(true)}>
-          <Trash2 size={18} />
-          <span className="text-[11px]">清空持仓</span>
-        </button>
+        {hasHolding ? (
+          <button type="button" className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-600" onClick={() => setClearModalOpen(true)}>
+            <Trash2 size={18} />
+            <span className="text-[11px]">清空持仓</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={navActionLoading}
+            className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-600"
+            onClick={() => {
+              void handleToggleListMembership();
+            }}
+          >
+            {isInList ? <CircleMinus size={18} /> : <CirclePlus size={18} />}
+            <span className="text-[11px]">{isInList ? "移除持仓列表" : "添加到持仓列表"}</span>
+          </button>
+        )}
       </nav>
 
       {clearModalOpen ? (

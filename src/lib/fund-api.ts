@@ -28,6 +28,8 @@ const sourceQueue = new Map<keyof typeof SOURCE_MIN_INTERVAL_MS, Promise<void>>(
 const previewInFlight = new Map<string, Promise<FundSnapshot>>();
 const fullInFlight = new Map<string, Promise<FundSnapshot>>();
 
+type RequestMode = "throttled" | "interactive";
+
 type OfficialQuoteSnapshot = {
   latestNav: number | null;
   latestDate: string | null;
@@ -42,7 +44,13 @@ const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(r
 const runWithSourceInterval = async <T>(
   source: keyof typeof SOURCE_MIN_INTERVAL_MS,
   task: () => Promise<T>,
+  mode: RequestMode = "throttled",
 ): Promise<T> => {
+  if (mode === "interactive") {
+    sourceLastRequestAt.set(source, Date.now());
+    return task();
+  }
+
   const previous = sourceQueue.get(source) || Promise.resolve();
 
   const nextTask = previous
@@ -65,8 +73,12 @@ const runWithSourceInterval = async <T>(
 const runWithSourcePriority = async <T>(
   source: keyof typeof SOURCE_MIN_INTERVAL_MS,
   task: () => Promise<T>,
-  priority: "high" | "normal" = "normal",
+  priority: "high" | "normal" | "interactive" = "normal",
 ): Promise<T> => {
+  if (priority === "interactive") {
+    return runWithSourceInterval(source, task, "interactive");
+  }
+
   if (priority === "high") {
     sourceLastRequestAt.set(source, 0);
   }
@@ -274,14 +286,22 @@ const parseHoldingsFromHtml = (content: string): FundHoldingStock[] => {
 
 const fetchHistoricalNetValues = async (code: string) => {
   const url = `https://fundf10.eastmoney.com/F10DataApi.aspx?type=lsjz&code=${code}&page=1&per=2&sdate=&edate=`;
-  const apidata = await runWithSourceInterval("eastmoneyHistory", () => loadScript(url));
+  const apidata = await withTimeout(
+    runWithSourceInterval("eastmoneyHistory", () => loadScript(url)),
+    OFFICIAL_SOURCE_TIMEOUT_MS,
+    "Eastmoney history timeout",
+  );
   return parseNetValuesFromHtml(apidata?.content || "");
 };
 
 const fetchHistoricalNetValuesPage = async (code: string, page: number, per: number, sdate = "") => {
   const startDate = sdate ? encodeURIComponent(sdate) : "";
   const url = `https://fundf10.eastmoney.com/F10DataApi.aspx?type=lsjz&code=${code}&page=${page}&per=${per}&sdate=${startDate}&edate=`;
-  return runWithSourceInterval("eastmoneyHistory", () => loadScript(url));
+  return withTimeout(
+    runWithSourceInterval("eastmoneyHistory", () => loadScript(url)),
+    OFFICIAL_SOURCE_TIMEOUT_MS,
+    "Eastmoney history page timeout",
+  );
 };
 
 export type FundHistoricalNavPoint = {
@@ -317,8 +337,8 @@ export const fetchFundHistoricalNavSeries = async (code: string, maxCount = 240,
     .slice(-maxCount);
 };
 
-const requestTencentFundQuote = (code: string) =>
-  runWithSourceInterval("tencentQuote", () =>
+const requestTencentFundQuote = (code: string, priority: "high" | "normal" | "interactive" = "normal") =>
+  runWithSourcePriority("tencentQuote", () =>
     withTimeout(
       new Promise<OfficialQuoteSnapshot>((resolve, reject) => {
         if (typeof document === "undefined" || !document.body) {
@@ -379,10 +399,11 @@ const requestTencentFundQuote = (code: string) =>
       OFFICIAL_SOURCE_TIMEOUT_MS,
       "Tencent quote timeout",
     ),
+    priority,
   );
 
-const requestDanjuanFundQuote = (code: string) =>
-  runWithSourceInterval("danjuanQuote", () =>
+const requestDanjuanFundQuote = (code: string, priority: "high" | "normal" | "interactive" = "normal") =>
+  runWithSourcePriority("danjuanQuote", () =>
     withTimeout(
       (async (): Promise<OfficialQuoteSnapshot> => {
         const response = await fetch(`https://danjuanfunds.com/djapi/fund/${encodeURIComponent(code)}`, {
@@ -413,6 +434,7 @@ const requestDanjuanFundQuote = (code: string) =>
       OFFICIAL_SOURCE_TIMEOUT_MS,
       "Danjuan quote timeout",
     ),
+    priority,
   );
 
 const buildOfficialFromHistory = (historyList: Array<{ date: string; nav: number; growth: number | null }>): OfficialQuoteSnapshot | null => {
@@ -428,7 +450,7 @@ const buildOfficialFromHistory = (historyList: Array<{ date: string; nav: number
   };
 };
 
-const fetchOfficialQuoteWithFallback = async (code: string) => {
+const fetchOfficialQuoteWithFallback = async (code: string, mode: RequestMode = "throttled") => {
   const historyList = await fetchHistoricalNetValues(code);
   const historyQuote = buildOfficialFromHistory(historyList);
   if (historyQuote && historyQuote.latestDate) {
@@ -436,7 +458,7 @@ const fetchOfficialQuoteWithFallback = async (code: string) => {
   }
 
   try {
-    const tencentQuote = await requestTencentFundQuote(code);
+    const tencentQuote = await requestTencentFundQuote(code, mode === "interactive" ? "interactive" : "normal");
     return { historyList, official: tencentQuote };
   } catch {
     // fallback to next provider
@@ -446,7 +468,7 @@ const fetchOfficialQuoteWithFallback = async (code: string) => {
     return { historyList, official: historyQuote };
   }
 
-  const danjuanQuote = await requestDanjuanFundQuote(code);
+  const danjuanQuote = await requestDanjuanFundQuote(code, mode === "interactive" ? "interactive" : "normal");
   return { historyList, official: danjuanQuote };
 };
 
@@ -523,7 +545,7 @@ const fetchFundProfile = async (code: string): Promise<Pick<FundSnapshot, "fundT
   return data;
 };
 
-const requestFundEstimateData = (code: string, priority: "high" | "normal" = "normal") =>
+const requestFundEstimateData = (code: string, priority: "high" | "normal" | "interactive" = "normal") =>
   runWithSourcePriority("eastmoneyEstimate", async () => {
     const cached = estimateCache.get(code);
     if (cached && Date.now() - cached.ts < ESTIMATE_CACHE_MS) {
@@ -600,9 +622,9 @@ const requestFundEstimateData = (code: string, priority: "high" | "normal" = "no
 const requestTencentEstimateData = async (
   code: string,
   previousFund?: FundSnapshot | null,
-  priority: "high" | "normal" = "normal",
+  priority: "high" | "normal" | "interactive" = "normal",
 ): Promise<FundSnapshot> => {
-  const quote = await runWithSourcePriority("tencentQuote", () => requestTencentFundQuote(code), priority);
+  const quote = await requestTencentFundQuote(code, priority);
   const estimateNav = toFiniteNumber(quote.latestNav);
 
   const computedGrowth =
@@ -633,7 +655,7 @@ const requestTencentEstimateData = async (
 const requestFundEstimateWithFallback = async (
   code: string,
   previousFund?: FundSnapshot | null,
-  priority: "high" | "normal" = "normal",
+  priority: "high" | "normal" | "interactive" = "normal",
 ) => {
   try {
     const primary = await requestFundEstimateData(code, priority);
@@ -647,7 +669,7 @@ const requestFundEstimateWithFallback = async (
 
 export const fetchFundPreviewData = async (code: string, previousFund?: FundSnapshot | null): Promise<FundSnapshot> => {
   return withInFlightDedup(previewInFlight, code, async () => {
-    const estimate = await requestFundEstimateWithFallback(code, previousFund, "high");
+    const estimate = await requestFundEstimateWithFallback(code, previousFund, "interactive");
     const preview = {
       ...(previousFund || {}),
       ...estimate,
@@ -658,10 +680,14 @@ export const fetchFundPreviewData = async (code: string, previousFund?: FundSnap
   });
 };
 
-export const fetchFundBaseData = async (code: string, previousFund?: FundSnapshot | null): Promise<FundSnapshot> => {
+export const fetchFundBaseData = async (
+  code: string,
+  previousFund?: FundSnapshot | null,
+  mode: RequestMode = "throttled",
+): Promise<FundSnapshot> => {
   const [officialResult, estimate] = await Promise.allSettled([
-    fetchOfficialQuoteWithFallback(code),
-    requestFundEstimateWithFallback(code, previousFund),
+    fetchOfficialQuoteWithFallback(code, mode),
+    requestFundEstimateWithFallback(code, previousFund, mode === "interactive" ? "interactive" : "normal"),
   ]);
 
   const historyList = officialResult.status === "fulfilled" ? officialResult.value.historyList : [];
@@ -788,9 +814,13 @@ export const fetchFundBaseData = async (code: string, previousFund?: FundSnapsho
   throw new Error(`Unable to fetch fund base data for ${code}`);
 };
 
-export const fetchFundData = async (code: string, previousFund?: FundSnapshot | null): Promise<FundSnapshot> => {
+export const fetchFundData = async (
+  code: string,
+  previousFund?: FundSnapshot | null,
+  mode: RequestMode = "throttled",
+): Promise<FundSnapshot> => {
   return withInFlightDedup(fullInFlight, code, async () => {
-    const base = await fetchFundBaseData(code, previousFund);
+    const base = await fetchFundBaseData(code, previousFund, mode);
     const [holdingsResult, profileResult] = await Promise.allSettled([
       fetchHoldings(code),
       fetchFundProfile(code),
@@ -830,7 +860,7 @@ export const fetchFundData = async (code: string, previousFund?: FundSnapshot | 
   });
 };
 
-export const searchFunds = async (keyword: string): Promise<SearchFundResult[]> => {
+export const searchFunds = async (keyword: string, mode: RequestMode = "throttled"): Promise<SearchFundResult[]> => {
   const query = keyword.trim();
   if (!query) return [];
   if (typeof document === "undefined" || !document.body) return [];
@@ -868,5 +898,5 @@ export const searchFunds = async (keyword: string): Promise<SearchFundResult[]> 
       reject(new Error("Fund search failed"));
     };
     document.body.appendChild(script);
-  }));
+  }), mode);
 };
