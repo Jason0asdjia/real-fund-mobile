@@ -5,9 +5,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Check, Circle, GripVertical, Search, SlidersHorizontal, X } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
-import { formatCurrency, formatSignedCurrency, getHoldingMetrics } from "@/lib/portfolio";
+import { applyConfirmedTransactionsToHolding, formatCurrency, formatSignedCurrency } from "@/lib/portfolio";
 import { holdingDaysInMarket, toMarketDay, todayInMarket } from "@/lib/time";
-import type { FundHolding, FundSnapshot } from "@/lib/types";
+import type { FundHolding, FundSnapshot, FundTransaction } from "@/lib/types";
 
 const VIEW_STATE_KEY = "real-fund-mobile:portfolio-view-state";
 const COLUMN_VISIBILITY_KEY = "real-fund-mobile:portfolio-column-visibility";
@@ -50,13 +50,17 @@ type PortfolioRow = {
   totalChangePercent: number | null;
   holdingAmount: number;
   holdingDays: number | null;
+  holdingDaysUpdatedAt: string;
   todayProfit: number | null;
   todayProfitStatus: "estimated" | "official" | "none";
   holdingProfit: number | null;
   estimatedHoldingProfit: number | null;
   holdingAmountLabel: string;
   officialUpdatedAt: string;
+  officialConfirmedUpdatedAt: string;
+  yesterdayChangeUpdatedAt: string;
   estimateUpdatedAt: string;
+  holdingAmountUpdatedAt: string;
   currentValueUpdatedAt: string;
   estimatedProfitUpdatedAt: string;
   debugSourceTag: string | null;
@@ -116,17 +120,23 @@ const resolveTodayProfitStatus = (hasOfficialToday: boolean, todayProfit: number
   return "estimated";
 };
 
-const buildRows = (funds: FundSnapshot[], holdings: Record<string, FundHolding>, today: string): PortfolioRow[] => {
+const buildRows = (
+  funds: FundSnapshot[],
+  holdings: Record<string, FundHolding>,
+  transactions: Record<string, FundTransaction[]>,
+  today: string,
+): PortfolioRow[] => {
+  const holdingDaysSettlementLabel = toMarketDay(`${today}T00:00:00`).format("MM-DD");
+
   return funds.map((fund) => {
-    const holding = holdings[fund.code];
-    const metrics = getHoldingMetrics(fund, holding);
-    const amount = metrics?.amount ?? 0;
+    const holding = applyConfirmedTransactionsToHolding(holdings[fund.code], transactions[fund.code] || []);
     const share = holding?.share != null ? Number(holding.share) : null;
     const unitCost = holding?.cost != null ? Number(holding.cost) : null;
     const hasValidPosition = share != null && Number.isFinite(share) && share > 0;
     const hasValidCost = unitCost != null && Number.isFinite(unitCost);
     const hasCostPosition = hasValidPosition && hasValidCost;
-    const hasTodayData = fund.jzrq === today;
+    const normalizedOfficialDate = fund.jzrq ? toMarketDay(`${fund.jzrq}T00:00:00`).format("YYYY-MM-DD") : null;
+    const hasTodayData = normalizedOfficialDate === today;
     const hasTodayValuation = !fund.noValuation && typeof fund.gztime === "string" && fund.gztime.startsWith(today);
     const canUseEstimate = !hasTodayData && hasTodayValuation && Number.isFinite(Number(fund.gsz));
     const hasTodayEstimate = !fund.noValuation && typeof fund.gztime === "string" && fund.gztime.startsWith(today);
@@ -135,19 +145,25 @@ const buildRows = (funds: FundSnapshot[], holdings: Record<string, FundHolding>,
     const lastNav = Number(fund.lastNav);
     const estimateChangePercent = fund.noValuation
       ? null
-      : Number.isFinite(Number(fund.gszzl))
+      : hasTodayValuation && Number.isFinite(Number(fund.gszzl))
         ? Number(fund.gszzl)
         : null;
-    const officialChangePercent = Number.isFinite(Number(fund.zzl)) ? Number(fund.zzl) : null;
-    const activeTodayChangePercent = hasTodayData ? officialChangePercent : canUseEstimate ? estimateChangePercent : null;
+    const officialChangePercentFromNav =
+      latestNav != null && Number.isFinite(lastNav) && lastNav > 0
+        ? ((latestNav - lastNav) / lastNav) * 100
+        : null;
+    const officialChangePercent = Number.isFinite(Number(fund.zzl)) ? Number(fund.zzl) : officialChangePercentFromNav;
+    const yesterdayChangePercent = Number.isFinite(Number(fund.zzl)) ? Number(fund.zzl) : null;
+    const useOfficialForTodayProfit = hasTodayData && officialChangePercent != null;
+    const activeTodayChangePercent = useOfficialForTodayProfit ? officialChangePercent : canUseEstimate ? estimateChangePercent : null;
     const totalChangePercent = hasCostPosition
       ? estimateNav != null
         ? (estimateNav - Number(unitCost)) * Number(share)
-        : metrics?.profitTotal ?? null
+        : null
       : null;
-    const yesterdayChangePercent = fund.zzl == null ? null : Number(fund.zzl);
     const firstPurchaseDate = holding?.firstPurchaseDate || null;
     const holdingDays = holdingDaysInMarket(firstPurchaseDate);
+    const holdingDaysUpdatedAt = holdingDaysSettlementLabel;
     const todayProfit =
       hasValidPosition && activeTodayChangePercent != null
         ? Number.isFinite(lastNav) && lastNav > 0
@@ -164,30 +180,45 @@ const buildRows = (funds: FundSnapshot[], holdings: Record<string, FundHolding>,
         ? (latestNav - Number(unitCost)) * Number(share)
         : null
       : null;
-    const estimatedHoldingProfit = hasCostPosition ? amount - Number(unitCost) * Number(share) : null;
+    const holdingAmount = hasValidPosition && latestNav != null ? Number(share) * latestNav : 0;
+    const estimatedHoldingProfit = hasCostPosition
+      ? estimateNav != null
+        ? (estimateNav - Number(unitCost)) * Number(share)
+        : holdingProfit
+      : null;
     const officialUpdatedAt = fund.jzrq ? toMarketDay(`${fund.jzrq}T00:00:00`).format("MM-DD") : "—";
+    const officialConfirmedUpdatedAt =
+      fund.officialConfirmedAt && fund.officialConfirmedForDate === fund.jzrq
+        ? toMarketDay(fund.officialConfirmedAt).format("MM-DD HH:mm")
+        : officialUpdatedAt;
+    const yesterdayChangeUpdatedAt = fund.officialConfirmedAt ? toMarketDay(fund.officialConfirmedAt).format("MM-DD HH:mm") : officialUpdatedAt;
     const estimateUpdatedAt = hasTodayValuation && fund.gztime ? toMarketDay(fund.gztime).format("MM-DD HH:mm") : "—";
-    const currentValueUpdatedAt = canUseEstimate ? estimateUpdatedAt : officialUpdatedAt;
-    const estimatedProfitUpdatedAt = estimateNav != null ? estimateUpdatedAt : officialUpdatedAt;
+    const holdingAmountUpdatedAt = officialConfirmedUpdatedAt;
+    const currentValueUpdatedAt = useOfficialForTodayProfit ? officialConfirmedUpdatedAt : canUseEstimate ? estimateUpdatedAt : officialUpdatedAt;
+    const estimatedProfitUpdatedAt = estimateNav != null ? estimateUpdatedAt : "—";
     const debugSourceTag = `来源：${getSourceLabel(fund.source)}`;
 
     return {
       code: fund.code,
       fundName: fund.name,
-      estimateNav: fund.noValuation ? "—" : formatNav(fund.gsz),
+      estimateNav: estimateNav != null ? formatNav(estimateNav) : "—",
       yesterdayChangePercent,
       estimateChangePercent,
       latestNav: formatNav(fund.dwjz),
       totalChangePercent,
-      holdingAmount: amount,
+      holdingAmount,
       holdingDays,
+      holdingDaysUpdatedAt,
       todayProfit,
-      todayProfitStatus: resolveTodayProfitStatus(hasTodayData && officialChangePercent != null, todayProfit),
+      todayProfitStatus: resolveTodayProfitStatus(useOfficialForTodayProfit, todayProfit),
       holdingProfit,
       estimatedHoldingProfit,
-      holdingAmountLabel: formatCurrency(amount),
+      holdingAmountLabel: formatCurrency(holdingAmount),
       officialUpdatedAt,
+      officialConfirmedUpdatedAt,
+      yesterdayChangeUpdatedAt,
       estimateUpdatedAt,
+      holdingAmountUpdatedAt,
       currentValueUpdatedAt,
       estimatedProfitUpdatedAt,
       debugSourceTag,
@@ -233,6 +264,8 @@ export default function PortfolioPage() {
   const [touchDraggingColumnId, setTouchDraggingColumnId] = useState<ColumnId | null>(null);
   const [dragGhost, setDragGhost] = useState<DragGhostState | null>(null);
   const [columnModalOpen, setColumnModalOpen] = useState(false);
+  const [showTodayProfitPercent, setShowTodayProfitPercent] = useState(false);
+  const [showTotalProfitPercent, setShowTotalProfitPercent] = useState(false);
   const viewStateRef = useRef<PortfolioViewState>({ windowY: 0, tableTop: 0, tableLeft: 0 });
   const tableRef = useRef<HTMLDivElement | null>(null);
   const tableRestoredRef = useRef(false);
@@ -310,8 +343,8 @@ export default function PortfolioPage() {
   }, [refreshFunds, state.funds.length]);
 
   const rows = useMemo(
-    () => buildRows(state.funds, state.holdings, todayInMarket()),
-    [state.funds, state.holdings],
+    () => buildRows(state.funds, state.holdings, state.transactions, todayInMarket()),
+    [state.funds, state.holdings, state.transactions],
   );
   const totals = useMemo(
     () =>
@@ -319,7 +352,7 @@ export default function PortfolioPage() {
         (acc, row) => {
           acc.amount += row.holdingAmount || 0;
           acc.today += row.todayProfit || 0;
-          acc.total += row.estimatedHoldingProfit || 0;
+          acc.total += row.holdingProfit || 0;
           return acc;
         },
         { amount: 0, today: 0, total: 0 },
@@ -329,9 +362,12 @@ export default function PortfolioPage() {
   const totalUpdatedAt = state.lastUpdatedAt ? toMarketDay(state.lastUpdatedAt).format("MM-DD HH:mm") : "--";
   const todayBase = totals.amount - totals.today;
   const todayRate = todayBase > 0 ? (totals.today / todayBase) * 100 : null;
-  const totalTodayProfitStatus = rows.some((row) => row.todayProfitStatus === "estimated")
+  const totalBase = totals.amount - totals.total;
+  const totalRate = totalBase > 0 ? (totals.total / totalBase) * 100 : null;
+  const effectiveTodayProfitRows = rows.filter((row) => row.holdingAmount > 0 && row.todayProfit != null);
+  const totalTodayProfitStatus = effectiveTodayProfitRows.some((row) => row.todayProfitStatus === "estimated")
     ? "estimated"
-    : rows.some((row) => row.todayProfitStatus === "official")
+    : effectiveTodayProfitRows.some((row) => row.todayProfitStatus === "official")
       ? "official"
       : "none";
 
@@ -515,16 +551,24 @@ export default function PortfolioPage() {
       );
 
     const updatedAt =
-      id === "latestNav" || id === "yesterdayChangePercent"
-        ? row.officialUpdatedAt
+      id === "latestNav"
+        ? row.officialConfirmedUpdatedAt
+        : id === "yesterdayChangePercent"
+          ? row.yesterdayChangeUpdatedAt
         : id === "estimateNav" || id === "estimateChangePercent"
           ? row.estimateUpdatedAt
-          : id === "totalChangePercent"
-            ? row.estimatedProfitUpdatedAt
-            : id === "holdingProfit"
-              ? row.officialUpdatedAt
-              : id === "holdingAmount" || id === "todayProfit"
-              ? row.currentValueUpdatedAt
+        : id === "totalChangePercent"
+          ? row.estimatedProfitUpdatedAt
+        : id === "holdingProfit"
+          ? row.officialConfirmedUpdatedAt
+        : id === "holdingAmount"
+          ? row.holdingAmountUpdatedAt
+        : id === "holdingDays"
+          ? row.holdingDaysUpdatedAt
+              : id === "todayProfit"
+                ? row.todayProfitStatus === "official"
+                  ? row.officialConfirmedUpdatedAt
+                  : row.currentValueUpdatedAt
               : row.officialUpdatedAt;
 
     return (
@@ -554,7 +598,7 @@ export default function PortfolioPage() {
 
   return (
     <div className="-mx-3 -mt-4 flex h-[calc(100dvh-6.6rem)] w-[calc(100%+1.5rem)] max-w-none flex-col gap-0 overflow-hidden bg-white md:-mx-4 md:-mt-4 md:w-[calc(100%+2rem)]">
-      <section className="bg-[#d7e2ff] px-3 pb-0 pt-2 text-[#001b3f]">
+      <section className="bg-[#d7e2ff] px-3 pb-2 pt-2 text-[#001b3f]">
         <header className="flex h-11 items-center justify-between">
           <h1 className="typo-page-title">基金资产概览</h1>
           <Link href="/discover" aria-label="搜索基金" className="rounded-md p-1 text-[#24467c] transition-colors hover:bg-black/5">
@@ -571,23 +615,35 @@ export default function PortfolioPage() {
 
           <div className="mt-4 flex items-center justify-between gap-2">
             <div>
-              <p className="text-[9px] font-medium tracking-[0.06em] text-[#24467c]/70">今日收益</p>
-              <p className="inline-flex items-center gap-1.5 text-lg font-bold leading-none text-[#24467c] tabular-nums">
+              <p className="flex items-center gap-1 text-[9px] font-medium tracking-[0.06em] text-[#24467c]/70">
+                <span>今日收益</span>
                 {totalTodayProfitStatus === "official" ? (
-                  <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current">
-                    <Check size={10} strokeWidth={3} />
+                  <span className="inline-flex h-3 w-3 items-center justify-center rounded-full border border-current">
+                    <Check size={8} strokeWidth={3} />
                   </span>
                 ) : totalTodayProfitStatus === "estimated" ? (
-                  <Circle size={12} className="text-red-500" strokeWidth={2.2} />
+                  <Circle size={10} className="text-red-500" strokeWidth={2.2} />
                 ) : null}
-                <span>
-                  {formatSignedCurrency(totals.today)} <span className="text-sm font-semibold">{`(${formatSignedPercent(todayRate)})`}</span>
-                </span>
               </p>
+              <button
+                type="button"
+                className="mt-1 inline-flex items-center gap-1.5 border-0 bg-transparent p-0 text-left text-[#24467c] tabular-nums"
+                onClick={() => setShowTodayProfitPercent((prev) => !prev)}
+                aria-label="切换今日收益显示方式"
+              >
+                <span className="text-lg font-bold leading-none">{showTodayProfitPercent ? formatSignedPercent(todayRate) : formatSignedCurrency(totals.today)}</span>
+              </button>
             </div>
             <div className="text-right">
-              <p className="text-[9px] font-medium tracking-[0.06em] text-[#24467c]/70">累计收益</p>
-              <p className="text-lg font-bold leading-none text-[#24467c] tabular-nums">{formatSignedCurrency(totals.total)}</p>
+              <p className="text-[9px] font-medium tracking-[0.06em] text-[#24467c]/70">累计收益（持有收益）</p>
+              <button
+                type="button"
+                className="mt-1 border-0 bg-transparent p-0 text-right text-[#24467c] tabular-nums"
+                onClick={() => setShowTotalProfitPercent((prev) => !prev)}
+                aria-label="切换累计收益显示方式"
+              >
+                <span className="text-lg font-bold leading-none">{showTotalProfitPercent ? formatSignedPercent(totalRate) : formatSignedCurrency(totals.total)}</span>
+              </button>
             </div>
           </div>
         </div>

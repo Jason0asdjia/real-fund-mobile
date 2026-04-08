@@ -20,6 +20,7 @@
 | `/API_AND_FIELDS_UPDATES.md` | API/字段历史归档（当前规范不在此扩写） |
 | `/TODO.md` | 阶段任务记录与执行清单 |
 | `/src/app/README.md` | 页面模块说明；持仓表格各列计算公式、列口径与时间显示规则 |
+| `/src/app/portfolio-table-columns.md` | 持仓表格列的单一真相文档：取值逻辑、计算公式、时间口径、确认链路 |
 | `/src/components/README.md` | 组件层职责；`app-provider` 刷新调度、估值粘性保留、演示数据入口规则 |
 | `/src/lib/README.md` | 数据源与字段规范；估值双源/官方多源回退、最小访问间隔、防 ban 策略 |
 | `/public/README.md` | 静态资源与 PWA 相关文件说明 |

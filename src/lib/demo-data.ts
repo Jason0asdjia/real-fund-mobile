@@ -160,8 +160,8 @@ const fundConfigs: FundSeedConfig[] = [
     ],
   },
   {
-    code: "013333",
-    name: "东兴兴瑞一年定开C",
+    code: "005827",
+    name: "易方达蓝筹精选混合",
     base: 1.31,
     drift: 0.06,
     wave: 0.018,
@@ -176,8 +176,8 @@ const fundConfigs: FundSeedConfig[] = [
     ],
   },
   {
-    code: "017777",
-    name: "富国价值优势混合A",
+    code: "161725",
+    name: "招商中证白酒指数(LOF)A",
     base: 1.48,
     drift: -0.11,
     wave: 0.041,
@@ -225,8 +225,8 @@ const fundConfigs: FundSeedConfig[] = [
     ],
   },
   {
-    code: "015555",
-    name: "中欧医疗创新股票A",
+    code: "003096",
+    name: "中欧医疗健康混合C",
     base: 1.58,
     drift: -0.24,
     wave: 0.052,

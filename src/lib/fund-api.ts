@@ -65,6 +65,30 @@ const toFiniteNumber = (value: unknown) => {
   return Number.isFinite(next) ? next : null;
 };
 
+const resolveOfficialConfirmationMeta = (
+  previousFund: FundSnapshot | null | undefined,
+  officialDate: string | null,
+) => {
+  if (!officialDate) {
+    return {
+      officialConfirmedAt: previousFund?.officialConfirmedAt ?? null,
+      officialConfirmedForDate: previousFund?.officialConfirmedForDate ?? null,
+    };
+  }
+
+  if (previousFund?.officialConfirmedForDate === officialDate && previousFund.officialConfirmedAt) {
+    return {
+      officialConfirmedAt: previousFund.officialConfirmedAt,
+      officialConfirmedForDate: officialDate,
+    };
+  }
+
+  return {
+    officialConfirmedAt: nowInMarket().format("YYYY-MM-DD HH:mm:ss"),
+    officialConfirmedForDate: officialDate,
+  };
+};
+
 const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, reason: string): Promise<T> => {
   let timer: number | null = null;
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -521,7 +545,7 @@ const requestFundEstimateData = (code: string) =>
           dwjz: json.dwjz,
           gsz: Number(json.gsz),
           gztime: json.gztime,
-          jzrq: json.jzrq,
+          jzrq: normalizeDate(json.jzrq),
           gszzl: Number(json.gszzl),
           source: "eastmoney",
           quoteStatus: "estimated",
@@ -631,20 +655,55 @@ export const fetchFundData = async (code: string, previousFund?: FundSnapshot | 
     const estimateOfficialDate = estimate.value.jzrq || null;
     const historyLatestDate = latest?.date || null;
     const estimateOfficialNav = Number(estimate.value.dwjz);
-    const useEstimateOfficial = Boolean(
+    const latestOfficialNav = latest?.nav ?? null;
+    const estimateHasOfficialSnapshot = Boolean(
       estimateOfficialDate
-        && estimateOfficialDate !== historyLatestDate
         && Number.isFinite(estimateOfficialNav)
         && estimateOfficialNav > 0,
     );
+    const estimateIsNewerOfficialDate = Boolean(
+      estimateOfficialDate
+        && historyLatestDate
+        && estimateOfficialDate > historyLatestDate,
+    );
+    const estimateIsSameDateButDifferentNav = Boolean(
+      estimateOfficialDate
+        && historyLatestDate
+        && estimateOfficialDate === historyLatestDate
+        && latestOfficialNav != null
+        && Math.abs(estimateOfficialNav - latestOfficialNav) > 1e-8,
+    );
+    const useEstimateOfficial = Boolean(
+      estimateHasOfficialSnapshot
+        && (!historyLatestDate || estimateIsNewerOfficialDate || estimateIsSameDateButDifferentNav),
+    );
 
     const effectiveLatestNav = useEstimateOfficial ? estimateOfficialNav : latest?.nav ?? null;
-    const effectiveLatestDate = useEstimateOfficial ? estimateOfficialDate : latest?.date || estimate.value.jzrq;
-    const effectiveLastNav = useEstimateOfficial ? latest?.nav ?? Number(previousFund?.lastNav) : previousNav?.nav ?? Number(previousFund?.lastNav);
-    const effectiveOfficialGrowth =
-      useEstimateOfficial && effectiveLastNav && effectiveLastNav > 0 && effectiveLatestNav != null
+    const effectiveLatestDate = useEstimateOfficial ? estimateOfficialDate : latest?.date || estimate.value.jzrq || null;
+    const effectiveLastNav = useEstimateOfficial
+      ? estimateIsSameDateButDifferentNav
+        ? previousNav?.nav ?? Number(previousFund?.lastNav)
+        : latest?.nav ?? Number(previousFund?.lastNav)
+      : previousNav?.nav ?? Number(previousFund?.lastNav);
+    const computedOfficialGrowth = useEstimateOfficial
+      ? estimate.value.zzl ?? (effectiveLastNav && effectiveLastNav > 0 && effectiveLatestNav != null
         ? ((effectiveLatestNav - effectiveLastNav) / effectiveLastNav) * 100
-        : latest?.growth ?? estimate.value.zzl ?? null;
+        : null)
+      : latest?.growth ?? estimate.value.zzl ?? null;
+    const hasFreshOfficialGrowth = computedOfficialGrowth != null && Number.isFinite(Number(computedOfficialGrowth));
+    const effectiveOfficialGrowth = hasFreshOfficialGrowth ? Number(computedOfficialGrowth) : toFiniteNumber(previousFund?.zzl) ?? null;
+    const hasFreshOfficialSnapshot = Boolean(
+      effectiveLatestDate
+        && effectiveLatestNav != null
+        && Number.isFinite(effectiveLatestNav)
+        && effectiveLatestNav > 0,
+    );
+    const officialConfirmationMeta = hasFreshOfficialSnapshot
+      ? resolveOfficialConfirmationMeta(previousFund, effectiveLatestDate)
+      : {
+          officialConfirmedAt: previousFund?.officialConfirmedAt ?? null,
+          officialConfirmedForDate: previousFund?.officialConfirmedForDate ?? null,
+        };
 
     return {
       ...(previousFund || {}),
@@ -660,12 +719,23 @@ export const fetchFundData = async (code: string, previousFund?: FundSnapshot | 
       holdingsReportDate: holdingsData.holdingsReportDate,
       holdingsIsLastQuarter: holdingsData.holdingsIsLastQuarter,
       archiveStatus,
+      officialConfirmedAt: officialConfirmationMeta.officialConfirmedAt,
+      officialConfirmedForDate: officialConfirmationMeta.officialConfirmedForDate,
       source: "eastmoney",
       quoteStatus: "estimated",
     };
   }
 
   if (latest) {
+    const hasFreshOfficialGrowth = latest.growth != null && Number.isFinite(Number(latest.growth));
+    const hasFreshOfficialSnapshot = latest.date && Number.isFinite(latest.nav) && latest.nav > 0;
+    const officialConfirmationMeta = hasFreshOfficialSnapshot
+      ? resolveOfficialConfirmationMeta(previousFund, latest.date)
+      : {
+          officialConfirmedAt: previousFund?.officialConfirmedAt ?? null,
+          officialConfirmedForDate: previousFund?.officialConfirmedForDate ?? null,
+        };
+
     return {
       ...(previousFund || {}),
       ...profileData,
@@ -675,7 +745,7 @@ export const fetchFundData = async (code: string, previousFund?: FundSnapshot | 
       gsz: null,
       gztime: null,
       jzrq: latest.date,
-      zzl: latest.growth,
+      zzl: hasFreshOfficialGrowth ? Number(latest.growth) : toFiniteNumber(previousFund?.zzl) ?? null,
       gszzl: null,
       lastNav: previousNav?.nav != null ? String(previousNav.nav) : previousFund?.lastNav ?? null,
       noValuation: true,
@@ -683,6 +753,8 @@ export const fetchFundData = async (code: string, previousFund?: FundSnapshot | 
       holdingsReportDate: holdingsData.holdingsReportDate,
       holdingsIsLastQuarter: holdingsData.holdingsIsLastQuarter,
       archiveStatus,
+      officialConfirmedAt: officialConfirmationMeta.officialConfirmedAt,
+      officialConfirmedForDate: officialConfirmationMeta.officialConfirmedForDate,
       source:
         officialQuote?.source === "history"
           ? "eastmoney"

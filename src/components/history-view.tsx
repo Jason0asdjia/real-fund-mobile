@@ -6,7 +6,7 @@ import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 import { TwSelect } from "@/components/ui/tw-select";
-import { formatCurrency } from "@/lib/portfolio";
+import { formatCurrency, isTransactionConfirmedInMarket } from "@/lib/portfolio";
 import { formatMarketDate, nowInMarket, toMarketDay } from "@/lib/time";
 import type { FundTransaction, FundTransactionType } from "@/lib/types";
 
@@ -42,30 +42,6 @@ const monthLabel = (monthKey: string) => {
   return `${year}年${month}月`;
 };
 
-const isLikelyTradingDayByDate = (day: ReturnType<typeof toMarketDay>) => {
-  const weekday = day.day();
-  return weekday !== 0 && weekday !== 6;
-};
-
-const addLikelyTradingDays = (baseDate: string, days: number) => {
-  let cursor = toMarketDay(`${baseDate}T00:00:00`).startOf("day");
-  let added = 0;
-  while (added < days) {
-    cursor = cursor.add(1, "day");
-    if (isLikelyTradingDayByDate(cursor)) {
-      added += 1;
-    }
-  }
-  return cursor;
-};
-
-const isAfterCloseOrder = (note?: string | null) => (note || "").includes("15:00后");
-
-const isTransactionConfirmed = (item: FundTransaction) => {
-  const confirmOffset = isAfterCloseOrder(item.note) ? 2 : 1;
-  const confirmDate = addLikelyTradingDays(item.date, confirmOffset);
-  return nowInMarket().startOf("day").isSame(confirmDate, "day") || nowInMarket().startOf("day").isAfter(confirmDate, "day");
-};
 
 export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?: string }) {
   const { state } = useAppState();
@@ -213,7 +189,7 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
                     const iconClass = isBuy ? "bg-[#d7e2ff] text-[#24467c]" : "bg-[#ffdbd0] text-[#8c4f39]";
                     const amountClass = isBuy ? "text-[#005bc0]" : "text-[#8c4f39]";
                     const typeText = isBuy ? "申购" : "赎回";
-                    const confirmed = isTransactionConfirmed(item);
+                    const confirmed = isTransactionConfirmedInMarket(item);
                     return (
                       <article key={item.id} className="flex items-center gap-3 px-3 py-3">
                         <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded ${iconClass}`}>

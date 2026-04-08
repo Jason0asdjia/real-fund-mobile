@@ -1,4 +1,4 @@
-import { hasEstimateWindowStarted, todayInMarket } from "@/lib/time";
+import { hasEstimateWindowStarted, nowInMarket, toMarketDay, todayInMarket } from "@/lib/time";
 import type { FundHolding, FundSnapshot, FundTransaction } from "@/lib/types";
 
 export type HoldingMetrics = {
@@ -15,6 +15,92 @@ export type TransactionSummary = {
   totalFees: number;
   totalBuyAmount: number;
   totalSellAmount: number;
+};
+
+const isLikelyTradingDayByDate = (day: ReturnType<typeof toMarketDay>) => {
+  const weekday = day.day();
+  return weekday !== 0 && weekday !== 6;
+};
+
+const addLikelyTradingDays = (baseDate: string, days: number) => {
+  let cursor = toMarketDay(`${baseDate}T00:00:00`).startOf("day");
+  let added = 0;
+  while (added < days) {
+    cursor = cursor.add(1, "day");
+    if (isLikelyTradingDayByDate(cursor)) {
+      added += 1;
+    }
+  }
+  return cursor;
+};
+
+const isAfterCloseOrder = (note?: string | null) => (note || "").includes("15:00后");
+
+export const isTransactionConfirmedInMarket = (item: FundTransaction) => {
+  const confirmOffset = isAfterCloseOrder(item.note) ? 2 : 1;
+  const confirmDate = addLikelyTradingDays(item.date, confirmOffset);
+  const today = nowInMarket().startOf("day");
+  return today.isSame(confirmDate, "day") || today.isAfter(confirmDate, "day");
+};
+
+export const applyConfirmedTransactionsToHolding = (holding: FundHolding | undefined, transactions: FundTransaction[] = []): FundHolding => {
+  const initialShare = typeof holding?.share === "number" && Number.isFinite(holding.share) ? holding.share : 0;
+  const initialCost = typeof holding?.cost === "number" && Number.isFinite(holding.cost) ? holding.cost : 0;
+  let share = Math.max(initialShare, 0);
+  let totalCost = share > 0 ? share * initialCost : 0;
+  let firstPurchaseDate = holding?.firstPurchaseDate || null;
+
+  const confirmed = transactions
+    .filter((item) => isTransactionConfirmedInMarket(item))
+    .slice()
+    .sort((a, b) => {
+      const dateCmp = `${a.date}`.localeCompare(`${b.date}`);
+      if (dateCmp !== 0) return dateCmp;
+      return `${a.id}`.localeCompare(`${b.id}`);
+    });
+
+  confirmed.forEach((item) => {
+    const txShare = Number(item.share);
+    const txPrice = Number(item.price);
+    const txFee = Number(item.fee || 0);
+    if (!Number.isFinite(txShare) || !Number.isFinite(txPrice) || txShare <= 0 || txPrice <= 0) return;
+
+    if (item.type === "buy") {
+      share += txShare;
+      totalCost += txShare * txPrice + (Number.isFinite(txFee) ? txFee : 0);
+
+      if (!firstPurchaseDate || toMarketDay(`${item.date}T00:00:00`).isBefore(toMarketDay(`${firstPurchaseDate}T00:00:00`), "day")) {
+        firstPurchaseDate = item.date;
+      }
+      return;
+    }
+
+    if (share <= 0) return;
+    const soldShare = Math.min(txShare, share);
+    const avgCost = share > 0 ? totalCost / share : 0;
+    share -= soldShare;
+    totalCost -= soldShare * avgCost;
+
+    if (share <= 1e-8) {
+      share = 0;
+      totalCost = 0;
+      firstPurchaseDate = null;
+    }
+  });
+
+  if (share <= 0) {
+    return {
+      share: null,
+      cost: null,
+      firstPurchaseDate: null,
+    };
+  }
+
+  return {
+    share,
+    cost: totalCost / share,
+    firstPurchaseDate,
+  };
 };
 
 export const getHoldingMetrics = (fund: FundSnapshot, holding?: FundHolding): HoldingMetrics | null => {

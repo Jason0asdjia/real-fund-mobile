@@ -77,6 +77,6 @@
 
 - 总资产：汇总 `row.holdingAmount`
 - 当日收益：汇总 `row.todayProfit`
-- 累计收益：汇总 `row.estimatedHoldingProfit`（估值链路）
+- 累计收益（持有收益）：汇总 `row.holdingProfit`（官方链路）
 
-说明：标题栏“累计收益”与表格“持有收益”故意分离，前者用于实时资产感知，后者用于官方口径对账。
+说明：当前标题栏“累计收益（持有收益）”与表格“持有收益”统一为官方口径。
