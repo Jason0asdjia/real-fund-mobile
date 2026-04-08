@@ -105,7 +105,7 @@ export default function MarketPage() {
       <div className="sticky top-0 z-20 shrink-0 bg-white">
         <header className="border-b border-[#e2e7ff] bg-white">
           <div className="flex h-12 items-center justify-between px-3">
-            <h1 className="text-2xl font-extrabold tracking-tight">行情中心</h1>
+            <h1 className="text-sm font-bold tracking-tight">行情中心</h1>
             <span />
           </div>
         </header>
@@ -114,9 +114,9 @@ export default function MarketPage() {
           <div className="flex flex-1 items-center gap-5 overflow-x-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {marketSnapshot.map((item) => (
               <article key={item.label} className="min-w-fit pr-3">
-                <p className="mb-1 text-[10px] font-bold text-[#747781]">{item.label}</p>
-                <p className="text-sm font-extrabold tabular-nums">{item.value}</p>
-                <p className={`text-[10px] font-bold ${item.change >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>{formatPercent(item.change)}</p>
+                <p className="mb-1 text-base font-extrabold text-[#4e5666]">{item.label}</p>
+                <p className="text-sm font-bold tabular-nums">{item.value}</p>
+                <p className={`text-sm font-semibold ${item.change >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>{formatPercent(item.change)}</p>
               </article>
             ))}
           </div>
@@ -129,15 +129,15 @@ export default function MarketPage() {
       <main className="flex-1 overflow-y-auto pb-24">
         <section className="border-b border-[#e2e7ff] py-3">
           <div className="mb-2 flex items-center justify-between px-3">
-            <h2 className="text-[10px] font-black tracking-[0.12em]">热门板块</h2>
-            <span className="text-[10px] font-bold text-[#005bc0]">更多行情</span>
+            <h2 className="text-sm font-bold text-[#131b2e]">热门板块</h2>
+            <span className="text-sm font-semibold text-[#005bc0]">更多行情</span>
           </div>
           <div className="grid grid-cols-2 border-y border-[#f2f3ff]">
             {hotSectors.map((sector, index) => (
               <article key={sector.name} className={`p-3 ${index === 0 ? "border-r border-[#f2f3ff]" : ""}`}>
                 <div className="mb-2 flex items-start justify-between gap-2">
-                  <span className="text-xs font-bold">{sector.name}</span>
-                  <span className="text-xs font-bold text-[#005bc0]">{formatPercent(sector.change)}</span>
+                  <span className="text-sm font-semibold">{sector.name}</span>
+                  <span className="text-sm font-semibold text-[#005bc0]">{formatPercent(sector.change)}</span>
                 </div>
                 <div className="h-8">
                   <svg viewBox="0 0 100 20" className="h-full w-full">
@@ -156,18 +156,18 @@ export default function MarketPage() {
 
         <section className="border-b border-[#e2e7ff] py-3">
           <div className="mb-2 flex items-center justify-between px-3">
-            <h2 className="text-[10px] font-black tracking-[0.12em]">基金领涨排行</h2>
+            <h2 className="text-sm font-bold text-[#131b2e]">基金领涨排行</h2>
           </div>
           <div className="divide-y divide-[#f2f3ff]">
             {topFunds.map((item) => (
               <Link key={item.code} href={`/portfolio/${item.code}`} className="flex items-center justify-between px-3 py-1.5">
                 <div className="min-w-0">
-                  <p className="truncate text-xs font-bold">{item.name}</p>
-                  <p className="text-[10px] font-semibold tabular-nums text-[#747781]">{item.code}</p>
+                  <p className="truncate text-sm font-bold">{item.name}</p>
+                  <p className="text-sm font-medium tabular-nums text-[#747781]">{item.code}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs font-bold text-[#005bc0]">{formatPercent(item.change)}</p>
-                  <p className="text-[10px] text-[#747781]">{item.nav == null ? "净值: —" : `净值: ${item.nav.toFixed(4)}`}</p>
+                  <p className="text-sm font-semibold text-[#005bc0]">{formatPercent(item.change)}</p>
+                  <p className="text-sm text-[#747781]">{item.nav == null ? "净值: —" : `净值: ${item.nav.toFixed(4)}`}</p>
                 </div>
               </Link>
             ))}
@@ -176,12 +176,12 @@ export default function MarketPage() {
         </section>
 
         <section className="py-3">
-          <h2 className="mb-2 px-3 text-[10px] font-black tracking-[0.12em]">7x24快讯</h2>
+          <h2 className="mb-2 px-3 text-sm font-bold text-[#131b2e]">7x24快讯</h2>
           <div className="divide-y divide-[#f2f3ff]">
             {quickNews.map((item) => (
               <article key={item.time + item.text} className="flex gap-3 px-3 py-3">
-                <span className={`pt-0.5 text-[10px] font-bold ${item.time === "14:35" ? "text-[#005bc0]" : "text-[#747781]"}`}>{item.time}</span>
-                <p className="m-0 text-xs font-bold leading-5">{item.text}</p>
+                <span className={`pt-0.5 text-sm font-semibold ${item.time === "14:35" ? "text-[#005bc0]" : "text-[#747781]"}`}>{item.time}</span>
+                <p className="m-0 text-sm leading-5">{item.text}</p>
               </article>
             ))}
           </div>

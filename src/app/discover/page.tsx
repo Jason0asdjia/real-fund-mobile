@@ -43,7 +43,7 @@ export default function DiscoverPage() {
     <div className="-mx-3 -mt-4 min-h-[calc(100dvh-5.5rem)] bg-white text-[#131b2e] md:-mx-4 md:-mt-4">
       <header className="sticky top-0 z-20 bg-white px-4 pb-3 pt-2">
         <div className="mb-3">
-          <h1 className="m-0 text-2xl font-extrabold tracking-tight">发现基金</h1>
+          <h1 className="m-0 typo-page-title">发现基金</h1>
         </div>
 
         <label className="flex min-h-12 items-center gap-2 rounded-xl border border-[#d5dbea] bg-white px-3 shadow-[0_10px_28px_rgba(19,27,46,0.06)]">
@@ -67,7 +67,7 @@ export default function DiscoverPage() {
         {!showResultLayer ? (
           <>
             <section className="mb-8">
-              <h2 className="mb-3 text-[10px] font-bold tracking-[0.16em] text-[#747781]">历史搜索</h2>
+              <h2 className="mb-3 typo-section-title">历史搜索</h2>
               <div className="grid grid-cols-4 gap-2" aria-label="热门搜索">
                 {popularSearches.map((item) => (
                   <button

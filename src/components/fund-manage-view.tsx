@@ -140,8 +140,8 @@ export function FundManageView({ code, onBack, asModal = false }: FundManageView
             <span />
           )}
           <div className="mx-auto max-w-[72%] text-center">
-            <h1 className="whitespace-normal break-words text-sm font-extrabold leading-tight text-[#131b2e]">{fund.name}</h1>
-            <p className="text-[10px] font-semibold text-[#747781]">{fund.code}</p>
+            <h1 className="whitespace-normal break-words typo-body-strong leading-tight">{fund.name}</h1>
+            <p className="typo-meta">{fund.code}</p>
           </div>
         </div>
       </header>
@@ -150,9 +150,9 @@ export function FundManageView({ code, onBack, asModal = false }: FundManageView
         <section className="space-y-3">
           <div className="rounded-xl border border-[#e2e7ff] bg-[#f8f9ff] p-4">
             <div className="mb-1 flex items-center justify-between">
-              <p className="text-[10px] font-semibold tracking-[0.14em] text-[#747781]">{mode === "amount" ? "当前持仓（元）" : "当前持仓（份额）"}</p>
+                <p className="typo-label">{mode === "amount" ? "当前持仓（元）" : "当前持仓（份额）"}</p>
               <div className="flex items-center gap-2">
-                <p className="text-[10px] font-semibold tracking-[0.14em] text-[#747781]">{mode === "amount" ? "CNY" : "SHARE"}</p>
+                  <p className="typo-label">{mode === "amount" ? "CNY" : "SHARE"}</p>
                 <button
                   type="button"
                   className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[#d5dbea] bg-white text-[#24467c]"
@@ -174,7 +174,7 @@ export function FundManageView({ code, onBack, asModal = false }: FundManageView
 
           <div className="grid grid-cols-2 gap-3">
             <label className="rounded-xl border border-[#e2e7ff] bg-[#f8f9ff] p-3">
-              <p className="mb-1 text-[10px] font-semibold tracking-[0.14em] text-[#747781]">持仓成本</p>
+               <p className="mb-1 typo-label">持仓成本</p>
               <input
                 inputMode="decimal"
                 value={costInput}
@@ -184,7 +184,7 @@ export function FundManageView({ code, onBack, asModal = false }: FundManageView
               />
             </label>
             <label className="rounded-xl border border-[#e2e7ff] bg-[#f8f9ff] p-3">
-              <p className="mb-1 text-[10px] font-semibold tracking-[0.14em] text-[#747781]">首次买入日期</p>
+               <p className="mb-1 typo-label">首次买入日期</p>
               <DatePicker
                 value={dateInput ? dayjs(dateInput, "YYYY-MM-DD") : null}
                 format="YYYY-MM-DD"
@@ -199,17 +199,17 @@ export function FundManageView({ code, onBack, asModal = false }: FundManageView
           <div className="rounded-xl border border-[#e2e7ff] bg-white p-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <p className="text-[10px] font-semibold tracking-[0.14em] text-[#747781]">当前持仓金额</p>
+                <p className="typo-label">当前持仓金额</p>
                 <p className="mt-1 text-lg font-extrabold tabular-nums text-[#00193c]">{formatCurrency(metrics?.amount)}</p>
               </div>
               <div>
-                <p className="text-[10px] font-semibold tracking-[0.14em] text-[#747781]">当前累计收益</p>
+                <p className="typo-label">当前累计收益</p>
                 <p className={`mt-1 text-lg font-extrabold tabular-nums ${(metrics?.profitTotal || 0) >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>
                   {formatSignedCurrency(metrics?.profitTotal)}
                 </p>
               </div>
             </div>
-            <p className="mt-2 text-[10px] font-semibold text-[#747781]">持有天数：{holdingDays == null ? "—" : `${holdingDays} 天`}</p>
+            <p className="mt-2 typo-label">持有天数：{holdingDays == null ? "—" : `${holdingDays} 天`}</p>
           </div>
         </section>
 

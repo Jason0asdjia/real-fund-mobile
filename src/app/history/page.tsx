@@ -139,7 +139,7 @@ export default function HistoryPage() {
     <div className="-mx-3 -mb-24 -mt-4 flex h-[calc(100dvh-5.5rem)] flex-col overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mb-24 md:-mt-4">
       <header className="z-20 shrink-0 border-b border-[#e2e7ff] bg-white">
         <div className="flex h-12 items-center justify-between px-3">
-          <h1 className="text-2xl font-extrabold tracking-tight">历史成交</h1>
+          <h1 className="typo-page-title">历史成交</h1>
         </div>
       </header>
 
@@ -147,8 +147,8 @@ export default function HistoryPage() {
         <section className="shrink-0 bg-[#d7e2ff] px-3 pb-4 pt-3 text-[#001b3f]">
           <div className="flex items-end justify-between gap-2">
             <div>
-              <p className="mb-1 text-[9px] font-semibold tracking-[0.14em] text-[#24467c]/70">{periodLabel}成交额</p>
-              <p className="text-[26px] font-extrabold leading-none tracking-tight tabular-nums">{formatCurrency(periodVolume)}</p>
+              <p className="mb-1 typo-label text-[#24467c]/70">{periodLabel}成交额</p>
+              <p className="typo-value-hero text-[#001b3f]">{formatCurrency(periodVolume)}</p>
             </div>
             <div className="text-right">
               <p className="text-[9px] font-medium tracking-[0.06em] text-[#24467c]/70">交易笔数</p>
@@ -209,7 +209,7 @@ export default function HistoryPage() {
           ) : (
             grouped.map(([month, items]) => (
               <div key={month}>
-                <div className="bg-[#f8f9ff] px-3 py-2 text-[10px] font-bold tracking-[0.16em] text-[#747781]">{monthLabel(month)}</div>
+                <div className="bg-[#f8f9ff] px-3 py-2 typo-section-title">{monthLabel(month)}</div>
                 <div className="divide-y divide-[#f2f3ff]">
                   {items.map((item) => {
                     const isBuy = item.type === "buy";

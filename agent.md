@@ -76,6 +76,21 @@
 - 避免同一页面同时存在“整页滚动 + 局部滚动”两套滚动语义。
 - 底部导航文案与路由语义必须一致。
 
+## Typography 全局约束（新增）
+- 全局字体族：`PingFang SC, Hiragino Sans GB, Microsoft YaHei, Noto Sans SC, Source Han Sans SC, Inter, system-ui`。
+- 默认正文基线字号：`14px`（与交易历史页基金名称字号一致）。
+- 字号层级固定，禁止页面内随意新增“临时字号”：
+  - `typo-page-title`：页面主标题（24/800）
+  - `typo-value-hero`：主金额/主数值（26 级视觉）
+  - `typo-value-emphasis`：强调数值（18 级视觉）
+  - `typo-body-strong`：列表标题/卡片主文案（14/600）
+  - `typo-section-title`：分区标题（10 + tracking）
+  - `typo-label`：字段标签（10 + tracking）
+  - `typo-meta`：时间/代码/辅助说明（10）
+  - `typo-micro`：细小按钮文案（11）
+- 金额、净值、涨跌幅等数字必须保留 `tabular-nums`。
+- “持仓总览”“个人中心”作为字体规范基线页面，新增页面须遵循同一层级映射。
+
 ## 弹窗统一规范（全项目）
 - 所有弹窗开启时，必须给 `body` 添加 `app-modal-open`；关闭或卸载时移除。
 - `app-modal-open` 状态下必须同时禁止页面滚动并隐藏底部导航。

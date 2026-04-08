@@ -63,22 +63,22 @@ export default function SettingsPage() {
             </span>
           </div>
           <div className="min-w-0">
-            <h1 className="m-0 text-xl font-extrabold tracking-tight text-[#131b2e]">个人中心</h1>
-            <p className="m-0 mt-1 text-sm font-medium text-[#57657a]">移动端账户设置与资产管理</p>
+            <h1 className="m-0 typo-page-title">个人中心</h1>
+            <p className="m-0 mt-1 typo-body-strong text-[#57657a]">移动端账户设置与资产管理</p>
           </div>
         </div>
       </section>
 
       <section className="mb-6 grid grid-cols-2 gap-3">
         <article className="rounded-xl border border-[#e2e7ff] bg-white p-4">
-          <p className="m-0 text-[10px] font-bold tracking-[0.14em] text-[#747781]">总资产估值</p>
+          <p className="m-0 typo-section-title">总资产估值</p>
           <p className="m-0 mt-2 text-lg font-extrabold tracking-tight text-[#00193c]">
             ¥{new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(totals.asset)}
           </p>
           <p className="m-0 mt-1 text-[10px] font-semibold text-[#57657a]">{state.funds.length} 只基金</p>
         </article>
         <article className="rounded-xl border border-[#e2e7ff] bg-white p-4">
-          <p className="m-0 text-[10px] font-bold tracking-[0.14em] text-[#747781]">当前刷新频率</p>
+          <p className="m-0 typo-section-title">当前刷新频率</p>
           <div className="mt-2 max-w-[108px]">
             <TwSelect
               id="settings-refresh-select"

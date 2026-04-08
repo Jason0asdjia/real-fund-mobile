@@ -556,7 +556,7 @@ export default function PortfolioPage() {
     <div className="-mx-3 -mt-4 flex h-[calc(100dvh-6.6rem)] w-[calc(100%+1.5rem)] max-w-none flex-col gap-0 overflow-hidden bg-white md:-mx-4 md:-mt-4 md:w-[calc(100%+2rem)]">
       <section className="bg-[#d7e2ff] px-3 pb-0 pt-2 text-[#001b3f]">
         <header className="flex h-11 items-center justify-between">
-          <h1 className="text-2xl font-extrabold leading-none tracking-tight">基金资产概览</h1>
+          <h1 className="typo-page-title">基金资产概览</h1>
           <Link href="/discover" aria-label="搜索基金" className="rounded-md p-1 text-[#24467c] transition-colors hover:bg-black/5">
             <Search size={18} />
           </Link>
@@ -564,10 +564,10 @@ export default function PortfolioPage() {
 
         <div className="mt-1.5">
           <div className="mb-1 flex items-center justify-between gap-2">
-            <p className="text-[9px] font-semibold tracking-[0.14em] text-[#24467c]/70">基金总资产（人民币）</p>
+            <p className="typo-label text-[#24467c]/70">基金总资产（人民币）</p>
             <p className="text-[10px] font-semibold text-[#24467c]/75">{totalUpdatedAt}</p>
           </div>
-          <p className="text-[26px] font-extrabold leading-none tracking-tight tabular-nums">{numberFormatter.format(totals.amount)}</p>
+          <p className="typo-value-hero text-[#001b3f]">{numberFormatter.format(totals.amount)}</p>
 
           <div className="mt-4 flex items-center justify-between gap-2">
             <div>

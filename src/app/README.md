@@ -23,6 +23,14 @@
 - 页面字体、间距、标题层级等全局约束遵循 `/agent.md`
 - 弹窗行为遵循 `/agent.md` 中的弹窗统一规范
 
+## Typography 约束（页面层）
+- 页面主标题统一使用 `typo-page-title`。
+- 分区标题统一使用 `typo-section-title`。
+- 字段标签统一使用 `typo-label`。
+- 主金额/主指标统一使用 `typo-value-hero`；强调指标使用 `typo-value-emphasis`。
+- 列表主文案使用 `typo-body-strong`；辅助信息使用 `typo-meta`/`typo-micro`。
+- 页面内禁止引入新的临时字号梯度，优先复用上述语义类。
+
 ## 持仓表格（`/src/app/portfolio/page.tsx`）列计算规则
 
 > 口径约定：

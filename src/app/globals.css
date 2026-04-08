@@ -8,6 +8,17 @@
 }
 
 @layer base {
+  :root {
+    --type-page-title-size: 1.5rem;
+    --type-hero-metric-lg: 1.875rem;
+    --type-hero-metric-md: 1.75rem;
+    --type-hero-metric-sm: 1.625rem;
+    --type-metric-strong: 1.125rem;
+    --type-body-size: 0.875rem;
+    --type-compact-size: 0.75rem;
+    --type-meta-size: 0.625rem;
+  }
+
   * {
     @apply box-border;
   }
@@ -18,6 +29,8 @@
   }
 
   body {
+    font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Source Han Sans SC", "Inter", system-ui, -apple-system, sans-serif;
+    font-size: var(--type-body-size);
     background-image: radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 28%),
       radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.08), transparent 25%);
   }
@@ -65,6 +78,46 @@
 
   .screen {
     @apply mx-auto flex w-full max-w-3xl flex-col gap-3;
+  }
+
+  .typo-page-title {
+    @apply text-[#131b2e] font-extrabold leading-none tracking-tight;
+    font-size: var(--type-page-title-size);
+  }
+
+  .typo-section-title {
+    @apply font-bold text-[#747781];
+    font-size: var(--type-meta-size);
+    letter-spacing: 0.14em;
+  }
+
+  .typo-label {
+    @apply font-semibold text-[#747781];
+    font-size: var(--type-meta-size);
+    letter-spacing: 0.12em;
+  }
+
+  .typo-value-hero {
+    @apply font-extrabold leading-none tracking-tight tabular-nums text-[#00193c];
+    font-size: var(--type-hero-metric-sm);
+  }
+
+  .typo-value-emphasis {
+    @apply font-bold leading-none tabular-nums;
+    font-size: var(--type-metric-strong);
+  }
+
+  .typo-body-strong {
+    @apply text-sm font-semibold text-[#131b2e];
+  }
+
+  .typo-meta {
+    @apply font-medium text-[#747781];
+    font-size: var(--type-meta-size);
+  }
+
+  .typo-micro {
+    @apply text-[11px] font-semibold;
   }
 
   .hero-card,

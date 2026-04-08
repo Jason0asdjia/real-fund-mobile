@@ -171,8 +171,8 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
             <span />
           )}
           <div className="mx-auto max-w-[72%] text-center">
-            <h1 className="m-0 whitespace-normal break-words text-sm font-extrabold leading-tight text-[#131b2e]">{fund.name}</h1>
-            <p className="m-0 text-[10px] font-semibold tabular-nums text-[#747781]">{fund.code}</p>
+            <h1 className="m-0 whitespace-normal break-words typo-body-strong leading-tight">{fund.name}</h1>
+            <p className="m-0 typo-meta tabular-nums">{fund.code}</p>
           </div>
         </div>
       </header>
@@ -182,11 +182,11 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
           <section className="border-b border-[#e2e7ff] bg-[#d7e2ff] px-3 py-1.5 text-[#001b3f]">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-h-[70px] flex-col justify-center">
-                <p className="mb-0.5 text-[9px] font-semibold tracking-[0.14em] text-[#24467c]/70">持仓金额</p>
+                <p className="mb-0.5 typo-label text-[#24467c]/70">持仓金额</p>
                 <p className="m-0 text-[30px] font-extrabold leading-none tracking-tight tabular-nums">{formatCurrency(metrics?.amount)}</p>
               </div>
               <div className="flex min-h-[70px] flex-col items-end justify-center text-right">
-                <p className="mb-0.5 text-[9px] font-medium tracking-[0.06em] text-[#24467c]/70">累计收益</p>
+                <p className="mb-0.5 typo-label text-[#24467c]/70">累计收益</p>
                 <p className={`m-0 text-[20px] font-bold leading-none tabular-nums ${(metrics?.profitTotal || 0) >= 0 ? "text-[#24467c]" : "text-[#ba1a1a]"}`}>
                   {formatSignedCurrency(metrics?.profitTotal)}
                 </p>
@@ -198,7 +198,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
         <section className="border-b border-[#e2e7ff] px-3 py-3">
           <div className="mb-2 flex items-start justify-between gap-3">
             <div>
-              <p className="mb-1 text-[10px] font-semibold tracking-[0.14em] text-[#747781]">单位净值 (NAV)</p>
+              <p className="mb-1 typo-section-title">单位净值 (NAV)</p>
               <p className="text-[28px] font-bold tracking-tight tabular-nums text-[#00193c]">{navValue.toFixed(4)}</p>
             </div>
             <div className={`text-sm tabular-nums ${navChange >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>{formatPercent(navChange)}</div>
@@ -227,7 +227,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
 
         <section className="border-b border-[#e2e7ff] py-3">
           <div className="mb-2 flex items-center justify-between px-3">
-            <h2 className="text-[10px] font-black tracking-[0.14em] text-[#747781]">前十重仓股</h2>
+            <h2 className="typo-section-title">前十重仓股</h2>
             <span className="text-[10px] font-semibold text-[#747781]">{fund.holdingsReportDate ? `披露日 ${fund.holdingsReportDate}` : "截至最近披露"}</span>
           </div>
           <div className="px-3">
@@ -243,7 +243,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
 
         <section className="pt-3">
           <div className="mb-2 flex items-center justify-between px-3">
-            <h2 className="text-[10px] font-black tracking-[0.14em] text-[#747781]">历史成交</h2>
+            <h2 className="typo-section-title">历史成交</h2>
             <Link href="/history" className="inline-flex items-center gap-1 text-[10px] font-bold text-[#24467c]">
               查看全部
               <ChevronRight size={12} />

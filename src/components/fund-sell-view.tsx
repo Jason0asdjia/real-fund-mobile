@@ -109,8 +109,8 @@ export function FundSellView({ code }: FundSellViewProps) {
             返回
           </button>
           <div className="mx-auto max-w-[72%] text-center">
-            <h1 className="whitespace-normal break-words text-sm font-extrabold leading-tight text-[#131b2e]">{fund.name}</h1>
-            <p className="text-[10px] font-semibold text-[#747781]">{fund.code}</p>
+            <h1 className="whitespace-normal break-words typo-body-strong leading-tight">{fund.name}</h1>
+            <p className="typo-meta">{fund.code}</p>
           </div>
         </div>
       </header>
@@ -119,23 +119,23 @@ export function FundSellView({ code }: FundSellViewProps) {
         <section className="border-b border-[#e2e7ff] px-3 py-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <p className="text-[10px] font-semibold tracking-[0.14em] text-[#747781]">持仓金额/份额</p>
+              <p className="typo-label">持仓金额/份额</p>
               <p className="mt-1 text-xl font-extrabold tabular-nums text-[#131b2e]">{formatCurrency(metrics?.amount)}</p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] font-semibold tracking-[0.14em] text-[#747781]">持有收益</p>
+              <p className="typo-label">持有收益</p>
               <p className={`mt-1 text-xl font-extrabold tabular-nums ${(metrics?.profitTotal || 0) >= 0 ? "text-[#005bc0]" : "text-[#ba1a1a]"}`}>
                 {formatSignedCurrency(metrics?.profitTotal)}
               </p>
             </div>
             <div className="border-t border-[#e2e7ff] pt-2">
-              <p className="text-[10px] font-semibold tracking-[0.14em] text-[#747781]">持有天数</p>
+              <p className="typo-label">持有天数</p>
               <p className="mt-1 text-base font-bold text-[#131b2e]">
                 {holding?.firstPurchaseDate ? `${holdingDaysInMarket(holding.firstPurchaseDate) ?? 0}天` : "—"}
               </p>
             </div>
             <div className="border-t border-[#e2e7ff] pt-2 text-right">
-              <p className="text-[10px] font-semibold tracking-[0.14em] text-[#747781]">最新净值（{fund.gztime?.slice(5, 10) || fund.jzrq?.slice(5, 10) || "--"}）</p>
+              <p className="typo-label">最新净值（{fund.gztime?.slice(5, 10) || fund.jzrq?.slice(5, 10) || "--"}）</p>
               <p className="mt-1 text-base font-bold tabular-nums text-[#131b2e]">{latestNav ? latestNav.toFixed(4) : "—"}</p>
             </div>
           </div>
