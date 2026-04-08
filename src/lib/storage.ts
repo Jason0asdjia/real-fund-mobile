@@ -34,5 +34,9 @@ export const loadAppState = (): AppState => {
 
 export const saveAppState = (state: AppState) => {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(APP_STATE_KEY, JSON.stringify(state));
+  try {
+    window.localStorage.setItem(APP_STATE_KEY, JSON.stringify(state));
+  } catch {
+    // ignore persistence failures (quota/private mode), keep runtime state alive
+  }
 };

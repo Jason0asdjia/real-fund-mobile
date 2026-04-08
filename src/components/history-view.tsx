@@ -176,7 +176,7 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
           </div>
         </section>
 
-        <section className="flex-1 overflow-y-auto pb-14">
+        <section className="flex-1 overflow-y-auto">
           {grouped.length === 0 ? (
             <div className="px-3 py-8 text-center text-sm text-[#747781]">暂无交易记录，先去持仓页录入交易。</div>
           ) : (

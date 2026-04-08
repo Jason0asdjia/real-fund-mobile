@@ -6,7 +6,7 @@ import { Check, Circle, GripVertical, Search, SlidersHorizontal, X } from "lucid
 
 import { useAppState } from "@/components/app-provider";
 import { applyConfirmedTransactionsToHolding, formatCurrency, formatSignedCurrency } from "@/lib/portfolio";
-import { holdingDaysInMarket, toMarketDay, todayInMarket } from "@/lib/time";
+import { holdingDaysInMarket, isEstimateTimestampUsable, toMarketDay, todayInMarket } from "@/lib/time";
 import type { FundHolding, FundSnapshot, FundTransaction } from "@/lib/types";
 
 const VIEW_STATE_KEY = "real-fund-mobile:portfolio-view-state";
@@ -137,15 +137,16 @@ const buildRows = (
     const hasCostPosition = hasValidPosition && hasValidCost;
     const normalizedOfficialDate = fund.jzrq ? toMarketDay(`${fund.jzrq}T00:00:00`).format("YYYY-MM-DD") : null;
     const hasTodayData = normalizedOfficialDate === today;
-    const hasTodayValuation = !fund.noValuation && typeof fund.gztime === "string" && fund.gztime.startsWith(today);
+    const hasTodayValuation = !fund.noValuation && isEstimateTimestampUsable(fund.gztime);
+    const hasEstimateForDisplay = !fund.noValuation && isEstimateTimestampUsable(fund.gztime, { allowPreviousCloseCarry: true });
     const canUseEstimate = !hasTodayData && hasTodayValuation && Number.isFinite(Number(fund.gsz));
-    const hasTodayEstimate = !fund.noValuation && typeof fund.gztime === "string" && fund.gztime.startsWith(today);
+    const hasTodayEstimate = hasEstimateForDisplay;
     const estimateNav = hasTodayEstimate && Number.isFinite(Number(fund.gsz)) ? Number(fund.gsz) : null;
     const latestNav = Number.isFinite(Number(fund.dwjz)) ? Number(fund.dwjz) : null;
     const lastNav = Number(fund.lastNav);
     const estimateChangePercent = fund.noValuation
       ? null
-      : hasTodayValuation && Number.isFinite(Number(fund.gszzl))
+      : hasEstimateForDisplay && Number.isFinite(Number(fund.gszzl))
         ? Number(fund.gszzl)
         : null;
     const officialChangePercentFromNav =
@@ -154,7 +155,7 @@ const buildRows = (
         : null;
     const officialChangePercent = Number.isFinite(Number(fund.zzl)) ? Number(fund.zzl) : officialChangePercentFromNav;
     const yesterdayChangePercent = Number.isFinite(Number(fund.zzl)) ? Number(fund.zzl) : null;
-    const useOfficialForTodayProfit = hasTodayData && officialChangePercent != null;
+    const useOfficialForTodayProfit = officialChangePercent != null && (hasTodayData || !canUseEstimate);
     const activeTodayChangePercent = useOfficialForTodayProfit ? officialChangePercent : canUseEstimate ? estimateChangePercent : null;
     const totalChangePercent = hasCostPosition
       ? estimateNav != null
@@ -192,7 +193,7 @@ const buildRows = (
         ? toMarketDay(fund.officialConfirmedAt).format("MM-DD HH:mm")
         : officialUpdatedAt;
     const yesterdayChangeUpdatedAt = fund.officialConfirmedAt ? toMarketDay(fund.officialConfirmedAt).format("MM-DD HH:mm") : officialUpdatedAt;
-    const estimateUpdatedAt = hasTodayValuation && fund.gztime ? toMarketDay(fund.gztime).format("MM-DD HH:mm") : "—";
+    const estimateUpdatedAt = hasEstimateForDisplay && fund.gztime ? toMarketDay(fund.gztime).format("MM-DD HH:mm") : "—";
     const holdingAmountUpdatedAt = officialConfirmedUpdatedAt;
     const currentValueUpdatedAt = useOfficialForTodayProfit ? officialConfirmedUpdatedAt : canUseEstimate ? estimateUpdatedAt : officialUpdatedAt;
     const estimatedProfitUpdatedAt = estimateNav != null ? estimateUpdatedAt : "—";
@@ -665,7 +666,7 @@ export default function PortfolioPage() {
             <section className="min-h-0 flex-1 bg-white">
               <div
                 ref={tableRef}
-                className="h-full overflow-auto pb-16 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="h-full overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 role="region"
                 aria-label="持仓总览表格"
                 onScroll={(event) =>

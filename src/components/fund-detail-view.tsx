@@ -6,8 +6,9 @@ import { ArrowDownLeft, ArrowUpRight, ChevronLeft, ChevronRight, CircleMinus, Ci
 import { Area, Pie } from "@ant-design/charts";
 
 import { useAppState } from "@/components/app-provider";
-import { fetchFundHistoricalNavSeries } from "@/lib/fund-api";
+import { fetchFundBaseData, fetchFundData, fetchFundHistoricalNavSeries, fetchFundPreviewData } from "@/lib/fund-api";
 import { formatCurrency, formatPercent, formatSignedCurrency, getHoldingMetrics } from "@/lib/portfolio";
+import type { FundSnapshot } from "@/lib/types";
 
 type FundDetailViewProps = {
   code: string;
@@ -46,7 +47,12 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
   const [period, setPeriod] = useState<PeriodKey>("1m");
   const [clearModalOpen, setClearModalOpen] = useState(false);
   const [officialNavSeries, setOfficialNavSeries] = useState<Array<{ date: string; nav: number }>>([]);
-  const fund = state.funds.find((item) => item.code === code);
+  const [officialNavSeriesLoading, setOfficialNavSeriesLoading] = useState(false);
+  const [remoteFund, setRemoteFund] = useState<FundSnapshot | null>(null);
+  const [remoteFundLoading, setRemoteFundLoading] = useState(false);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const fundFromState = state.funds.find((item) => item.code === code);
+  const fund = fundFromState || remoteFund;
 
   useEffect(() => {
     if (asModal) return;
@@ -62,6 +68,75 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
       document.body.classList.remove("app-modal-open");
     };
   }, [clearModalOpen]);
+
+  useEffect(() => {
+    if (fundFromState) {
+      setRemoteFund(null);
+      setRemoteFundLoading(false);
+      return;
+    }
+
+    let active = true;
+    setRemoteFundLoading(true);
+
+    const loadFund = async () => {
+      let previewName = code;
+
+      try {
+        const preview = await fetchFundPreviewData(code, { code, name: code });
+        if (!active) return;
+        previewName = preview.name || code;
+        setRemoteFund(preview);
+      } catch {
+        // noop, full fetch below may still recover
+      }
+
+      try {
+        const snapshot = await fetchFundBaseData(code, { code, name: previewName });
+        if (!active) return;
+        setRemoteFund(snapshot);
+      } catch {
+        if (!active) return;
+        setRemoteFund(null);
+      } finally {
+        if (active) {
+          setRemoteFundLoading(false);
+        }
+      }
+    };
+
+    void loadFund();
+
+    return () => {
+      active = false;
+    };
+  }, [code, fundFromState]);
+
+  useEffect(() => {
+    if (fundFromState || !remoteFund) return;
+    if (remoteFund.archiveStatus === "ready") return;
+
+    let active = true;
+    setArchiveLoading(true);
+
+    const timer = window.setTimeout(() => {
+      void fetchFundData(code, remoteFund)
+        .then((snapshot) => {
+          if (!active) return;
+          setRemoteFund(snapshot);
+        })
+        .finally(() => {
+          if (active) {
+            setArchiveLoading(false);
+          }
+        });
+    }, 180);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [code, fundFromState, remoteFund]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -81,6 +156,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
 
   useEffect(() => {
     let active = true;
+    setOfficialNavSeriesLoading(true);
 
     const loadHistory = async () => {
       try {
@@ -114,6 +190,10 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
         }
       } catch {
         // keep cached series when request fails
+      } finally {
+        if (active) {
+          setOfficialNavSeriesLoading(false);
+        }
       }
     };
 
@@ -137,8 +217,10 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
         ) : null}
         <section className="px-3 py-6">
           <div className="rounded-xl border border-[#e2e7ff] bg-[#f8f9ff] p-4">
-            <h2 className="m-0 text-base font-normal text-[#131b2e]">没有找到这只基金</h2>
-            <p className="mb-0 mt-2 text-sm text-[#57657a]">它可能已经被移除，或者当前地址不是有效的基金详情页。</p>
+            <h2 className="m-0 text-base font-normal text-[#131b2e]">{remoteFundLoading ? "正在加载基金详情" : "没有找到这只基金"}</h2>
+            <p className="mb-0 mt-2 text-sm text-[#57657a]">
+              {remoteFundLoading ? "正在尝试从外部数据源获取该基金，请稍候。" : "它可能已经被移除，或者当前地址不是有效的基金详情页。"}
+            </p>
           </div>
         </section>
       </div>
@@ -164,6 +246,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
   const navChange = toNumber(fund.gszzl);
   const latestTrades = transactions.slice(0, 5);
   const holdings = Array.isArray(fund.holdings) ? fund.holdings : [];
+  const detailLoading = remoteFundLoading && !fundFromState;
   const holdingPieData = holdings
     .map((item) => ({
       type: item.name || item.code || "—",
@@ -304,7 +387,14 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
 
           <div className="rounded-xl border border-[#e2e7ff] bg-white p-2.5">
             <p className="mb-1 px-1 text-[11px] font-normal tracking-[0.06em] text-[#57657a]">净值变化</p>
-            <Area {...areaConfig} height={220} />
+            {officialNavSeriesLoading && !officialNavSeries.length ? (
+              <div className="space-y-3 px-1 py-3">
+                <div className="h-4 w-20 animate-pulse rounded bg-[#eef2fa]" />
+                <div className="h-[180px] animate-pulse rounded-lg bg-[#f6f8fc]" />
+              </div>
+            ) : (
+              <Area {...areaConfig} height={220} />
+            )}
           </div>
         </section>
 
@@ -314,7 +404,11 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
             <span className="text-[10px] font-normal text-[#747781]">{fund.holdingsReportDate ? `披露日 ${fund.holdingsReportDate}` : "截至最近披露"}</span>
           </div>
           <div className="px-3">
-            {holdingPieData.length ? (
+            {archiveLoading && !holdingPieData.length ? (
+              <div className="rounded-xl border border-[#e2e7ff] bg-white p-3">
+                <div className="h-[240px] animate-pulse rounded-lg bg-[#f6f8fc]" />
+              </div>
+            ) : holdingPieData.length ? (
               <div className="rounded-xl border border-[#e2e7ff] bg-white p-3">
                 <Pie {...pieConfig} height={240} />
               </div>

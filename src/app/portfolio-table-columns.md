@@ -19,15 +19,16 @@
 ### 2.1 行级计算变量（`portfolio/page.tsx`）
 
 - `hasTodayData`：该基金是否已经拿到“今天官方净值”（`jzrq === 今天`）。
-- `hasTodayValuation`：是否拿到“今天估值时间戳”（`gztime` 是今天）。
-- `canUseEstimate`：当前行是否允许使用估值（今天未出官方 + 今天有估值 + `gsz` 有效）。
-- `hasTodayEstimate`：估值字段是否是今天有效样本（用于 `estimateNav` 计算）。
+- `hasTodayValuation`：估值时间戳是否“可用”（通过 `isEstimateTimestampUsable(gztime)` 校验：同日、非未来时刻、交易日、09:15~15:00）。
+- `canUseEstimate`：当前行是否允许使用估值（今天未出官方 + 估值时间可用 + `gsz` 有效）。
+- `hasTodayEstimate`：估值字段是否为“可用估值样本”（用于 `estimateNav` 计算，含夜间结转规则）。
+- `hasEstimateForDisplay`：估值链路展示可用标记（开启 `allowPreviousCloseCarry`：收盘到次日开盘前允许沿用上一交易日收盘估值）。
 - `latestNav`：官方净值数值（由 `dwjz` 转数值）。
 - `estimateNav`：估值净值数值（由 `gsz` 转数值）。
 - `lastNav`：前一日净值（`lastNav` 字段）。
 - `officialChangePercent`：官方涨跌幅（优先 `zzl`，缺失时回退 `(latestNav-lastNav)/lastNav`）。
 - `yesterdayChangePercent`：昨日涨幅展示值（仅取 `zzl`，不做净值差回推）。
-- `useOfficialForTodayProfit`：当日收益是否切到官方口径（`hasTodayData && officialChangePercent != null`）。
+- `useOfficialForTodayProfit`：当日收益是否切到官方口径（`officialChangePercent != null && (hasTodayData || !canUseEstimate)`）。
 - `activeTodayChangePercent`：当日收益实际使用的涨跌幅（官方优先，否则估值）。
 - `hasValidPosition`：份额有效且大于 0。
 - `hasCostPosition`：份额有效 + 成本有效。
@@ -66,8 +67,15 @@
 1. 行内持仓先由 `applyConfirmedTransactionsToHolding(holding, transactions)` 计算：
    - 未确认交易不进入份额/成本；
    - 15:00 前交易按 T+1 确认，15:00 后按 T+2 确认（周末顺延）。
-2. 当日官方数据判定：`hasTodayData = fund.jzrq === todayInMarket()`。
-3. 估值可用判定：`canUseEstimate = !hasTodayData && gztime 为今日 && gsz 有效`。
+2. 当日官方数据判定：`hasTodayData = normalize(jzrq) === todayInMarket()`。
+3. 估值可用判定：`canUseEstimate = !hasTodayData && isEstimateTimestampUsable(gztime) && gsz 有效`。
+   - `isEstimateTimestampUsable` 规则：
+     - `gztime` 必须是今天（市场时区）；
+     - 不能晚于当前时间（允许 2 分钟容差）；
+     - 仅交易日生效；
+     - 仅在 09:15~15:00 之间生效。
+4. 估值展示结转判定：`hasEstimateForDisplay = isEstimateTimestampUsable(gztime, { allowPreviousCloseCarry: true })`。
+   - 收盘后到次日开盘前，估值列允许沿用上一交易日收盘估值（例如 14:50/15:00 样本）。
 
 ---
 
@@ -130,8 +138,8 @@
 
 ### 场景 A：交易日盘前（官方仍是上一交易日）
 - 最新净值/持仓金额/持有收益：显示上一官方值与官方时间。
-- 估算净值/估值涨幅：可能显示 `—` 或上一估值样本（取决于 `gztime` 是否是今天）。
-- 当日收益：多为 `none` 或估值态（视估值是否已开始）。
+- 估算净值/估值涨幅：显示 `—`（未进入可用估值时段）。
+- 当日收益：优先官方；若官方不可用则 `none`（不会误用未来估值时间）。
 
 ### 场景 B：交易日盘中（今天估值持续更新，官方仍未出）
 - 最新净值/持仓金额/持有收益：保持上一官方值（符合“官方口径固定”设想）。
@@ -145,7 +153,8 @@
 
 ### 场景 D：跨日到次日盘中（次日官方未出）
 - 最新净值等官方列：保持昨日官方值与时间。
-- 当日收益：恢复估值链路（如果有次日估值）。
+- 当日收益：仅当次日估值时间通过可用性校验后才走估值链路。
+- 估值列（估算净值/估值涨幅/估算收益）：次日开盘前沿用上一交易日收盘估值，开盘后切回当日估值样本。
 - 持有天数：按自然日在 0 点切日 +1。
 
 ### 场景 E：有加减仓但尚未确认

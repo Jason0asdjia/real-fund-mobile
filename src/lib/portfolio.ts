@@ -1,4 +1,4 @@
-import { hasEstimateWindowStarted, nowInMarket, toMarketDay, todayInMarket } from "@/lib/time";
+import { isEstimateTimestampUsable, nowInMarket, toMarketDay, todayInMarket } from "@/lib/time";
 import type { FundHolding, FundSnapshot, FundTransaction } from "@/lib/types";
 
 export type HoldingMetrics = {
@@ -112,8 +112,8 @@ export const getHoldingMetrics = (fund: FundSnapshot, holding?: FundHolding): Ho
 
   const today = todayInMarket();
   const hasTodayData = fund.jzrq === today;
-  const hasTodayValuation = typeof fund.gztime === "string" && fund.gztime.startsWith(today);
-  const canUseEstimate = !hasTodayData && (hasTodayValuation || hasEstimateWindowStarted()) && Number.isFinite(Number(fund.gsz));
+  const hasTodayValuation = isEstimateTimestampUsable(fund.gztime);
+  const canUseEstimate = !hasTodayData && hasTodayValuation && Number.isFinite(Number(fund.gsz));
   const currentNav = canUseEstimate
     ? Number(fund.gsz)
     : Number.isFinite(Number(fund.dwjz))

@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { fetchFundData, searchFunds } from "@/lib/fund-api";
 import { defaultAppState, loadAppState, saveAppState } from "@/lib/storage";
-import { nowInMarket, todayInMarket } from "@/lib/time";
+import { isEstimateTimestampUsable, nowInMarket } from "@/lib/time";
 import type { AppState, FundHolding, FundSnapshot, FundTransaction, SearchFundResult, ValuationPoint } from "@/lib/types";
 import { clearValuationSeries, getAllValuationSeries, recordValuation } from "@/lib/valuation-timeseries";
 import { buildDemoSeed } from "@/lib/demo-data";
@@ -18,6 +18,7 @@ type AppContextValue = {
   passiveRefreshAt: number | null;
   valuationSeries: Record<string, ValuationPoint[]>;
   search: (keyword: string) => Promise<SearchFundResult[]>;
+  recordSearchHistory: (keyword: string) => void;
   addFund: (input: SearchFundResult) => Promise<FundSnapshot | null>;
   refreshFunds: () => Promise<void>;
   removeFund: (code: string) => void;
@@ -27,6 +28,7 @@ type AppContextValue = {
   removeTransaction: (code: string, id: string) => void;
   toggleFavorite: (code: string) => void;
   setRefreshMs: (value: number) => void;
+  clearSearchHistory: () => void;
   clearAll: () => void;
   seedDemoData: () => Promise<void>;
 };
@@ -44,14 +46,13 @@ const toFiniteNumber = (value: unknown) => {
 };
 
 const mergeQuoteWithIntradayFallback = (previous: FundSnapshot, next: FundSnapshot): FundSnapshot => {
-  const today = todayInMarket();
   const previousEstimateTime = previous.gztime;
-  const previousEstimateIsToday = typeof previousEstimateTime === "string" && previousEstimateTime.startsWith(today);
+  const previousEstimateIsToday = isEstimateTimestampUsable(previousEstimateTime);
   const previousEstimateNav = toFiniteNumber(previous.gsz);
   const previousEstimateGrowth = toFiniteNumber(previous.gszzl);
 
   const nextEstimateTime = next.gztime;
-  const nextEstimateIsToday = typeof nextEstimateTime === "string" && nextEstimateTime.startsWith(today);
+  const nextEstimateIsToday = isEstimateTimestampUsable(nextEstimateTime);
   const nextEstimateNav = toFiniteNumber(next.gsz);
   const nextEstimateGrowth = toFiniteNumber(next.gszzl);
   const nextEstimateMissing = !nextEstimateIsToday || nextEstimateNav == null || nextEstimateGrowth == null;
@@ -123,6 +124,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const refreshFunds = useCallback(async () => {
     if (refreshingRef.current || fundsRef.current.length === 0) return;
+    if (typeof window !== "undefined" && window.location.pathname.startsWith("/discover")) return;
 
     const token = ++refreshTokenRef.current;
     refreshingRef.current = true;
@@ -226,6 +228,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const backfillFundArchives = useCallback(async (fund: FundSnapshot) => {
     if (archiveBackfillCodeRef.current || refreshingRef.current || document.hidden) return;
+    if (typeof window !== "undefined" && window.location.pathname.startsWith("/discover")) return;
 
     archiveBackfillCodeRef.current = fund.code;
     archiveBackfillAttemptRef.current[fund.code] = Date.now();
@@ -314,6 +317,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       refreshingRef.current = false;
       setRefreshing(false);
     }
+  }, []);
+
+  const recordSearchHistory = useCallback((keyword: string) => {
+    const trimmed = keyword.trim();
+    if (!trimmed) return;
+
+    setState((current) => ({
+      ...current,
+      searchHistory: [trimmed, ...current.searchHistory.filter((item) => item !== trimmed)].slice(0, 6),
+    }));
   }, []);
 
   const removeFund = useCallback((code: string) => {
@@ -406,6 +419,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  const clearSearchHistory = useCallback(() => {
+    setState((current) => ({
+      ...current,
+      searchHistory: [],
+    }));
+  }, []);
+
   const clearAll = useCallback(() => {
     refreshTokenRef.current += 1;
     refreshingRef.current = false;
@@ -460,6 +480,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       passiveRefreshAt,
       valuationSeries,
       search,
+      recordSearchHistory,
       addFund,
       refreshFunds,
       removeFund,
@@ -469,10 +490,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       removeTransaction,
       toggleFavorite,
       setRefreshMs,
+      clearSearchHistory,
       clearAll,
       seedDemoData,
     }),
-    [addFund, addTransaction, clearAll, clearHolding, error, hydrated, passiveRefreshAt, refreshFunds, refreshing, removeFund, removeTransaction, search, seeding, seedDemoData, setRefreshMs, state, toggleFavorite, updateHolding, valuationSeries],
+    [
+      addFund,
+      addTransaction,
+      clearAll,
+      clearHolding,
+      clearSearchHistory,
+      error,
+      hydrated,
+      passiveRefreshAt,
+      refreshFunds,
+      refreshing,
+      removeFund,
+      removeTransaction,
+      search,
+      recordSearchHistory,
+      seeding,
+      seedDemoData,
+      setRefreshMs,
+      state,
+      toggleFavorite,
+      updateHolding,
+      valuationSeries,
+    ],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

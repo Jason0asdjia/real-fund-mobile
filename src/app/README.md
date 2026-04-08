@@ -36,6 +36,7 @@
 > 口径约定：
 > - **官方链路**：`dwjz/jzrq/zzl`（日终确定值）
 > - **估值链路**：`gsz/gztime/gszzl`（盘中估算值）
+> - **估值可用性**：`gztime` 需通过 `isEstimateTimestampUsable`（同日、非未来时刻、交易日且 09:15~15:00）
 
 - `最新净值`（`latestNav`）
   - 展示：`dwjz`

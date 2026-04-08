@@ -34,6 +34,7 @@ export type FundSnapshot = {
 
 export type SearchFundResult = {
   code: string;
+  resolvedCode?: string;
   name: string;
   shortName?: string;
   category?: string;

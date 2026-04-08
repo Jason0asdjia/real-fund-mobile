@@ -184,7 +184,7 @@ export default function MarketPage() {
         </section>
       </div>
 
-      <main className="flex-1 overflow-y-auto pb-24">
+      <main className="flex-1 overflow-y-auto">
         <section className="border-b border-[#e2e7ff] py-3">
           <div className="mb-2 flex items-center justify-between px-3">
             <h2 className="text-sm font-bold text-[#131b2e]">热门板块</h2>

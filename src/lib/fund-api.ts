@@ -25,6 +25,8 @@ const profileCache = new Map<string, CachedData<Pick<FundSnapshot, "fundType" | 
 const estimateCache = new Map<string, CachedData<FundSnapshot>>();
 const sourceLastRequestAt = new Map<keyof typeof SOURCE_MIN_INTERVAL_MS, number>();
 const sourceQueue = new Map<keyof typeof SOURCE_MIN_INTERVAL_MS, Promise<void>>();
+const previewInFlight = new Map<string, Promise<FundSnapshot>>();
+const fullInFlight = new Map<string, Promise<FundSnapshot>>();
 
 type OfficialQuoteSnapshot = {
   latestNav: number | null;
@@ -58,6 +60,30 @@ const runWithSourceInterval = async <T>(
   sourceQueue.set(source, nextTask);
   await nextTask;
   return task();
+};
+
+const runWithSourcePriority = async <T>(
+  source: keyof typeof SOURCE_MIN_INTERVAL_MS,
+  task: () => Promise<T>,
+  priority: "high" | "normal" = "normal",
+): Promise<T> => {
+  if (priority === "high") {
+    sourceLastRequestAt.set(source, 0);
+  }
+  return runWithSourceInterval(source, task);
+};
+
+const withInFlightDedup = <T>(store: Map<string, Promise<T>>, key: string, factory: () => Promise<T>) => {
+  const existing = store.get(key);
+  if (existing) return existing;
+
+  const created = factory().finally(() => {
+    if (store.get(key) === created) {
+      store.delete(key);
+    }
+  });
+  store.set(key, created);
+  return created;
 };
 
 const toFiniteNumber = (value: unknown) => {
@@ -416,6 +442,10 @@ const fetchOfficialQuoteWithFallback = async (code: string) => {
     // fallback to next provider
   }
 
+  if (typeof window !== "undefined") {
+    return { historyList, official: historyQuote };
+  }
+
   const danjuanQuote = await requestDanjuanFundQuote(code);
   return { historyList, official: danjuanQuote };
 };
@@ -493,8 +523,8 @@ const fetchFundProfile = async (code: string): Promise<Pick<FundSnapshot, "fundT
   return data;
 };
 
-const requestFundEstimateData = (code: string) =>
-  runWithSourceInterval("eastmoneyEstimate", async () => {
+const requestFundEstimateData = (code: string, priority: "high" | "normal" = "normal") =>
+  runWithSourcePriority("eastmoneyEstimate", async () => {
     const cached = estimateCache.get(code);
     if (cached && Date.now() - cached.ts < ESTIMATE_CACHE_MS) {
       return cached.data;
@@ -565,10 +595,14 @@ const requestFundEstimateData = (code: string) =>
 
     estimateCache.set(code, { data: result, ts: Date.now() });
     return result;
-  });
+  }, priority);
 
-const requestTencentEstimateData = async (code: string, previousFund?: FundSnapshot | null): Promise<FundSnapshot> => {
-  const quote = await requestTencentFundQuote(code);
+const requestTencentEstimateData = async (
+  code: string,
+  previousFund?: FundSnapshot | null,
+  priority: "high" | "normal" = "normal",
+): Promise<FundSnapshot> => {
+  const quote = await runWithSourcePriority("tencentQuote", () => requestTencentFundQuote(code), priority);
   const estimateNav = toFiniteNumber(quote.latestNav);
 
   const computedGrowth =
@@ -596,23 +630,38 @@ const requestTencentEstimateData = async (code: string, previousFund?: FundSnaps
   };
 };
 
-const requestFundEstimateWithFallback = async (code: string, previousFund?: FundSnapshot | null) => {
+const requestFundEstimateWithFallback = async (
+  code: string,
+  previousFund?: FundSnapshot | null,
+  priority: "high" | "normal" = "normal",
+) => {
   try {
-    const primary = await requestFundEstimateData(code);
+    const primary = await requestFundEstimateData(code, priority);
     if (hasValidEstimateFields(primary)) return primary;
   } catch {
     // fallback to secondary estimate provider
   }
 
-  return requestTencentEstimateData(code, previousFund);
+  return requestTencentEstimateData(code, previousFund, priority);
 };
 
-export const fetchFundData = async (code: string, previousFund?: FundSnapshot | null): Promise<FundSnapshot> => {
-  const [officialResult, estimate, holdingsResult, profileResult] = await Promise.allSettled([
+export const fetchFundPreviewData = async (code: string, previousFund?: FundSnapshot | null): Promise<FundSnapshot> => {
+  return withInFlightDedup(previewInFlight, code, async () => {
+    const estimate = await requestFundEstimateWithFallback(code, previousFund, "high");
+    const preview = {
+      ...(previousFund || {}),
+      ...estimate,
+      code,
+      name: estimate.name || previousFund?.name || code,
+    };
+    return preview;
+  });
+};
+
+export const fetchFundBaseData = async (code: string, previousFund?: FundSnapshot | null): Promise<FundSnapshot> => {
+  const [officialResult, estimate] = await Promise.allSettled([
     fetchOfficialQuoteWithFallback(code),
     requestFundEstimateWithFallback(code, previousFund),
-    fetchHoldings(code),
-    fetchFundProfile(code),
   ]);
 
   const historyList = officialResult.status === "fulfilled" ? officialResult.value.historyList : [];
@@ -629,27 +678,6 @@ export const fetchFundData = async (code: string, previousFund?: FundSnapshot | 
     : historyList.length > 1
       ? historyList.at(-2)
       : null;
-  const holdingsData = holdingsResult.status === "fulfilled"
-    ? holdingsResult.value
-    : {
-      holdings: previousFund?.holdings || [],
-      holdingsReportDate: previousFund?.holdingsReportDate || null,
-      holdingsIsLastQuarter: previousFund?.holdingsIsLastQuarter || false,
-    };
-  const profileData = profileResult.status === "fulfilled"
-    ? profileResult.value
-    : {
-      fundType: previousFund?.fundType || null,
-      riskLevel: previousFund?.riskLevel || null,
-      fundManager: previousFund?.fundManager || null,
-      fundCompany: previousFund?.fundCompany || null,
-      fundScale: previousFund?.fundScale || null,
-      trackingTarget: previousFund?.trackingTarget || null,
-      inceptionDate: previousFund?.inceptionDate || null,
-    };
-  const archiveFetchSucceeded = holdingsResult.status === "fulfilled" || profileResult.status === "fulfilled";
-  const archiveHasData = Boolean(holdingsData.holdings.length || holdingsData.holdingsReportDate || hasProfileData(profileData));
-  const archiveStatus = archiveHasData ? "ready" : archiveFetchSucceeded ? "empty" : previousFund?.archiveStatus || "pending";
 
   if (estimate.status === "fulfilled") {
     const estimateOfficialDate = estimate.value.jzrq || null;
@@ -705,25 +733,21 @@ export const fetchFundData = async (code: string, previousFund?: FundSnapshot | 
           officialConfirmedForDate: previousFund?.officialConfirmedForDate ?? null,
         };
 
-    return {
+    const snapshot: FundSnapshot = {
       ...(previousFund || {}),
       ...estimate.value,
-      ...profileData,
       code,
       name: estimate.value.name || officialQuote?.name || previousFund?.name || "",
       dwjz: effectiveLatestNav != null ? String(effectiveLatestNav) : estimate.value.dwjz,
       jzrq: effectiveLatestDate,
       zzl: effectiveOfficialGrowth,
       lastNav: effectiveLastNav && Number.isFinite(effectiveLastNav) ? String(effectiveLastNav) : previousFund?.lastNav ?? null,
-      holdings: holdingsData.holdings,
-      holdingsReportDate: holdingsData.holdingsReportDate,
-      holdingsIsLastQuarter: holdingsData.holdingsIsLastQuarter,
-      archiveStatus,
       officialConfirmedAt: officialConfirmationMeta.officialConfirmedAt,
       officialConfirmedForDate: officialConfirmationMeta.officialConfirmedForDate,
       source: "eastmoney",
       quoteStatus: "estimated",
     };
+    return snapshot;
   }
 
   if (latest) {
@@ -736,9 +760,8 @@ export const fetchFundData = async (code: string, previousFund?: FundSnapshot | 
           officialConfirmedForDate: previousFund?.officialConfirmedForDate ?? null,
         };
 
-    return {
+    const snapshot: FundSnapshot = {
       ...(previousFund || {}),
-      ...profileData,
       code,
       name: officialQuote?.name || previousFund?.name || `基金 ${code}`,
       dwjz: String(latest.nav),
@@ -749,10 +772,6 @@ export const fetchFundData = async (code: string, previousFund?: FundSnapshot | 
       gszzl: null,
       lastNav: previousNav?.nav != null ? String(previousNav.nav) : previousFund?.lastNav ?? null,
       noValuation: true,
-      holdings: holdingsData.holdings,
-      holdingsReportDate: holdingsData.holdingsReportDate,
-      holdingsIsLastQuarter: holdingsData.holdingsIsLastQuarter,
-      archiveStatus,
       officialConfirmedAt: officialConfirmationMeta.officialConfirmedAt,
       officialConfirmedForDate: officialConfirmationMeta.officialConfirmedForDate,
       source:
@@ -763,9 +782,52 @@ export const fetchFundData = async (code: string, previousFund?: FundSnapshot | 
             : "danjuan",
       quoteStatus: "official",
     };
+    return snapshot;
   }
 
-  throw new Error(`Unable to fetch fund data for ${code}`);
+  throw new Error(`Unable to fetch fund base data for ${code}`);
+};
+
+export const fetchFundData = async (code: string, previousFund?: FundSnapshot | null): Promise<FundSnapshot> => {
+  return withInFlightDedup(fullInFlight, code, async () => {
+    const base = await fetchFundBaseData(code, previousFund);
+    const [holdingsResult, profileResult] = await Promise.allSettled([
+      fetchHoldings(code),
+      fetchFundProfile(code),
+    ]);
+
+  const holdingsData = holdingsResult.status === "fulfilled"
+    ? holdingsResult.value
+    : {
+      holdings: base.holdings || previousFund?.holdings || [],
+      holdingsReportDate: base.holdingsReportDate || previousFund?.holdingsReportDate || null,
+      holdingsIsLastQuarter: base.holdingsIsLastQuarter || previousFund?.holdingsIsLastQuarter || false,
+    };
+  const profileData = profileResult.status === "fulfilled"
+    ? profileResult.value
+    : {
+      fundType: base.fundType || previousFund?.fundType || null,
+      riskLevel: base.riskLevel || previousFund?.riskLevel || null,
+      fundManager: base.fundManager || previousFund?.fundManager || null,
+      fundCompany: base.fundCompany || previousFund?.fundCompany || null,
+      fundScale: base.fundScale || previousFund?.fundScale || null,
+      trackingTarget: base.trackingTarget || previousFund?.trackingTarget || null,
+      inceptionDate: base.inceptionDate || previousFund?.inceptionDate || null,
+    };
+  const archiveFetchSucceeded = holdingsResult.status === "fulfilled" || profileResult.status === "fulfilled";
+  const archiveHasData = Boolean(holdingsData.holdings.length || holdingsData.holdingsReportDate || hasProfileData(profileData));
+  const archiveStatus = archiveHasData ? "ready" : archiveFetchSucceeded ? "empty" : base.archiveStatus || previousFund?.archiveStatus || "pending";
+
+    const snapshot: FundSnapshot = {
+      ...base,
+      ...profileData,
+      holdings: holdingsData.holdings,
+      holdingsReportDate: holdingsData.holdingsReportDate,
+      holdingsIsLastQuarter: holdingsData.holdingsIsLastQuarter,
+      archiveStatus,
+    };
+    return snapshot;
+  });
 };
 
 export const searchFunds = async (keyword: string): Promise<SearchFundResult[]> => {
@@ -782,6 +844,7 @@ export const searchFunds = async (keyword: string): Promise<SearchFundResult[]> 
         ? data.Datas.filter((item: any) => item.CATEGORY === 700 || item.CATEGORY === "700" || item.CATEGORYDESC === "基金")
             .map((item: any) => ({
               code: item.CODE,
+              resolvedCode: item.BACKCODE || item.CODE,
               name: item.NAME || item.SHORTNAME || item.CODE,
               shortName: item.SHORTNAME || "",
               category: item.CATEGORYDESC || "",
