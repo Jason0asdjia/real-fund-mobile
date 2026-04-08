@@ -244,7 +244,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
         <section className="pt-3">
           <div className="mb-2 flex items-center justify-between px-3">
             <h2 className="typo-section-title">历史成交</h2>
-            <Link href="/history" className="inline-flex items-center gap-1 text-[10px] font-bold text-[#24467c]">
+            <Link href={`/history?fund=${fund.code}`} className="inline-flex items-center gap-1 text-[10px] font-bold text-[#24467c]">
               查看全部
               <ChevronRight size={12} />
             </Link>

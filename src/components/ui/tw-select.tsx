@@ -14,9 +14,10 @@ type TwSelectProps = {
   options: SelectOption[];
   onValueChange: (value: string) => void;
   className?: string;
+  optionsClassName?: string;
 };
 
-export function TwSelect({ id, value, options, onValueChange, className }: TwSelectProps) {
+export function TwSelect({ id, value, options, onValueChange, className, optionsClassName }: TwSelectProps) {
   const selected = options.find((option) => option.value === value) ?? options[0];
 
   return (
@@ -32,7 +33,7 @@ export function TwSelect({ id, value, options, onValueChange, className }: TwSel
 
         <ListboxOptions
           anchor="bottom start"
-          className="z-30 mt-1 w-[var(--button-width)] rounded-md border border-[#d5dbea] bg-white p-1 shadow-lg outline-none"
+          className={`z-30 mt-1 w-[var(--button-width)] rounded-md border border-[#d5dbea] bg-white p-1 shadow-lg outline-none ${optionsClassName || ""}`}
         >
           {options.map((option) => (
             <ListboxOption

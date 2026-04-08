@@ -105,7 +105,7 @@ export default function MarketPage() {
       <div className="sticky top-0 z-20 shrink-0 bg-white">
         <header className="border-b border-[#e2e7ff] bg-white">
           <div className="flex h-12 items-center justify-between px-3">
-            <h1 className="text-sm font-bold tracking-tight">行情中心</h1>
+            <h1 className="typo-page-title">行情中心</h1>
             <span />
           </div>
         </header>
