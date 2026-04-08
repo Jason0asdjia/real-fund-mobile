@@ -6,7 +6,7 @@ import { CalendarDays, ChevronLeft, Info, Repeat2 } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 import { formatCurrency, formatSignedCurrency, getHoldingMetrics } from "@/lib/portfolio";
-import { holdingDaysInMarket, todayInMarket } from "@/lib/time";
+import { holdingDaysInMarket, isBeforeTradeCutoffInMarket, todayInMarket } from "@/lib/time";
 
 type FundBuyViewProps = {
   code: string;
@@ -33,7 +33,7 @@ export function FundBuyView({ code }: FundBuyViewProps) {
   const [amountInput, setAmountInput] = useState("");
   const [shareInput, setShareInput] = useState("");
   const [tradeDate, setTradeDate] = useState(todayInMarket());
-  const [beforeClose, setBeforeClose] = useState(true);
+  const [beforeClose, setBeforeClose] = useState(() => isBeforeTradeCutoffInMarket());
   const returnToDetail = searchParams.get("from") === "detail";
 
   const handleBack = () => {

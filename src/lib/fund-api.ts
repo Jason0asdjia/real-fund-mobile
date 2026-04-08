@@ -2,8 +2,18 @@ import type { FundHoldingStock, FundSnapshot, SearchFundResult } from "@/lib/typ
 import { nowInMarket } from "@/lib/time";
 
 const FUND_GZ_TIMEOUT_MS = 8000;
+const OFFICIAL_SOURCE_TIMEOUT_MS = 8000;
 const HOLDINGS_CACHE_MS = 60 * 60 * 1000;
 const PROFILE_CACHE_MS = 6 * 60 * 60 * 1000;
+const ESTIMATE_CACHE_MS = 45 * 1000;
+
+const SOURCE_MIN_INTERVAL_MS = {
+  eastmoneyEstimate: 1200,
+  eastmoneyHistory: 1000,
+  tencentQuote: 1500,
+  danjuanQuote: 2000,
+  eastmoneySearch: 800,
+} as const;
 
 type CachedData<T> = {
   data: T;
@@ -12,6 +22,78 @@ type CachedData<T> = {
 
 const holdingsCache = new Map<string, CachedData<{ holdings: FundHoldingStock[]; holdingsReportDate: string | null; holdingsIsLastQuarter: boolean }>>();
 const profileCache = new Map<string, CachedData<Pick<FundSnapshot, "fundType" | "riskLevel" | "fundManager" | "fundCompany" | "fundScale" | "trackingTarget" | "inceptionDate">>>();
+const estimateCache = new Map<string, CachedData<FundSnapshot>>();
+const sourceLastRequestAt = new Map<keyof typeof SOURCE_MIN_INTERVAL_MS, number>();
+const sourceQueue = new Map<keyof typeof SOURCE_MIN_INTERVAL_MS, Promise<void>>();
+
+type OfficialQuoteSnapshot = {
+  latestNav: number | null;
+  latestDate: string | null;
+  latestGrowth: number | null;
+  previousNav: number | null;
+  name?: string | null;
+  source: "history" | "tencent" | "danjuan";
+};
+
+const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+
+const runWithSourceInterval = async <T>(
+  source: keyof typeof SOURCE_MIN_INTERVAL_MS,
+  task: () => Promise<T>,
+): Promise<T> => {
+  const previous = sourceQueue.get(source) || Promise.resolve();
+
+  const nextTask = previous
+    .catch(() => undefined)
+    .then(async () => {
+      const lastAt = sourceLastRequestAt.get(source) || 0;
+      const wait = SOURCE_MIN_INTERVAL_MS[source] - (Date.now() - lastAt);
+      if (wait > 0) {
+        await sleep(wait);
+      }
+
+      sourceLastRequestAt.set(source, Date.now());
+    });
+
+  sourceQueue.set(source, nextTask);
+  await nextTask;
+  return task();
+};
+
+const toFiniteNumber = (value: unknown) => {
+  const next = Number(value);
+  return Number.isFinite(next) ? next : null;
+};
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, reason: string): Promise<T> => {
+  let timer: number | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = window.setTimeout(() => reject(new Error(reason)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer !== null) window.clearTimeout(timer);
+  }
+};
+
+const normalizeDate = (value?: string | null) => {
+  if (!value) return null;
+  const date = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+  if (/^\d{8}$/.test(date)) return `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
+  const matched = date.match(/(\d{4})[-/]?(\d{2})[-/]?(\d{2})/);
+  if (!matched) return null;
+  return `${matched[1]}-${matched[2]}-${matched[3]}`;
+};
+
+const hasValidEstimateFields = (snapshot: Pick<FundSnapshot, "gsz" | "gszzl" | "gztime">) => {
+  const estimateNav = toFiniteNumber(snapshot.gsz);
+  const estimateGrowth = toFiniteNumber(snapshot.gszzl);
+  const estimateTime = typeof snapshot.gztime === "string" ? snapshot.gztime.trim() : "";
+  return estimateNav != null && estimateGrowth != null && Boolean(estimateTime);
+};
 
 const loadScript = (url: string) =>
   new Promise<any>((resolve, reject) => {
@@ -142,8 +224,137 @@ const parseHoldingsFromHtml = (content: string): FundHoldingStock[] => {
 
 const fetchHistoricalNetValues = async (code: string) => {
   const url = `https://fundf10.eastmoney.com/F10DataApi.aspx?type=lsjz&code=${code}&page=1&per=2&sdate=&edate=`;
-  const apidata = await loadScript(url);
+  const apidata = await runWithSourceInterval("eastmoneyHistory", () => loadScript(url));
   return parseNetValuesFromHtml(apidata?.content || "");
+};
+
+const requestTencentFundQuote = (code: string) =>
+  runWithSourceInterval("tencentQuote", () =>
+    withTimeout(
+      new Promise<OfficialQuoteSnapshot>((resolve, reject) => {
+        if (typeof document === "undefined" || !document.body) {
+          reject(new Error("No browser environment"));
+          return;
+        }
+
+        const key = `hq_str_jj${code}`;
+        const script = document.createElement("script");
+        script.src = `https://qt.gtimg.cn/q=jj${code}&r=${Date.now()}`;
+        script.async = true;
+
+        const cleanup = () => {
+          if (document.body.contains(script)) document.body.removeChild(script);
+        };
+
+        script.onerror = () => {
+          cleanup();
+          reject(new Error("Tencent quote load failed"));
+        };
+
+        script.onload = () => {
+          try {
+            const raw = Reflect.get(window, key);
+            cleanup();
+            if (typeof raw !== "string") {
+              reject(new Error("Tencent quote invalid"));
+              return;
+            }
+
+            const fields = raw.split("~");
+            const latestNav = toFiniteNumber(fields[5]);
+            const latestGrowth = toFiniteNumber(fields[7]);
+            const latestDate = normalizeDate(fields[8]);
+            const previousNav = toFiniteNumber(fields[6]);
+            const name = fields[1] || null;
+
+            if (!latestNav || !latestDate) {
+              reject(new Error("Tencent quote missing nav/date"));
+              return;
+            }
+
+            resolve({
+              latestNav,
+              latestDate,
+              latestGrowth,
+              previousNav,
+              name,
+              source: "tencent",
+            });
+          } catch (error) {
+            reject(error instanceof Error ? error : new Error("Tencent quote parse failed"));
+          }
+        };
+
+        document.body.appendChild(script);
+      }),
+      OFFICIAL_SOURCE_TIMEOUT_MS,
+      "Tencent quote timeout",
+    ),
+  );
+
+const requestDanjuanFundQuote = (code: string) =>
+  runWithSourceInterval("danjuanQuote", () =>
+    withTimeout(
+      (async (): Promise<OfficialQuoteSnapshot> => {
+        const response = await fetch(`https://danjuanfunds.com/djapi/fund/${encodeURIComponent(code)}`, {
+          cache: "no-store",
+        });
+        if (!response.ok) throw new Error(`Danjuan quote request failed: ${response.status}`);
+
+        const payload = await response.json() as Record<string, any>;
+        const data = payload?.fund_derived || payload?.data?.fund_derived || payload?.data || payload;
+        const latestNav = toFiniteNumber(data?.unit_nav);
+        const latestDate = normalizeDate(data?.end_date);
+        const latestGrowth = toFiniteNumber(data?.nav_growth ?? data?.nav_grtd);
+        const previousNav = latestNav != null && latestGrowth != null && latestGrowth > -100
+          ? latestNav / (1 + latestGrowth / 100)
+          : null;
+
+        if (!latestNav || !latestDate) throw new Error("Danjuan quote missing nav/date");
+
+        return {
+          latestNav,
+          latestDate,
+          latestGrowth,
+          previousNav,
+          name: payload?.fund_name || payload?.name || null,
+          source: "danjuan",
+        };
+      })(),
+      OFFICIAL_SOURCE_TIMEOUT_MS,
+      "Danjuan quote timeout",
+    ),
+  );
+
+const buildOfficialFromHistory = (historyList: Array<{ date: string; nav: number; growth: number | null }>): OfficialQuoteSnapshot | null => {
+  const latest = historyList.at(-1);
+  if (!latest) return null;
+  const previous = historyList.length > 1 ? historyList.at(-2) : null;
+  return {
+    latestNav: latest.nav,
+    latestDate: latest.date,
+    latestGrowth: toFiniteNumber(latest.growth),
+    previousNav: previous?.nav ?? null,
+    source: "history",
+  };
+};
+
+const fetchOfficialQuoteWithFallback = async (code: string) => {
+  const historyList = await fetchHistoricalNetValues(code);
+  const historyQuote = buildOfficialFromHistory(historyList);
+  if (historyQuote && historyQuote.latestDate) {
+    return { historyList, official: historyQuote };
+  }
+
+  try {
+    const tencentQuote = await requestTencentFundQuote(code);
+    return { historyList, official: tencentQuote };
+  } catch {
+    // fallback to next provider
+  }
+
+  const danjuanQuote = await requestDanjuanFundQuote(code);
+  return { historyList, official: danjuanQuote };
 };
 
 const fetchFundArchivesContent = async (code: string, type: "jjcc" | "jbgk") => {
@@ -220,7 +431,13 @@ const fetchFundProfile = async (code: string): Promise<Pick<FundSnapshot, "fundT
 };
 
 const requestFundEstimateData = (code: string) =>
-  new Promise<FundSnapshot>((resolve, reject) => {
+  runWithSourceInterval("eastmoneyEstimate", async () => {
+    const cached = estimateCache.get(code);
+    if (cached && Date.now() - cached.ts < ESTIMATE_CACHE_MS) {
+      return cached.data;
+    }
+
+    const result = await new Promise<FundSnapshot>((resolve, reject) => {
     if (typeof document === "undefined" || !document.body) {
       reject(new Error("No browser environment"));
       return;
@@ -279,21 +496,76 @@ const requestFundEstimateData = (code: string) =>
       frameDocument.body.appendChild(script);
     };
 
-    document.body.appendChild(iframe);
-    timer = window.setTimeout(() => done(reject, new Error("Fund estimate timeout")), FUND_GZ_TIMEOUT_MS);
+      document.body.appendChild(iframe);
+      timer = window.setTimeout(() => done(reject, new Error("Fund estimate timeout")), FUND_GZ_TIMEOUT_MS);
+    });
+
+    estimateCache.set(code, { data: result, ts: Date.now() });
+    return result;
   });
 
+const requestTencentEstimateData = async (code: string, previousFund?: FundSnapshot | null): Promise<FundSnapshot> => {
+  const quote = await requestTencentFundQuote(code);
+  const estimateNav = toFiniteNumber(quote.latestNav);
+
+  const computedGrowth =
+    toFiniteNumber(quote.latestGrowth)
+    ?? (estimateNav != null && quote.previousNav != null && quote.previousNav > 0
+      ? ((estimateNav - quote.previousNav) / quote.previousNav) * 100
+      : null);
+
+  if (estimateNav == null || computedGrowth == null) {
+    throw new Error("Tencent estimate fields missing");
+  }
+
+  const now = nowInMarket();
+
+  return {
+    code,
+    name: quote.name || previousFund?.name || `基金 ${code}`,
+    dwjz: previousFund?.dwjz ?? (quote.previousNav != null ? String(quote.previousNav) : null),
+    gsz: estimateNav,
+    gztime: `${quote.latestDate} ${now.format("HH:mm:ss")}`,
+    jzrq: previousFund?.jzrq ?? quote.latestDate,
+    gszzl: computedGrowth,
+    source: "tencent",
+    quoteStatus: "estimated",
+  };
+};
+
+const requestFundEstimateWithFallback = async (code: string, previousFund?: FundSnapshot | null) => {
+  try {
+    const primary = await requestFundEstimateData(code);
+    if (hasValidEstimateFields(primary)) return primary;
+  } catch {
+    // fallback to secondary estimate provider
+  }
+
+  return requestTencentEstimateData(code, previousFund);
+};
+
 export const fetchFundData = async (code: string, previousFund?: FundSnapshot | null): Promise<FundSnapshot> => {
-  const [history, estimate, holdingsResult, profileResult] = await Promise.allSettled([
-    fetchHistoricalNetValues(code),
-    requestFundEstimateData(code),
+  const [officialResult, estimate, holdingsResult, profileResult] = await Promise.allSettled([
+    fetchOfficialQuoteWithFallback(code),
+    requestFundEstimateWithFallback(code, previousFund),
     fetchHoldings(code),
     fetchFundProfile(code),
   ]);
 
-  const historyList = history.status === "fulfilled" ? history.value : [];
-  const latest = historyList.at(-1);
-  const previousNav = historyList.length > 1 ? historyList.at(-2) : null;
+  const historyList = officialResult.status === "fulfilled" ? officialResult.value.historyList : [];
+  const officialQuote = officialResult.status === "fulfilled" ? officialResult.value.official : null;
+  const latest = officialQuote?.latestNav != null && officialQuote.latestDate
+    ? {
+      nav: officialQuote.latestNav,
+      date: officialQuote.latestDate,
+      growth: officialQuote.latestGrowth,
+    }
+    : historyList.at(-1) || null;
+  const previousNav = officialQuote?.previousNav != null
+    ? { nav: officialQuote.previousNav }
+    : historyList.length > 1
+      ? historyList.at(-2)
+      : null;
   const holdingsData = holdingsResult.status === "fulfilled"
     ? holdingsResult.value
     : {
@@ -340,7 +612,7 @@ export const fetchFundData = async (code: string, previousFund?: FundSnapshot | 
       ...estimate.value,
       ...profileData,
       code,
-      name: estimate.value.name || previousFund?.name || "",
+      name: estimate.value.name || officialQuote?.name || previousFund?.name || "",
       dwjz: effectiveLatestNav != null ? String(effectiveLatestNav) : estimate.value.dwjz,
       jzrq: effectiveLatestDate,
       zzl: effectiveOfficialGrowth,
@@ -359,20 +631,25 @@ export const fetchFundData = async (code: string, previousFund?: FundSnapshot | 
       ...(previousFund || {}),
       ...profileData,
       code,
-      name: previousFund?.name || `基金 ${code}`,
+      name: officialQuote?.name || previousFund?.name || `基金 ${code}`,
       dwjz: String(latest.nav),
       gsz: null,
       gztime: null,
       jzrq: latest.date,
       zzl: latest.growth,
       gszzl: null,
-      lastNav: previousNav ? String(previousNav.nav) : null,
+      lastNav: previousNav?.nav != null ? String(previousNav.nav) : previousFund?.lastNav ?? null,
       noValuation: true,
       holdings: holdingsData.holdings,
       holdingsReportDate: holdingsData.holdingsReportDate,
       holdingsIsLastQuarter: holdingsData.holdingsIsLastQuarter,
       archiveStatus,
-      source: "fallback",
+      source:
+        officialQuote?.source === "history"
+          ? "eastmoney"
+          : officialQuote?.source === "tencent"
+            ? "tencent"
+            : "danjuan",
       quoteStatus: "official",
     };
   }
@@ -388,7 +665,7 @@ export const searchFunds = async (keyword: string): Promise<SearchFundResult[]> 
   const callbackName = `SuggestData_${Date.now()}`;
   const url = `https://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key=${encodeURIComponent(query)}&callback=${callbackName}&_=${Date.now()}`;
 
-  return new Promise((resolve, reject) => {
+  return runWithSourceInterval("eastmoneySearch", () => new Promise((resolve, reject) => {
     (window as any)[callbackName] = (data: any) => {
       const results = Array.isArray(data?.Datas)
         ? data.Datas.filter((item: any) => item.CATEGORY === 700 || item.CATEGORY === "700" || item.CATEGORYDESC === "基金")
@@ -417,5 +694,5 @@ export const searchFunds = async (keyword: string): Promise<SearchFundResult[]> 
       reject(new Error("Fund search failed"));
     };
     document.body.appendChild(script);
-  });
+  }));
 };

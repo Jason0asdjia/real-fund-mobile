@@ -15,7 +15,7 @@ export type FundSnapshot = {
   zzl?: number | null;
   lastNav?: string | null;
   noValuation?: boolean;
-  source?: "eastmoney" | "fallback";
+  source?: "eastmoney" | "tencent" | "danjuan" | "fallback";
   quoteStatus?: "estimated" | "official";
   holdings?: FundHoldingStock[];
   holdingsReportDate?: string | null;

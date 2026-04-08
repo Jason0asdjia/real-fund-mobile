@@ -18,6 +18,7 @@ const refreshOptions = [
 export default function SettingsPage() {
   const { state, seeding, setRefreshMs, clearAll, seedDemoData } = useAppState();
   const [seededAt, setSeededAt] = useState<string | null>(null);
+  const [clearingDemo, setClearingDemo] = useState(false);
   const totals = useMemo(
     () =>
       state.funds.reduce(
@@ -34,6 +35,15 @@ export default function SettingsPage() {
   const handleSeedDemoData = () => {
     seedDemoData();
     setSeededAt(toMarketTime(undefined, "HH:mm"));
+  };
+
+  const handleClearDemoData = async () => {
+    if (clearingDemo || seeding) return;
+    setClearingDemo(true);
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 280));
+    clearAll();
+    setSeededAt(null);
+    setClearingDemo(false);
   };
 
   return (
@@ -83,13 +93,27 @@ export default function SettingsPage() {
           type="button"
           className="flex w-full items-center justify-between rounded-xl bg-[#f2f3ff] px-4 py-3.5 text-left disabled:opacity-70"
           onClick={handleSeedDemoData}
-          disabled={seeding}
+          disabled={seeding || clearingDemo}
         >
           <div className="flex items-center gap-3">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded bg-white text-[#24467c]">
               {seeding ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
             </span>
             <span className="text-sm font-semibold text-[#131b2e]">{seeding ? "写入中..." : "写入演示数据"}</span>
+          </div>
+          <ChevronRight size={18} className="text-[#747781]" />
+        </button>
+        <button
+          type="button"
+          className="flex w-full items-center justify-between rounded-xl bg-[#f2f3ff] px-4 py-3.5 text-left disabled:opacity-70"
+          onClick={handleClearDemoData}
+          disabled={seeding || clearingDemo}
+        >
+          <div className="flex items-center gap-3">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded bg-white text-[#24467c]">
+              {clearingDemo ? <Loader2 size={18} className="animate-spin" /> : <Database size={18} />}
+            </span>
+            <span className="text-sm font-semibold text-[#131b2e]">{clearingDemo ? "删除中..." : "删除演示数据"}</span>
           </div>
           <ChevronRight size={18} className="text-[#747781]" />
         </button>

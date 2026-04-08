@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { fetchFundData, searchFunds } from "@/lib/fund-api";
 import { defaultAppState, loadAppState, saveAppState } from "@/lib/storage";
-import { nowInMarket } from "@/lib/time";
+import { nowInMarket, todayInMarket } from "@/lib/time";
 import type { AppState, FundHolding, FundSnapshot, FundTransaction, SearchFundResult, ValuationPoint } from "@/lib/types";
 import { clearValuationSeries, getAllValuationSeries, recordValuation } from "@/lib/valuation-timeseries";
 import { buildDemoSeed } from "@/lib/demo-data";
@@ -36,6 +36,47 @@ const AppContext = createContext<AppContextValue | null>(null);
 const needsArchiveBackfill = (fund: FundSnapshot) => {
   if (fund.archiveStatus === "ready" || fund.archiveStatus === "empty") return false;
   return !fund.holdingsReportDate && !fund.fundType && !fund.riskLevel && !fund.fundManager && !fund.fundCompany && !fund.fundScale && !fund.trackingTarget && !fund.inceptionDate;
+};
+
+const toFiniteNumber = (value: unknown) => {
+  const next = Number(value);
+  return Number.isFinite(next) ? next : null;
+};
+
+const mergeQuoteWithIntradayFallback = (previous: FundSnapshot, next: FundSnapshot): FundSnapshot => {
+  const today = todayInMarket();
+  const previousEstimateTime = previous.gztime;
+  const previousEstimateIsToday = typeof previousEstimateTime === "string" && previousEstimateTime.startsWith(today);
+  const previousEstimateNav = toFiniteNumber(previous.gsz);
+  const previousEstimateGrowth = toFiniteNumber(previous.gszzl);
+
+  const nextEstimateTime = next.gztime;
+  const nextEstimateIsToday = typeof nextEstimateTime === "string" && nextEstimateTime.startsWith(today);
+  const nextEstimateNav = toFiniteNumber(next.gsz);
+  const nextEstimateGrowth = toFiniteNumber(next.gszzl);
+  const nextEstimateMissing = !nextEstimateIsToday || nextEstimateNav == null || nextEstimateGrowth == null;
+
+  const shouldKeepPreviousEstimate = previousEstimateIsToday && previousEstimateNav != null && previousEstimateGrowth != null && nextEstimateMissing;
+
+  if (!shouldKeepPreviousEstimate) {
+    return {
+      ...next,
+      zzl: toFiniteNumber(next.zzl) ?? toFiniteNumber(previous.zzl) ?? null,
+      lastNav: toFiniteNumber(next.lastNav) != null ? next.lastNav : previous.lastNav ?? null,
+    };
+  }
+
+  return {
+    ...next,
+    gsz: previousEstimateNav,
+    gszzl: previousEstimateGrowth,
+    gztime: previousEstimateTime,
+    noValuation: false,
+    source: previous.source || next.source,
+    quoteStatus: "estimated",
+    zzl: toFiniteNumber(next.zzl) ?? toFiniteNumber(previous.zzl) ?? null,
+    lastNav: toFiniteNumber(next.lastNav) != null ? next.lastNav : previous.lastNav ?? null,
+  };
 };
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
@@ -97,7 +138,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }),
       );
 
-      const refreshed = refreshedResults.map((result, index) => (result.status === "fulfilled" ? result.value : fundsRef.current[index]));
+      const refreshed = refreshedResults.map((result, index) => {
+        const previousFund = fundsRef.current[index];
+        if (result.status !== "fulfilled") return previousFund;
+        return mergeQuoteWithIntradayFallback(previousFund, result.value);
+      });
       const successCount = refreshedResults.filter((item) => item.status === "fulfilled").length;
       const failedCount = refreshedResults.length - successCount;
 

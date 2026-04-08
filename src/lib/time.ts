@@ -8,6 +8,7 @@ dayjs.extend(timezone);
 
 export const MARKET_TIMEZONE = "Asia/Shanghai";
 export const MARKET_ESTIMATE_START_MINUTES = 9 * 60 + 15;
+export const MARKET_TRADE_CUTOFF_MINUTES = 15 * 60;
 
 dayjs.tz.setDefault(MARKET_TIMEZONE);
 
@@ -88,4 +89,25 @@ export const hasEstimateWindowStarted = () => {
   if (!isLikelyTradingDay()) return false;
   const now = nowInMarket();
   return now.hour() * 60 + now.minute() >= MARKET_ESTIMATE_START_MINUTES;
+};
+
+export const isBeforeTradeCutoffInMarket = (value?: ConfigType | null) => {
+  if (value == null) {
+    const current = nowInMarket();
+    return current.hour() * 60 + current.minute() < MARKET_TRADE_CUTOFF_MINUTES;
+  }
+
+  if (typeof value === "string") {
+    const current = toMarketDay(value);
+    return current.hour() * 60 + current.minute() < MARKET_TRADE_CUTOFF_MINUTES;
+  }
+
+  const current = dayjs(value);
+  if (!current.isValid()) {
+    const fallback = nowInMarket();
+    return fallback.hour() * 60 + fallback.minute() < MARKET_TRADE_CUTOFF_MINUTES;
+  }
+
+  const marketTime = current.tz(MARKET_TIMEZONE);
+  return marketTime.hour() * 60 + marketTime.minute() < MARKET_TRADE_CUTOFF_MINUTES;
 };

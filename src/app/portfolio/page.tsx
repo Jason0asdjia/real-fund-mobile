@@ -53,8 +53,13 @@ type PortfolioRow = {
   todayProfit: number | null;
   todayProfitStatus: "estimated" | "official" | "none";
   holdingProfit: number | null;
+  estimatedHoldingProfit: number | null;
   holdingAmountLabel: string;
-  updatedDate: string;
+  officialUpdatedAt: string;
+  estimateUpdatedAt: string;
+  currentValueUpdatedAt: string;
+  estimatedProfitUpdatedAt: string;
+  debugSourceTag: string | null;
 };
 
 const COLUMN_OPTIONS = [
@@ -77,6 +82,15 @@ const defaultColumnVisibility = COLUMN_OPTIONS.reduce<Record<ColumnId, boolean>>
 }, {} as Record<ColumnId, boolean>);
 
 const defaultColumnOrder = COLUMN_OPTIONS.map((item) => item.id);
+const isDevMode = process.env.NODE_ENV !== "production";
+
+const getSourceLabel = (source?: FundSnapshot["source"]) => {
+  if (source === "eastmoney") return "东方财富";
+  if (source === "tencent") return "腾讯";
+  if (source === "danjuan") return "蛋卷";
+  if (source === "fallback") return "备用源";
+  return "未知";
+};
 
 const numberFormatter = new Intl.NumberFormat("zh-CN", {
   minimumFractionDigits: 2,
@@ -95,17 +109,9 @@ const formatNav = (value?: string | number | null) => {
   return nav.toFixed(4);
 };
 
-const resolveUpdatedDate = (fund: FundSnapshot) => {
-  if (fund.gztime) return toMarketDay(fund.gztime).format("YYYY-MM-DD");
-  if (fund.jzrq) return toMarketDay(`${fund.jzrq}T00:00:00`).format("YYYY-MM-DD");
-  return "—";
-};
-
-const resolveTodayProfitStatus = (fund: FundSnapshot, todayProfit: number | null, today: string): PortfolioRow["todayProfitStatus"] => {
+const resolveTodayProfitStatus = (hasOfficialToday: boolean, todayProfit: number | null): PortfolioRow["todayProfitStatus"] => {
   if (todayProfit == null) return "none";
-
-  const hasOfficialToday = fund.jzrq === today && Number.isFinite(Number(fund.zzl ?? fund.dwjz));
-  if (hasOfficialToday || fund.quoteStatus === "official") return "official";
+  if (hasOfficialToday) return "official";
 
   return "estimated";
 };
@@ -115,20 +121,55 @@ const buildRows = (funds: FundSnapshot[], holdings: Record<string, FundHolding>,
     const holding = holdings[fund.code];
     const metrics = getHoldingMetrics(fund, holding);
     const amount = metrics?.amount ?? 0;
-    const costBasis = holding?.cost != null && holding?.share != null ? Number(holding.cost) * Number(holding.share) : null;
-    const holdingProfitPercent = costBasis && costBasis > 0 && metrics?.profitTotal != null ? (metrics.profitTotal / costBasis) * 100 : null;
+    const share = holding?.share != null ? Number(holding.share) : null;
+    const unitCost = holding?.cost != null ? Number(holding.cost) : null;
+    const hasValidPosition = share != null && Number.isFinite(share) && share > 0;
+    const hasValidCost = unitCost != null && Number.isFinite(unitCost);
+    const hasCostPosition = hasValidPosition && hasValidCost;
     const hasTodayData = fund.jzrq === today;
+    const hasTodayValuation = !fund.noValuation && typeof fund.gztime === "string" && fund.gztime.startsWith(today);
+    const canUseEstimate = !hasTodayData && hasTodayValuation && Number.isFinite(Number(fund.gsz));
     const hasTodayEstimate = !fund.noValuation && typeof fund.gztime === "string" && fund.gztime.startsWith(today);
-    const estimateChangePercent = fund.noValuation || fund.gszzl == null ? null : Number(fund.gszzl);
-    const totalChangePercent = hasTodayData
-      ? holdingProfitPercent
-      : hasTodayEstimate || holdingProfitPercent != null
-        ? (hasTodayEstimate && estimateChangePercent != null ? estimateChangePercent : 0) + (holdingProfitPercent ?? 0)
+    const estimateNav = hasTodayEstimate && Number.isFinite(Number(fund.gsz)) ? Number(fund.gsz) : null;
+    const latestNav = Number.isFinite(Number(fund.dwjz)) ? Number(fund.dwjz) : null;
+    const lastNav = Number(fund.lastNav);
+    const estimateChangePercent = fund.noValuation
+      ? null
+      : Number.isFinite(Number(fund.gszzl))
+        ? Number(fund.gszzl)
         : null;
+    const officialChangePercent = Number.isFinite(Number(fund.zzl)) ? Number(fund.zzl) : null;
+    const activeTodayChangePercent = hasTodayData ? officialChangePercent : canUseEstimate ? estimateChangePercent : null;
+    const totalChangePercent = hasCostPosition
+      ? estimateNav != null
+        ? (estimateNav - Number(unitCost)) * Number(share)
+        : metrics?.profitTotal ?? null
+      : null;
     const yesterdayChangePercent = fund.zzl == null ? null : Number(fund.zzl);
     const firstPurchaseDate = holding?.firstPurchaseDate || null;
     const holdingDays = holdingDaysInMarket(firstPurchaseDate);
-    const todayProfit = metrics?.profitToday ?? null;
+    const todayProfit =
+      hasValidPosition && activeTodayChangePercent != null
+        ? Number.isFinite(lastNav) && lastNav > 0
+          ? Number(share) * lastNav * (activeTodayChangePercent / 100)
+          : (() => {
+              const navForBackCalc = hasTodayData ? latestNav : estimateNav;
+              if (navForBackCalc == null) return null;
+              const currentAmount = Number(share) * navForBackCalc;
+              return currentAmount - currentAmount / (1 + activeTodayChangePercent / 100);
+            })()
+        : null;
+    const holdingProfit = hasCostPosition
+      ? latestNav != null
+        ? (latestNav - Number(unitCost)) * Number(share)
+        : null
+      : null;
+    const estimatedHoldingProfit = hasCostPosition ? amount - Number(unitCost) * Number(share) : null;
+    const officialUpdatedAt = fund.jzrq ? toMarketDay(`${fund.jzrq}T00:00:00`).format("MM-DD") : "—";
+    const estimateUpdatedAt = hasTodayValuation && fund.gztime ? toMarketDay(fund.gztime).format("MM-DD HH:mm") : "—";
+    const currentValueUpdatedAt = canUseEstimate ? estimateUpdatedAt : officialUpdatedAt;
+    const estimatedProfitUpdatedAt = estimateNav != null ? estimateUpdatedAt : officialUpdatedAt;
+    const debugSourceTag = `来源：${getSourceLabel(fund.source)}`;
 
     return {
       code: fund.code,
@@ -141,10 +182,15 @@ const buildRows = (funds: FundSnapshot[], holdings: Record<string, FundHolding>,
       holdingAmount: amount,
       holdingDays,
       todayProfit,
-      todayProfitStatus: resolveTodayProfitStatus(fund, todayProfit, today),
-      holdingProfit: metrics?.profitTotal ?? null,
+      todayProfitStatus: resolveTodayProfitStatus(hasTodayData && officialChangePercent != null, todayProfit),
+      holdingProfit,
+      estimatedHoldingProfit,
       holdingAmountLabel: formatCurrency(amount),
-      updatedDate: resolveUpdatedDate(fund),
+      officialUpdatedAt,
+      estimateUpdatedAt,
+      currentValueUpdatedAt,
+      estimatedProfitUpdatedAt,
+      debugSourceTag,
     };
   });
 };
@@ -193,17 +239,6 @@ export default function PortfolioPage() {
   const columnItemRefs = useRef<Partial<Record<ColumnId, HTMLDivElement | null>>>({});
   const previousRectsRef = useRef<Partial<Record<ColumnId, DOMRect>>>({});
   const touchDragTargetRef = useRef<ColumnId | null>(null);
-
-  const totals = state.funds.reduce(
-    (acc, fund) => {
-      const metrics = getHoldingMetrics(fund, state.holdings[fund.code]);
-      acc.amount += metrics?.amount || 0;
-      acc.today += metrics?.profitToday || 0;
-      acc.total += metrics?.profitTotal || 0;
-      return acc;
-    },
-    { amount: 0, today: 0, total: 0 },
-  );
 
   useEffect(() => {
     const next = readViewState();
@@ -277,6 +312,19 @@ export default function PortfolioPage() {
   const rows = useMemo(
     () => buildRows(state.funds, state.holdings, todayInMarket()),
     [state.funds, state.holdings],
+  );
+  const totals = useMemo(
+    () =>
+      rows.reduce(
+        (acc, row) => {
+          acc.amount += row.holdingAmount || 0;
+          acc.today += row.todayProfit || 0;
+          acc.total += row.estimatedHoldingProfit || 0;
+          return acc;
+        },
+        { amount: 0, today: 0, total: 0 },
+      ),
+    [rows],
   );
   const totalUpdatedAt = state.lastUpdatedAt ? toMarketDay(state.lastUpdatedAt).format("MM-DD HH:mm") : "--";
   const todayBase = totals.amount - totals.today;
@@ -439,7 +487,7 @@ export default function PortfolioPage() {
             : id === "estimateChangePercent"
               ? formatSignedPercent(row.estimateChangePercent)
               : id === "totalChangePercent"
-                ? formatSignedPercent(row.totalChangePercent)
+                ? formatSignedCurrency(row.totalChangePercent)
                 : id === "holdingAmount"
                   ? formatCurrency(row.holdingAmount)
                   : id === "holdingDays"
@@ -466,25 +514,39 @@ export default function PortfolioPage() {
         <span>{primaryValue}</span>
       );
 
+    const updatedAt =
+      id === "latestNav" || id === "yesterdayChangePercent"
+        ? row.officialUpdatedAt
+        : id === "estimateNav" || id === "estimateChangePercent"
+          ? row.estimateUpdatedAt
+          : id === "totalChangePercent"
+            ? row.estimatedProfitUpdatedAt
+            : id === "holdingProfit"
+              ? row.officialUpdatedAt
+              : id === "holdingAmount" || id === "todayProfit"
+              ? row.currentValueUpdatedAt
+              : row.officialUpdatedAt;
+
     return (
       <div className="flex flex-col leading-tight">
         {valueNode}
-        <span className="mt-1 text-[10px] font-medium text-[#8a90a0]">{row.updatedDate}</span>
+        <span className="mt-1 text-[10px] font-medium text-[#8a90a0]">{updatedAt}</span>
+        {isDevMode && row.debugSourceTag ? <span className="mt-0.5 text-[10px] font-semibold text-[#6f7ea3]">{row.debugSourceTag}</span> : null}
       </div>
     );
   };
 
   const getCellClass = (row: PortfolioRow, id: ColumnId) => {
     const base = "px-0 py-3 text-sm tabular-nums align-top";
-    if (id === "yesterdayChangePercent" || id === "estimateChangePercent" || id === "totalChangePercent") {
-      const value = id === "yesterdayChangePercent" ? row.yesterdayChangePercent : id === "estimateChangePercent" ? row.estimateChangePercent : row.totalChangePercent;
+    if (id === "yesterdayChangePercent" || id === "estimateChangePercent") {
+      const value = id === "yesterdayChangePercent" ? row.yesterdayChangePercent : row.estimateChangePercent;
       if (value == null) return `${base} text-[#747781]`;
-      return `${base} font-bold ${value < 0 ? "text-emerald-700" : "text-red-600"}`;
+      return `${base} ${value < 0 ? "text-emerald-700" : "text-red-600"}`;
     }
-    if (id === "todayProfit" || id === "holdingProfit") {
-      const value = id === "todayProfit" ? row.todayProfit : row.holdingProfit;
+    if (id === "totalChangePercent" || id === "todayProfit" || id === "holdingProfit") {
+      const value = id === "totalChangePercent" ? row.totalChangePercent : id === "todayProfit" ? row.todayProfit : row.holdingProfit;
       if (value == null) return `${base} text-[#747781]`;
-      return `${base} font-bold ${value < 0 ? "text-emerald-700" : "text-red-600"}`;
+      return `${base} ${value < 0 ? "text-emerald-700" : "text-red-600"}`;
     }
     if (id === "holdingAmount") return `${base} text-[#131b2e]`;
     return `${base} font-medium text-[#131b2e]`;
