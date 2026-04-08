@@ -228,6 +228,45 @@ const fetchHistoricalNetValues = async (code: string) => {
   return parseNetValuesFromHtml(apidata?.content || "");
 };
 
+const fetchHistoricalNetValuesPage = async (code: string, page: number, per: number, sdate = "") => {
+  const startDate = sdate ? encodeURIComponent(sdate) : "";
+  const url = `https://fundf10.eastmoney.com/F10DataApi.aspx?type=lsjz&code=${code}&page=${page}&per=${per}&sdate=${startDate}&edate=`;
+  return runWithSourceInterval("eastmoneyHistory", () => loadScript(url));
+};
+
+export type FundHistoricalNavPoint = {
+  date: string;
+  nav: number;
+};
+
+export const fetchFundHistoricalNavSeries = async (code: string, maxCount = 240, sinceDate?: string): Promise<FundHistoricalNavPoint[]> => {
+  const per = 49;
+  const firstPage = await fetchHistoricalNetValuesPage(code, 1, per, sinceDate || "");
+  const totalPages = Math.max(1, Number(firstPage?.pages) || 1);
+  const cappedPages = Math.min(totalPages, Math.max(1, Math.ceil(maxCount / per)));
+  const rows = parseNetValuesFromHtml(firstPage?.content || "");
+
+  if (cappedPages > 1) {
+    const restPages = await Promise.all(
+      Array.from({ length: cappedPages - 1 }, (_, index) => fetchHistoricalNetValuesPage(code, index + 2, per, sinceDate || "")),
+    );
+
+    restPages.forEach((pageData) => {
+      rows.push(...parseNetValuesFromHtml(pageData?.content || ""));
+    });
+  }
+
+  const deduped = new Map<string, number>();
+  rows.forEach((item) => {
+    deduped.set(item.date, item.nav);
+  });
+
+  return [...deduped.entries()]
+    .map(([date, nav]) => ({ date, nav }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-maxCount);
+};
+
 const requestTencentFundQuote = (code: string) =>
   runWithSourceInterval("tencentQuote", () =>
     withTimeout(

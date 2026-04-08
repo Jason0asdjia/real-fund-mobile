@@ -7,13 +7,14 @@ import { DatePicker } from "antd";
 import dayjs from "dayjs";
 
 import { useAppState } from "@/components/app-provider";
-import { formatCurrency, formatSignedCurrency, getHoldingMetrics } from "@/lib/portfolio";
-import { holdingDaysInMarket } from "@/lib/time";
+import { getHoldingMetrics } from "@/lib/portfolio";
+import { holdingDaysInMarket, todayInMarket } from "@/lib/time";
 
 type FundManageViewProps = {
   code: string;
   onBack?: () => void;
   asModal?: boolean;
+  redirectOnConfirm?: string | null;
 };
 
 type EditMode = "amount" | "share";
@@ -30,21 +31,26 @@ const formatInputNumber = (value: number | null | undefined, digits = 2) => {
   return value.toFixed(digits);
 };
 
-export function FundManageView({ code, onBack, asModal = false }: FundManageViewProps) {
+export function FundManageView({ code, onBack, asModal = false, redirectOnConfirm = null }: FundManageViewProps) {
   const router = useRouter();
   const { state, updateHolding } = useAppState();
   const fund = state.funds.find((item) => item.code === code);
   const holding = fund ? state.holdings[fund.code] : undefined;
   const metrics = useMemo(() => (fund ? getHoldingMetrics(fund, holding) : null), [fund, holding]);
-  const holdingDays = useMemo(() => {
-    return holdingDaysInMarket(holding?.firstPurchaseDate || null);
-  }, [holding?.firstPurchaseDate]);
 
   const [mode, setMode] = useState<EditMode>("amount");
   const [amountInput, setAmountInput] = useState("");
   const [shareInput, setShareInput] = useState("");
-  const [costInput, setCostInput] = useState("");
+  const [profitInput, setProfitInput] = useState("");
   const [dateInput, setDateInput] = useState("");
+  const holdingDays = useMemo(() => {
+    return holdingDaysInMarket(dateInput || null);
+  }, [dateInput]);
+
+  const officialNav = useMemo(() => {
+    const dwjz = fund?.dwjz == null ? null : Number(fund.dwjz);
+    return dwjz != null && Number.isFinite(dwjz) && dwjz > 0 ? dwjz : null;
+  }, [fund?.dwjz]);
 
   useEffect(() => {
     if (asModal) return;
@@ -56,34 +62,75 @@ export function FundManageView({ code, onBack, asModal = false }: FundManageView
 
   useEffect(() => {
     const share = holding?.share ?? null;
-    const cost = holding?.cost ?? null;
-    const amount = share != null && cost != null ? share * cost : null;
+    const amount = metrics?.amount ?? null;
+    const profit = metrics?.profitTotal ?? null;
     setShareInput(formatInputNumber(share, 2));
-    setCostInput(formatInputNumber(cost, 4));
     setAmountInput(formatInputNumber(amount, 2));
-    setDateInput(holding?.firstPurchaseDate || "");
-  }, [holding?.cost, holding?.firstPurchaseDate, holding?.share]);
+    setProfitInput(formatInputNumber(profit, 2));
+    setDateInput(holding?.firstPurchaseDate || todayInMarket());
+  }, [holding?.firstPurchaseDate, holding?.share, metrics?.amount, metrics?.profitTotal]);
+
+  const inputShare = toNumber(shareInput);
+  const inputAmount = toNumber(amountInput);
+  const inputProfit = toNumber(profitInput);
+
+  const derivedShare = mode === "share"
+    ? inputShare
+    : officialNav && inputAmount != null
+      ? inputAmount / officialNav
+      : null;
+  const derivedAmount = mode === "amount"
+    ? inputAmount
+    : officialNav && inputShare != null
+      ? inputShare * officialNav
+      : null;
+  const derivedCostAmount = derivedAmount != null && inputProfit != null ? derivedAmount - inputProfit : null;
+  const derivedCostPerShare = derivedShare && derivedShare > 0 && derivedCostAmount != null ? derivedCostAmount / derivedShare : null;
+  const profitToneClass = inputProfit == null ? "text-[#131b2e]" : inputProfit >= 0 ? "text-[#005bc0]" : "text-red-600";
+  const profitHint = inputProfit == null ? "正数表示盈利，负数表示亏损" : inputProfit >= 0 ? "当前为盈利输入" : "当前为亏损输入";
+
+  const handleToggleMode = () => {
+    if (!officialNav || officialNav <= 0) {
+      setMode((prev) => (prev === "amount" ? "share" : "amount"));
+      return;
+    }
+
+    if (mode === "amount") {
+      const amountValue = toNumber(amountInput);
+      if (amountValue != null) {
+        setShareInput(formatInputNumber(amountValue / officialNav, 2));
+      }
+      setMode("share");
+      return;
+    }
+
+    const shareValue = toNumber(shareInput);
+    if (shareValue != null) {
+      setAmountInput(formatInputNumber(shareValue * officialNav, 2));
+    }
+    setMode("amount");
+  };
 
   if (!fund) {
     return (
-      <div className={asModal ? "detail-page" : "-mx-3 -mt-4 min-h-[calc(100dvh-5.5rem)] bg-white md:-mx-4 md:-mt-4"}>
+      <div className={asModal ? "detail-page bg-white text-[#131b2e]" : "-mx-3 -mt-4 min-h-[calc(100dvh-5.5rem)] bg-white text-[#131b2e] md:-mx-4 md:-mt-4"}>
         <header className="sticky top-0 z-20 border-b border-[#e2e7ff] bg-white">
           <div className="flex h-12 items-center justify-between px-3">
             {onBack ? (
-              <button type="button" className="inline-flex items-center gap-1 text-sm font-semibold text-[#24467c]" onClick={onBack}>
+              <button type="button" className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm font-normal text-[#24467c]" onClick={onBack}>
                 <ChevronLeft size={16} />
                 返回
               </button>
             ) : (
               <span />
             )}
-            <h1 className="text-base font-bold text-[#131b2e]">编辑持仓</h1>
+            <h1 className="typo-body-strong">编辑持仓</h1>
             <span />
           </div>
         </header>
         <section className="px-3 py-6">
           <div className="rounded-xl border border-[#e2e7ff] bg-[#f8f9ff] p-4">
-            <h2 className="m-0 text-base font-bold text-[#131b2e]">未找到基金</h2>
+             <h2 className="m-0 typo-body-strong">未找到基金</h2>
             <p className="mb-0 mt-2 text-sm text-[#57657a]">请返回持仓总览页重新进入。</p>
           </div>
         </section>
@@ -92,17 +139,19 @@ export function FundManageView({ code, onBack, asModal = false }: FundManageView
   }
 
   const handleConfirm = () => {
-    const cost = toNumber(costInput);
-    const inputShare = toNumber(shareInput);
-    const inputAmount = toNumber(amountInput);
-
-    const finalShare = mode === "share" ? inputShare : cost && inputAmount != null ? inputAmount / cost : inputShare;
+    const finalShare = derivedShare;
+    const cost = derivedCostPerShare;
 
     updateHolding(fund.code, {
       share: finalShare,
       cost,
       firstPurchaseDate: dateInput || null,
     });
+
+    if (redirectOnConfirm) {
+      router.replace(redirectOnConfirm);
+      return;
+    }
 
     if (onBack) {
       onBack();
@@ -130,7 +179,7 @@ export function FundManageView({ code, onBack, asModal = false }: FundManageView
           {onBack ? (
             <button
               type="button"
-              className="absolute left-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 text-sm font-semibold text-[#24467c]"
+              className="absolute left-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 rounded-md px-1 py-0.5 text-sm font-normal text-[#24467c]"
               onClick={onBack}
             >
               <ChevronLeft size={16} />
@@ -140,76 +189,86 @@ export function FundManageView({ code, onBack, asModal = false }: FundManageView
             <span />
           )}
           <div className="mx-auto max-w-[72%] text-center">
-            <h1 className="whitespace-normal break-words typo-body-strong leading-tight">{fund.name}</h1>
-            <p className="typo-meta">{fund.code}</p>
+            <h1 className="typo-fund-header-title whitespace-normal break-words">{fund.name}</h1>
+            <p className="typo-fund-header-code">{fund.code}</p>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 overflow-hidden px-3 pb-28 pt-4">
-        <section className="space-y-3">
-          <div className="rounded-xl border border-[#e2e7ff] bg-[#f8f9ff] p-4">
-            <div className="mb-1 flex items-center justify-between">
-                <p className="typo-label">{mode === "amount" ? "当前持仓（元）" : "当前持仓（份额）"}</p>
-              <div className="flex items-center gap-2">
-                  <p className="typo-label">{mode === "amount" ? "CNY" : "SHARE"}</p>
+      <main className="flex-1 overflow-y-auto pb-24">
+        <section className="border-b border-[#e2e7ff] px-3 py-4">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="typo-label">{mode === "amount" ? "当前持仓" : "当前份额"}</p>
+              <div className="flex items-center gap-2 rounded-lg border border-[#e2e7ff] bg-[#f8f9ff] p-1">
+                <p className="typo-meta">{mode === "amount" ? "CNY" : "SHARE"}</p>
                 <button
                   type="button"
                   className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[#d5dbea] bg-white text-[#24467c]"
-                  onClick={() => setMode((prev) => (prev === "amount" ? "share" : "amount"))}
+                  onClick={handleToggleMode}
                   aria-label="切换金额和份额"
                 >
                   <Repeat2 size={12} />
                 </button>
               </div>
             </div>
-            <input
-              inputMode="decimal"
-              value={mode === "amount" ? amountInput : shareInput}
-              onChange={(event) => (mode === "amount" ? setAmountInput(event.target.value) : setShareInput(event.target.value))}
-              placeholder="0.00"
-              className="w-full border-0 bg-transparent p-0 text-2xl font-extrabold tracking-tight text-[#00193c] outline-none placeholder:text-[#9aa5bb] focus:ring-0"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <label className="rounded-xl border border-[#e2e7ff] bg-[#f8f9ff] p-3">
-               <p className="mb-1 typo-label">持仓成本</p>
+            <div className="relative">
+              <span className="absolute left-0 top-1/2 -translate-y-1/2 text-lg font-normal text-[#131b2e]">{mode === "amount" ? "¥" : "份"}</span>
               <input
                 inputMode="decimal"
-                value={costInput}
-                onChange={(event) => setCostInput(event.target.value)}
-                placeholder="0.0000"
-                className="w-full border-0 bg-transparent p-0 text-lg font-bold text-[#131b2e] outline-none placeholder:text-[#9aa5bb] focus:ring-0"
+                value={mode === "amount" ? amountInput : shareInput}
+                onChange={(event) => (mode === "amount" ? setAmountInput(event.target.value) : setShareInput(event.target.value))}
+                placeholder="0.00"
+                className="typo-value-hero w-full border-0 bg-transparent py-2 pl-6 pr-3 outline-none placeholder:text-[#9aa5bb] focus:ring-0"
               />
-            </label>
-            <label className="rounded-xl border border-[#e2e7ff] bg-[#f8f9ff] p-3">
-               <p className="mb-1 typo-label">首次买入日期</p>
-              <DatePicker
-                value={dateInput ? dayjs(dateInput, "YYYY-MM-DD") : null}
-                format="YYYY-MM-DD"
-                allowClear
-                inputReadOnly
-                style={{ width: "100%" }}
-                onChange={(_, dateString) => setDateInput(Array.isArray(dateString) ? dateString[0] || "" : dateString || "")}
-              />
-            </label>
-          </div>
-
-          <div className="rounded-xl border border-[#e2e7ff] bg-white p-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="typo-label">当前持仓金额</p>
-                <p className="mt-1 text-lg font-extrabold tabular-nums text-[#00193c]">{formatCurrency(metrics?.amount)}</p>
-              </div>
-              <div>
-                <p className="typo-label">当前累计收益</p>
-                <p className={`mt-1 text-lg font-extrabold tabular-nums ${(metrics?.profitTotal || 0) >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>
-                  {formatSignedCurrency(metrics?.profitTotal)}
-                </p>
-              </div>
             </div>
-            <p className="mt-2 typo-label">持有天数：{holdingDays == null ? "—" : `${holdingDays} 天`}</p>
+        </section>
+
+        <section className="divide-y divide-[#e2e7ff]">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="col-span-2 border-b border-[#d5dbea] px-3 py-4">
+              <div className="flex items-center justify-between">
+                <p className="typo-label">持有收益</p>
+                <input
+                  inputMode="decimal"
+                  value={profitInput}
+                  onChange={(event) => setProfitInput(event.target.value)}
+                  placeholder="0.00"
+                  className={`typo-value-emphasis w-28 border-0 bg-transparent p-0 text-right outline-none placeholder:text-[#9aa5bb] focus:ring-0 ${profitToneClass}`}
+                />
+              </div>
+              <p className={`mt-1 typo-meta ${inputProfit == null ? "text-[#747781]" : inputProfit >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>{profitHint}</p>
+            </label>
+            <label className="col-span-2 flex items-center justify-between border-b border-[#d5dbea] px-3 py-4">
+               <p className="typo-label">首次买入日期</p>
+               <DatePicker
+                 value={dateInput ? dayjs(dateInput, "YYYY-MM-DD") : null}
+                 format="YYYY-MM-DD"
+                 allowClear
+                 inputReadOnly
+                 className="typo-body-strong w-[138px] text-right"
+                 onChange={(_, dateString) => setDateInput(Array.isArray(dateString) ? dateString[0] || "" : dateString || "")}
+               />
+             </label>
+          </div>
+        </section>
+
+        <section className="divide-y divide-[#e2e7ff]">
+          <div className="flex items-center justify-between px-3 py-4">
+            <div>
+              <p className="typo-label">最新净值</p>
+              <p className="mt-1 typo-meta">数据时间 {fund?.jzrq || "—"}</p>
+            </div>
+            <p className="typo-value-emphasis">{officialNav != null ? officialNav.toFixed(4) : "—"}</p>
+          </div>
+          <div className="flex items-center justify-between px-3 py-4">
+            <p className="typo-label">持仓成本</p>
+            <p className={`typo-value-emphasis ${(derivedCostPerShare || 0) >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>
+              {derivedCostPerShare != null ? derivedCostPerShare.toFixed(4) : "—"}
+            </p>
+          </div>
+          <div className="flex items-center justify-between px-3 py-4">
+            <p className="typo-label">持有天数</p>
+            <p className="typo-body-strong tabular-nums">{holdingDays == null ? "—" : `${holdingDays} 天`}</p>
           </div>
         </section>
 
@@ -219,7 +278,7 @@ export function FundManageView({ code, onBack, asModal = false }: FundManageView
         <button
           type="button"
           onClick={handleConfirm}
-          className="inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-[#d5dbea] bg-white px-3 text-sm font-bold text-[#131b2e]"
+          className="inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-[#d5dbea] bg-white px-3 text-sm font-semibold text-[#131b2e]"
         >
           确认修改
         </button>

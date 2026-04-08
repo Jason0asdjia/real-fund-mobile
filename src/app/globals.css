@@ -120,6 +120,16 @@
     @apply text-[11px] font-semibold;
   }
 
+  .typo-fund-header-title {
+    @apply font-extrabold leading-tight text-[#131b2e];
+    font-size: 1rem;
+  }
+
+  .typo-fund-header-code {
+    @apply font-bold tabular-nums text-[#57657a];
+    font-size: 0.75rem;
+  }
+
   .hero-card,
   .metric-tile,
   .fund-card,

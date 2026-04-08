@@ -49,6 +49,7 @@ export default function MarketPage() {
   const [quickNews, setQuickNews] = useState(defaultQuickNews);
   const [indexModalOpen, setIndexModalOpen] = useState(false);
   const [selectedIndexIds, setSelectedIndexIds] = useState<string[]>(DEFAULT_MARKET_INDEX_IDS);
+  const [indicesHydrated, setIndicesHydrated] = useState(false);
 
   const groupedIndexTargets = useMemo(
     () => [
@@ -72,13 +73,16 @@ export default function MarketPage() {
       }
     } catch {
       // noop
+    } finally {
+      setIndicesHydrated(true);
     }
   }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (!indicesHydrated) return;
     window.localStorage.setItem(MARKET_INDEX_STORAGE_KEY, JSON.stringify(selectedIndexIds));
-  }, [selectedIndexIds]);
+  }, [indicesHydrated, selectedIndexIds]);
 
   useEffect(() => {
     if (state.funds.length === 0) return;
@@ -94,6 +98,7 @@ export default function MarketPage() {
   }, [indexModalOpen]);
 
   useEffect(() => {
+    if (!indicesHydrated) return;
     let active = true;
 
     const loadMarketData = async () => {
@@ -126,7 +131,7 @@ export default function MarketPage() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [selectedIndexIds, state.refreshMs]);
+  }, [indicesHydrated, selectedIndexIds, state.refreshMs]);
 
   const today = todayInMarket();
 

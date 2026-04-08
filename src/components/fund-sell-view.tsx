@@ -60,14 +60,14 @@ export function FundSellView({ code }: FundSellViewProps) {
           <div className="relative min-h-12 px-3 py-1">
             <button
               type="button"
-              className="absolute left-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 text-sm font-semibold text-[#24467c]"
+              className="absolute left-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 text-sm font-normal text-[#24467c]"
               onClick={() => router.push("/portfolio")}
             >
               <ChevronLeft size={16} />
               返回
             </button>
             <div className="mx-auto max-w-[72%] text-center">
-              <h1 className="text-sm font-extrabold text-[#131b2e]">基金减仓</h1>
+              <h1 className="typo-body-strong">基金减仓</h1>
             </div>
           </div>
         </header>
@@ -75,7 +75,7 @@ export function FundSellView({ code }: FundSellViewProps) {
     );
   }
 
-  const latestNav = Number(fund.gsz ?? fund.dwjz ?? 0) || 0;
+  const latestNav = Number(fund.dwjz ?? 0) || 0;
   const maxSellShare = Math.max(Number(holding?.share || 0), 0);
   const maxSellAmount = Math.max(maxSellShare * latestNav, 0);
   const shareRaw = mode === "share" ? toNumber(shareInput) || 0 : latestNav > 0 ? (toNumber(amountInput) || 0) / latestNav : 0;
@@ -102,15 +102,15 @@ export function FundSellView({ code }: FundSellViewProps) {
         <div className="relative min-h-12 px-3 py-1">
           <button
             type="button"
-            className="absolute left-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 text-sm font-semibold text-[#24467c]"
+              className="absolute left-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 text-sm font-normal text-[#24467c]"
             onClick={handleBack}
           >
             <ChevronLeft size={16} />
             返回
           </button>
           <div className="mx-auto max-w-[72%] text-center">
-            <h1 className="whitespace-normal break-words typo-body-strong leading-tight">{fund.name}</h1>
-            <p className="typo-meta">{fund.code}</p>
+            <h1 className="whitespace-normal break-words typo-fund-header-title font-normal">{fund.name}</h1>
+            <p className="typo-fund-header-code font-normal">{fund.code}</p>
           </div>
         </div>
       </header>
@@ -120,23 +120,23 @@ export function FundSellView({ code }: FundSellViewProps) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <p className="typo-label">持仓金额/份额</p>
-              <p className="mt-1 text-xl font-extrabold tabular-nums text-[#131b2e]">{formatCurrency(metrics?.amount)}</p>
+              <p className="mt-1 text-xl font-normal tabular-nums text-[#131b2e]">{formatCurrency(metrics?.amount)}</p>
             </div>
             <div className="text-right">
               <p className="typo-label">持有收益</p>
-              <p className={`mt-1 text-xl font-extrabold tabular-nums ${(metrics?.profitTotal || 0) >= 0 ? "text-[#005bc0]" : "text-[#ba1a1a]"}`}>
+              <p className={`mt-1 text-xl font-normal tabular-nums ${(metrics?.profitTotal || 0) >= 0 ? "text-[#005bc0]" : "text-[#ba1a1a]"}`}>
                 {formatSignedCurrency(metrics?.profitTotal)}
               </p>
             </div>
             <div className="border-t border-[#e2e7ff] pt-2">
               <p className="typo-label">持有天数</p>
-              <p className="mt-1 text-base font-bold text-[#131b2e]">
+              <p className="mt-1 text-base font-normal text-[#131b2e]">
                 {holding?.firstPurchaseDate ? `${holdingDaysInMarket(holding.firstPurchaseDate) ?? 0}天` : "—"}
               </p>
             </div>
             <div className="border-t border-[#e2e7ff] pt-2 text-right">
-              <p className="typo-label">最新净值（{fund.gztime?.slice(5, 10) || fund.jzrq?.slice(5, 10) || "--"}）</p>
-              <p className="mt-1 text-base font-bold tabular-nums text-[#131b2e]">{latestNav ? latestNav.toFixed(4) : "—"}</p>
+              <p className="typo-label">最新净值（{fund.jzrq?.slice(5, 10) || "--"}）</p>
+              <p className="mt-1 text-base font-normal tabular-nums text-[#131b2e]">{latestNav ? latestNav.toFixed(4) : "—"}</p>
             </div>
           </div>
         </section>
@@ -144,7 +144,7 @@ export function FundSellView({ code }: FundSellViewProps) {
         <section className="border-b border-[#e2e7ff] px-3 py-4">
           <div className="mb-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <label className="text-sm font-bold text-[#131b2e]">{mode === "amount" ? "减仓金额 (CNY)" : "减仓份额 (SHARE)"}</label>
+              <label className="text-sm font-normal text-[#131b2e]">{mode === "amount" ? "减仓金额 (CNY)" : "减仓份额 (SHARE)"}</label>
               <button
                 type="button"
                 className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[#d5dbea] bg-white text-[#24467c]"
@@ -157,14 +157,14 @@ export function FundSellView({ code }: FundSellViewProps) {
             <span className="text-[10px] font-medium text-[#747781]">费率: {(FEE_RATE * 100).toFixed(2)}%</span>
           </div>
           <div className="relative border-b border-[#d5dbea] pb-1">
-            <span className="absolute left-0 top-1/2 -translate-y-1/2 text-lg font-bold text-[#131b2e]">{mode === "amount" ? "¥" : "份"}</span>
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 text-lg font-normal text-[#131b2e]">{mode === "amount" ? "¥" : "份"}</span>
             <input
               type="number"
               inputMode="decimal"
               value={mode === "amount" ? amountInput : shareInput}
               onChange={(event) => (mode === "amount" ? setAmountInput(event.target.value) : setShareInput(event.target.value))}
               placeholder="0.00"
-              className="w-full border-0 bg-transparent py-2 pl-6 pr-3 text-3xl font-extrabold tracking-tight text-[#131b2e] outline-none placeholder:text-[#9aa5bb] focus:ring-0"
+              className="w-full border-0 bg-transparent py-2 pl-6 pr-3 text-3xl font-normal tracking-tight text-[#131b2e] outline-none placeholder:text-[#9aa5bb] focus:ring-0"
             />
           </div>
           <div className="mt-3 grid grid-cols-4 gap-2">
@@ -172,7 +172,7 @@ export function FundSellView({ code }: FundSellViewProps) {
               <button
                 key={value}
                 type="button"
-                className="min-h-8 rounded border border-[#d5dbea] bg-white text-xs font-bold text-[#131b2e]"
+                className="min-h-8 rounded border border-[#d5dbea] bg-white text-xs font-normal text-[#131b2e]"
                 onClick={() => (mode === "amount" ? setAmountInput(String(Math.min(value, maxSellAmount))) : setShareInput(String(Math.min(value, maxSellShare))))}
               >
                 {value.toLocaleString("zh-CN")}
@@ -180,7 +180,7 @@ export function FundSellView({ code }: FundSellViewProps) {
             ))}
             <button
               type="button"
-              className="min-h-8 rounded border border-[#d5dbea] bg-white text-xs font-bold text-[#131b2e]"
+              className="min-h-8 rounded border border-[#d5dbea] bg-white text-xs font-normal text-[#131b2e]"
               onClick={() => (mode === "amount" ? setAmountInput(String(maxSellAmount.toFixed(2))) : setShareInput(String(maxSellShare.toFixed(2))))}
             >
               MAX
@@ -197,25 +197,26 @@ export function FundSellView({ code }: FundSellViewProps) {
 
         <section className="divide-y divide-[#e2e7ff]">
           <div className="px-3 py-3">
-            <label className="mb-1 block text-[10px] font-bold tracking-[0.14em] text-[#747781]">交易确认时间</label>
+            <label className="mb-1 block typo-label">交易确认时间</label>
             <DatePicker
               value={tradeDate ? dayjs(tradeDate, "YYYY-MM-DD") : null}
               format="YYYY-MM-DD"
               allowClear={false}
               inputReadOnly
+              className="text-sm font-normal text-[#131b2e]"
               style={{ width: "100%" }}
               onChange={(_, dateString) => setTradeDate(Array.isArray(dateString) ? dateString[0] || "" : dateString || "")}
             />
           </div>
           <div className="px-3 py-3">
-            <label className="mb-2 block text-[10px] font-bold tracking-[0.14em] text-[#747781]">成交时间节点</label>
+            <label className="mb-2 block typo-label">成交时间节点</label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 className={`rounded border px-2 py-2 text-center ${beforeClose ? "border-[#005bc0] bg-[#eef4ff]" : "border-[#d5dbea] bg-white"}`}
                 onClick={() => setBeforeClose(true)}
               >
-                <div className={`text-xs font-bold ${beforeClose ? "text-[#005bc0]" : "text-[#131b2e]"}`}>15:00前</div>
+                <div className={`text-xs font-normal ${beforeClose ? "text-[#005bc0]" : "text-[#131b2e]"}`}>15:00前</div>
                 <div className="text-[10px] text-[#747781]">下个交易日确认</div>
               </button>
               <button
@@ -223,11 +224,11 @@ export function FundSellView({ code }: FundSellViewProps) {
                 className={`rounded border px-2 py-2 text-center ${!beforeClose ? "border-[#005bc0] bg-[#eef4ff]" : "border-[#d5dbea] bg-white"}`}
                 onClick={() => setBeforeClose(false)}
               >
-                <div className={`text-xs font-bold ${!beforeClose ? "text-[#005bc0]" : "text-[#131b2e]"}`}>15:00后</div>
+                <div className={`text-xs font-normal ${!beforeClose ? "text-[#005bc0]" : "text-[#131b2e]"}`}>15:00后</div>
                 <div className="text-[10px] text-[#747781]">后两个交易日确认</div>
               </button>
             </div>
-            <p className="mt-2 text-[10px] leading-relaxed text-[#747781]">
+            <p className="mt-2 typo-meta leading-relaxed">
               {beforeClose ? "今日15:00前交易，将于下个交易日确认份额。" : "今日15:00后交易，将于后两个交易日确认份额。"}
             </p>
           </div>
@@ -239,7 +240,7 @@ export function FundSellView({ code }: FundSellViewProps) {
           type="button"
           onClick={handleConfirm}
           disabled={!amount || !share || !latestNav || maxSellAmount <= 0}
-          className="inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-[#d5dbea] bg-white px-3 text-sm font-bold text-[#131b2e] disabled:opacity-40"
+          className="inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-[#d5dbea] bg-white px-3 text-sm font-normal text-[#131b2e] disabled:opacity-40"
         >
           确认修改
         </button>

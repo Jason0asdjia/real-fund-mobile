@@ -2,18 +2,21 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Check, CirclePlus, Search, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, CirclePlus, Loader2, Search, X } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 
 const fallbackPopularSearches = ["高增长科技", "标普500", "全球ESG领先", "债券阿尔法"];
 
 export default function DiscoverPage() {
-  const { state, search, addFund, refreshing } = useAppState();
+  const { state, search, addFund } = useAppState();
+  const router = useRouter();
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [results, setResults] = useState<Array<{ code: string; name: string; shortName?: string }>>([]);
+  const [addingCode, setAddingCode] = useState<string | null>(null);
 
   const handleSearch = async (nextKeyword: string) => {
     setKeyword(nextKeyword);
@@ -38,6 +41,18 @@ export default function DiscoverPage() {
 
   const showResultLayer = Boolean(keyword.trim()) || loading || Boolean(error);
   const popularSearches = state.searchHistory.length ? state.searchHistory : fallbackPopularSearches;
+
+  const handleAddFund = async (item: { code: string; name: string; shortName?: string }) => {
+    if (addingCode) return;
+    setAddingCode(item.code);
+    try {
+      const snapshot = await addFund(item);
+      if (!snapshot) return;
+      router.push(`/portfolio/${item.code}/manage?from=discover`);
+    } finally {
+      setAddingCode(null);
+    }
+  };
 
   return (
     <div className="-mx-3 -mt-4 min-h-[calc(100dvh-5.5rem)] bg-white text-[#131b2e] md:-mx-4 md:-mt-4">
@@ -105,6 +120,7 @@ export default function DiscoverPage() {
             <div className="divide-y divide-[#f2f3ff] bg-white">
               {results.map((item) => {
                 const added = state.funds.some((fund) => fund.code === item.code);
+                const adding = addingCode === item.code;
 
                 return (
                   <article key={item.code} className="flex items-center gap-3 px-4 py-3">
@@ -118,14 +134,18 @@ export default function DiscoverPage() {
                       <p className="m-0 mt-1 text-[11px] font-semibold tabular-nums text-[#747781]">{item.code}</p>
                     </Link>
 
-                    <button
-                      type="button"
-                      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition ${added ? "bg-[#d7e2ff] text-[#24467c]" : "bg-[#00193c] text-white"}`}
-                      disabled={added || refreshing}
-                      onClick={() => addFund(item)}
-                      aria-label={added ? "已加入" : "加入基金"}
-                    >
-                      {added ? <Check size={17} /> : <CirclePlus size={18} />}
+                      <button
+                        type="button"
+                        className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition ${
+                          added
+                            ? "border-[#abc7ff] bg-[#d7e2ff] text-[#24467c]"
+                            : "border-[#d5dbea] bg-white text-[#24467c]"
+                        }`}
+                        disabled={added || adding}
+                        onClick={() => void handleAddFund(item)}
+                        aria-label={added ? "已加入" : "加入基金"}
+                      >
+                      {adding ? <Loader2 size={16} className="animate-spin" /> : added ? <Check size={17} /> : <CirclePlus size={18} />}
                     </button>
                   </article>
                 );

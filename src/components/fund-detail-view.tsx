@@ -6,6 +6,7 @@ import { ArrowDownLeft, ArrowUpRight, ChevronLeft, ChevronRight, CircleMinus, Ci
 import { Area, Pie } from "@ant-design/charts";
 
 import { useAppState } from "@/components/app-provider";
+import { fetchFundHistoricalNavSeries } from "@/lib/fund-api";
 import { formatCurrency, formatPercent, formatSignedCurrency, getHoldingMetrics } from "@/lib/portfolio";
 
 type FundDetailViewProps = {
@@ -15,6 +16,8 @@ type FundDetailViewProps = {
 };
 
 type PeriodKey = "1m" | "3m" | "1y" | "max";
+
+const OFFICIAL_NAV_HISTORY_CACHE_KEY = "real-fund-mobile:official-nav-history";
 
 const PERIOD_OPTIONS: Array<{ key: PeriodKey; label: string; points?: number }> = [
   { key: "1m", label: "1月", points: 30 },
@@ -28,10 +31,21 @@ const toNumber = (value: string | number | null | undefined) => {
   return Number.isFinite(next) ? next : 0;
 };
 
+const mergeNavSeries = (base: Array<{ date: string; nav: number }>, incoming: Array<{ date: string; nav: number }>, maxCount = 360) => {
+  const merged = new Map<string, number>();
+  base.forEach((item) => merged.set(item.date, item.nav));
+  incoming.forEach((item) => merged.set(item.date, item.nav));
+  return [...merged.entries()]
+    .map(([date, nav]) => ({ date, nav }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-maxCount);
+};
+
 export function FundDetailView({ code, onBack, asModal = false }: FundDetailViewProps) {
-  const { clearHolding, state, valuationSeries } = useAppState();
+  const { clearHolding, state } = useAppState();
   const [period, setPeriod] = useState<PeriodKey>("1m");
   const [clearModalOpen, setClearModalOpen] = useState(false);
+  const [officialNavSeries, setOfficialNavSeries] = useState<Array<{ date: string; nav: number }>>([]);
   const fund = state.funds.find((item) => item.code === code);
 
   useEffect(() => {
@@ -49,12 +63,73 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
     };
   }, [clearModalOpen]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(OFFICIAL_NAV_HISTORY_CACHE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Record<string, Array<{ date: string; nav: number }>>;
+      const cached = Array.isArray(parsed?.[code]) ? parsed[code] : [];
+      const normalized = cached.filter((item) => item?.date && Number.isFinite(Number(item?.nav))).map((item) => ({ date: item.date, nav: Number(item.nav) }));
+      if (normalized.length > 0) {
+        setOfficialNavSeries(normalized);
+      }
+    } catch {
+      // noop
+    }
+  }, [code]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadHistory = async () => {
+      try {
+        let cachedSeries: Array<{ date: string; nav: number }> = [];
+        if (typeof window !== "undefined") {
+          try {
+            const raw = window.localStorage.getItem(OFFICIAL_NAV_HISTORY_CACHE_KEY);
+            const parsed = raw ? (JSON.parse(raw) as Record<string, Array<{ date: string; nav: number }>>) : {};
+            cachedSeries = Array.isArray(parsed?.[code]) ? parsed[code] : [];
+          } catch {
+            cachedSeries = [];
+          }
+        }
+
+        const lastCachedDate = cachedSeries.length ? cachedSeries[cachedSeries.length - 1]?.date : undefined;
+        const fetchedSeries = await fetchFundHistoricalNavSeries(code, 360, lastCachedDate);
+        const series = lastCachedDate ? mergeNavSeries(cachedSeries, fetchedSeries, 360) : fetchedSeries;
+        if (!active) return;
+        if (series.length > 0) {
+          setOfficialNavSeries(series);
+          if (typeof window !== "undefined") {
+            try {
+              const raw = window.localStorage.getItem(OFFICIAL_NAV_HISTORY_CACHE_KEY);
+              const parsed = raw ? (JSON.parse(raw) as Record<string, Array<{ date: string; nav: number }>>) : {};
+              parsed[code] = series;
+              window.localStorage.setItem(OFFICIAL_NAV_HISTORY_CACHE_KEY, JSON.stringify(parsed));
+            } catch {
+              // noop
+            }
+          }
+        }
+      } catch {
+        // keep cached series when request fails
+      }
+    };
+
+    void loadHistory();
+
+    return () => {
+      active = false;
+    };
+  }, [code]);
+
   if (!fund) {
     return (
       <div className={asModal ? "detail-page" : "screen"}>
         {onBack ? (
           <header className="sticky top-0 z-20 border-b border-[#e2e7ff] bg-white px-3 py-2">
-            <button type="button" className="inline-flex items-center gap-1 text-sm font-semibold text-[#24467c]" onClick={onBack}>
+            <button type="button" className="inline-flex items-center gap-1 text-sm font-normal text-[#24467c]" onClick={onBack}>
               <ChevronLeft size={16} />
               返回
             </button>
@@ -62,7 +137,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
         ) : null}
         <section className="px-3 py-6">
           <div className="rounded-xl border border-[#e2e7ff] bg-[#f8f9ff] p-4">
-            <h2 className="m-0 text-base font-bold text-[#131b2e]">没有找到这只基金</h2>
+            <h2 className="m-0 text-base font-normal text-[#131b2e]">没有找到这只基金</h2>
             <p className="mb-0 mt-2 text-sm text-[#57657a]">它可能已经被移除，或者当前地址不是有效的基金详情页。</p>
           </div>
         </section>
@@ -73,11 +148,14 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
   const holding = state.holdings[fund.code];
   const metrics = getHoldingMetrics(fund, holding);
   const transactions = (state.transactions[fund.code] || []).slice().sort((a, b) => `${b.date}`.localeCompare(`${a.date}`));
-  const rawSeries = valuationSeries[fund.code] || [];
-  const chartPoints = rawSeries.map((point) => ({ label: point.date.slice(5).replace("-", "/"), value: point.value }));
+  const chartPoints = officialNavSeries.map((point) => ({
+    date: point.date,
+    label: point.date.slice(5).replace("-", "/"),
+    value: point.nav,
+  }));
   const periodOption = PERIOD_OPTIONS.find((item) => item.key === period);
   const filteredPoints = !chartPoints.length
-    ? [{ label: "今日", value: toNumber(fund.gsz ?? fund.dwjz) }]
+    ? [{ date: fund.jzrq || "today", label: "今日", value: toNumber(fund.gsz ?? fund.dwjz) }]
     : !periodOption?.points
       ? chartPoints
       : chartPoints.slice(-periodOption.points);
@@ -96,14 +174,19 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
 
   const areaConfig = {
     data: filteredPoints,
-    xField: "label",
+    xField: "date",
     yField: "value",
     smooth: true,
     tooltip: {
       items: [{ channel: "y", valueFormatter: (value: number) => value.toFixed(4) }],
     },
     axis: {
-      x: { labelAutoHide: true, tick: false, title: false },
+      x: {
+        labelAutoHide: true,
+        tick: false,
+        title: false,
+        labelFormatter: (_: string, index: number) => filteredPoints[index]?.label || "",
+      },
       y: { title: false, tick: false, grid: true, labelFormatter: (value: string) => Number(value).toFixed(2) },
     },
     line: {
@@ -161,7 +244,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
           {onBack ? (
             <button
               type="button"
-              className="absolute left-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 text-sm font-semibold text-[#24467c]"
+              className="absolute left-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 text-sm font-normal text-[#24467c]"
               onClick={onBack}
             >
               <ChevronLeft size={16} />
@@ -171,8 +254,8 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
             <span />
           )}
           <div className="mx-auto max-w-[72%] text-center">
-            <h1 className="m-0 whitespace-normal break-words typo-body-strong leading-tight">{fund.name}</h1>
-            <p className="m-0 typo-meta tabular-nums">{fund.code}</p>
+            <h1 className="m-0 whitespace-normal break-words typo-fund-header-title font-normal">{fund.name}</h1>
+            <p className="m-0 typo-fund-header-code font-normal">{fund.code}</p>
           </div>
         </div>
       </header>
@@ -183,11 +266,11 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-h-[70px] flex-col justify-center">
                 <p className="mb-0.5 typo-label text-[#24467c]/70">持仓金额</p>
-                <p className="m-0 text-[30px] font-extrabold leading-none tracking-tight tabular-nums">{formatCurrency(metrics?.amount)}</p>
+                <p className="m-0 text-[30px] font-normal leading-none tracking-tight tabular-nums">{formatCurrency(metrics?.amount)}</p>
               </div>
               <div className="flex min-h-[70px] flex-col items-end justify-center text-right">
                 <p className="mb-0.5 typo-label text-[#24467c]/70">累计收益</p>
-                <p className={`m-0 text-[20px] font-bold leading-none tabular-nums ${(metrics?.profitTotal || 0) >= 0 ? "text-[#24467c]" : "text-[#ba1a1a]"}`}>
+                <p className={`m-0 text-[20px] font-normal leading-none tabular-nums ${(metrics?.profitTotal || 0) >= 0 ? "text-[#24467c]" : "text-[#ba1a1a]"}`}>
                   {formatSignedCurrency(metrics?.profitTotal)}
                 </p>
               </div>
@@ -199,7 +282,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
           <div className="mb-2 flex items-start justify-between gap-3">
             <div>
               <p className="mb-1 typo-section-title">单位净值 (NAV)</p>
-              <p className="text-[28px] font-bold tracking-tight tabular-nums text-[#00193c]">{navValue.toFixed(4)}</p>
+              <p className="text-[28px] font-normal tracking-tight tabular-nums text-[#00193c]">{navValue.toFixed(4)}</p>
             </div>
             <div className={`text-sm tabular-nums ${navChange >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>{formatPercent(navChange)}</div>
           </div>
@@ -209,7 +292,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
               <button
                 key={item.key}
                 type="button"
-                className={`rounded-md border px-2.5 py-1 text-[11px] font-bold ${
+                className={`rounded-md border px-2.5 py-1 text-[11px] font-normal ${
                   period === item.key ? "border-[#a9c3ff] bg-[#dce8ff] text-[#0f2c66]" : "border-transparent bg-[#f2f3ff] text-[#57657a]"
                 }`}
                 onClick={() => setPeriod(item.key)}
@@ -220,7 +303,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
           </div>
 
           <div className="rounded-xl border border-[#e2e7ff] bg-white p-2.5">
-            <p className="mb-1 px-1 text-[11px] font-semibold tracking-[0.06em] text-[#57657a]">净值变化</p>
+            <p className="mb-1 px-1 text-[11px] font-normal tracking-[0.06em] text-[#57657a]">净值变化</p>
             <Area {...areaConfig} height={220} />
           </div>
         </section>
@@ -228,7 +311,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
         <section className="border-b border-[#e2e7ff] py-3">
           <div className="mb-2 flex items-center justify-between px-3">
             <h2 className="typo-section-title">前十重仓股</h2>
-            <span className="text-[10px] font-semibold text-[#747781]">{fund.holdingsReportDate ? `披露日 ${fund.holdingsReportDate}` : "截至最近披露"}</span>
+            <span className="text-[10px] font-normal text-[#747781]">{fund.holdingsReportDate ? `披露日 ${fund.holdingsReportDate}` : "截至最近披露"}</span>
           </div>
           <div className="px-3">
             {holdingPieData.length ? (
@@ -244,7 +327,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
         <section className="pt-3">
           <div className="mb-2 flex items-center justify-between px-3">
             <h2 className="typo-section-title">历史成交</h2>
-            <Link href={`/history?fund=${fund.code}`} className="inline-flex items-center gap-1 text-[10px] font-bold text-[#24467c]">
+            <Link href={`/history?fund=${fund.code}`} className="inline-flex items-center gap-1 text-[10px] font-normal text-[#24467c]">
               查看全部
               <ChevronRight size={12} />
             </Link>
@@ -265,12 +348,12 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
                         {isBuy ? <ArrowDownLeft size={16} /> : <ArrowUpRight size={16} />}
                       </div>
                       <div className="min-w-0">
-                        <p className="m-0 text-xs font-bold">{isBuy ? "加仓" : "减仓"}</p>
+                        <p className="m-0 text-xs font-normal">{isBuy ? "加仓" : "减仓"}</p>
                         <p className="m-0 mt-0.5 truncate text-[10px] text-[#747781]">{item.date}</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className={`m-0 text-sm font-bold tabular-nums ${isBuy ? "text-[#005bc0]" : "text-[#8c4f39]"}`}>{formatSignedCurrency(isBuy ? amount : -amount)}</p>
+                          <p className={`m-0 text-sm font-normal tabular-nums ${isBuy ? "text-[#005bc0]" : "text-[#8c4f39]"}`}>{formatSignedCurrency(isBuy ? amount : -amount)}</p>
                       <p className="m-0 mt-0.5 text-[10px] text-[#747781]">净值: {Number(item.price).toFixed(4)}</p>
                     </div>
                   </article>
@@ -308,7 +391,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
           <div className="app-modal-sheet" onClick={(event) => event.stopPropagation()}>
             <div className="app-modal-sheet__grabber" />
             <div className="app-modal-sheet__header">
-              <h3 className="m-0 text-base font-bold text-[#131b2e]">确认清空持仓</h3>
+            <h3 className="m-0 text-base font-normal text-[#131b2e]">确认清空持仓</h3>
               <button
                 type="button"
                 onClick={() => setClearModalOpen(false)}
@@ -324,14 +407,14 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
                 <button
                   type="button"
                   onClick={() => setClearModalOpen(false)}
-                  className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#d5dbea] bg-white px-3 text-sm font-semibold text-[#57657a]"
+                className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#d5dbea] bg-white px-3 text-sm font-normal text-[#57657a]"
                 >
                   取消
                 </button>
                 <button
                   type="button"
                   onClick={handleClearHolding}
-                  className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[#ba1a1a] px-3 text-sm font-bold text-white"
+                className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[#ba1a1a] px-3 text-sm font-normal text-white"
                 >
                   确认清空
                 </button>

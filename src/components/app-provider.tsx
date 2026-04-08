@@ -18,7 +18,7 @@ type AppContextValue = {
   passiveRefreshAt: number | null;
   valuationSeries: Record<string, ValuationPoint[]>;
   search: (keyword: string) => Promise<SearchFundResult[]>;
-  addFund: (input: SearchFundResult) => Promise<void>;
+  addFund: (input: SearchFundResult) => Promise<FundSnapshot | null>;
   refreshFunds: () => Promise<void>;
   removeFund: (code: string) => void;
   clearHolding: (code: string) => void;
@@ -283,7 +283,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [backfillFundArchives, hydrated, state.funds]);
 
   const addFund = useCallback(async (input: SearchFundResult) => {
-    if (fundsRef.current.some((item) => item.code === input.code)) return;
+    const existing = fundsRef.current.find((item) => item.code === input.code);
+    if (existing) return existing;
 
     refreshingRef.current = true;
     setRefreshing(true);
@@ -305,8 +306,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         lastUpdatedAt: nowInMarket().format("YYYY-MM-DD HH:mm:ss"),
       }));
       didInitialRefreshRef.current = true;
+      return snapshot;
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "添加基金失败");
+      return null;
     } finally {
       refreshingRef.current = false;
       setRefreshing(false);
