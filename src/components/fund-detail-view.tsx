@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, ChevronLeft, ChevronRight, CircleMinus, CirclePlus, PenSquare, Trash2, X } from "lucide-react";
+import { Area, Pie } from "@ant-design/charts";
 
-import { PerformanceLineChart } from "@/components/performance-line-chart";
 import { useAppState } from "@/components/app-provider";
 import { formatCurrency, formatPercent, formatSignedCurrency, getHoldingMetrics } from "@/lib/portfolio";
 
@@ -84,8 +84,66 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
 
   const navValue = toNumber(fund.gsz ?? fund.dwjz);
   const navChange = toNumber(fund.gszzl);
-  const latestTrades = transactions.slice(0, 6);
+  const latestTrades = transactions.slice(0, 5);
   const holdings = Array.isArray(fund.holdings) ? fund.holdings : [];
+  const holdingPieData = holdings
+    .map((item) => ({
+      type: item.name || item.code || "—",
+      value: Number(String(item.weight || "").replace("%", "").trim()),
+    }))
+    .filter((item) => Number.isFinite(item.value) && item.value > 0)
+    .slice(0, 10);
+
+  const areaConfig = {
+    data: filteredPoints,
+    xField: "label",
+    yField: "value",
+    smooth: true,
+    tooltip: {
+      items: [{ channel: "y", valueFormatter: (value: number) => value.toFixed(4) }],
+    },
+    axis: {
+      x: { labelAutoHide: true, tick: false, title: false },
+      y: { title: false, tick: false, grid: true, labelFormatter: (value: string) => Number(value).toFixed(2) },
+    },
+    line: {
+      style: {
+        stroke: "#2f5ce0",
+        lineWidth: 2,
+      },
+    },
+    area: {
+      style: {
+        fill: "l(270) 0:#7da5ff66 1:#ffffff00",
+      },
+    },
+    style: {
+      radiusTopLeft: 8,
+      radiusTopRight: 8,
+    },
+  };
+
+  const pieConfig = {
+    data: holdingPieData,
+    angleField: "value",
+    colorField: "type",
+    radius: 0.9,
+    innerRadius: 0.55,
+    legend: {
+      color: {
+        position: "bottom" as const,
+        itemLabelFontSize: 11,
+      },
+    },
+    label: {
+      text: (d: { value: number }) => `${d.value.toFixed(2)}%`,
+      position: "spider",
+      fontSize: 11,
+    },
+    tooltip: {
+      items: [{ channel: "y", valueFormatter: (value: number) => `${value.toFixed(2)}%` }],
+    },
+  };
   const handleClearHolding = () => {
     clearHolding(fund.code);
     setClearModalOpen(false);
@@ -119,17 +177,17 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-28">
+      <main className="flex-1 overflow-y-auto pb-16">
         {holding ? (
-          <section className="border-b border-[#e2e7ff] bg-[#d7e2ff] px-3 pb-4 pt-3 text-[#001b3f]">
-            <div className="flex items-end justify-between gap-2">
-              <div>
-                <p className="mb-1 text-[9px] font-semibold tracking-[0.14em] text-[#24467c]/70">持仓金额</p>
-                <p className="text-[26px] font-extrabold leading-none tracking-tight tabular-nums">{formatCurrency(metrics?.amount)}</p>
+          <section className="border-b border-[#e2e7ff] bg-[#d7e2ff] px-3 py-1.5 text-[#001b3f]">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-h-[70px] flex-col justify-center">
+                <p className="mb-0.5 text-[9px] font-semibold tracking-[0.14em] text-[#24467c]/70">持仓金额</p>
+                <p className="m-0 text-[30px] font-extrabold leading-none tracking-tight tabular-nums">{formatCurrency(metrics?.amount)}</p>
               </div>
-              <div className="text-right">
-                <p className="mb-1 text-[9px] font-medium tracking-[0.06em] text-[#24467c]/70">累计收益</p>
-                <p className={`text-xs font-semibold leading-none tabular-nums ${(metrics?.profitTotal || 0) >= 0 ? "text-[#24467c]" : "text-[#ba1a1a]"}`}>
+              <div className="flex min-h-[70px] flex-col items-end justify-center text-right">
+                <p className="mb-0.5 text-[9px] font-medium tracking-[0.06em] text-[#24467c]/70">累计收益</p>
+                <p className={`m-0 text-[20px] font-bold leading-none tabular-nums ${(metrics?.profitTotal || 0) >= 0 ? "text-[#24467c]" : "text-[#ba1a1a]"}`}>
                   {formatSignedCurrency(metrics?.profitTotal)}
                 </p>
               </div>
@@ -137,22 +195,22 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
           </section>
         ) : null}
 
-        <section className="border-b border-[#e2e7ff] px-3 py-4">
-          <div className="mb-3 flex items-start justify-between gap-3">
+        <section className="border-b border-[#e2e7ff] px-3 py-3">
+          <div className="mb-2 flex items-start justify-between gap-3">
             <div>
               <p className="mb-1 text-[10px] font-semibold tracking-[0.14em] text-[#747781]">单位净值 (NAV)</p>
-              <p className="text-3xl font-extrabold tracking-tight tabular-nums text-[#00193c]">{navValue.toFixed(4)}</p>
+              <p className="text-[28px] font-bold tracking-tight tabular-nums text-[#00193c]">{navValue.toFixed(4)}</p>
             </div>
-            <div className={`text-sm font-bold tabular-nums ${navChange >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>{formatPercent(navChange)}</div>
+            <div className={`text-sm tabular-nums ${navChange >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>{formatPercent(navChange)}</div>
           </div>
 
-          <div className="mb-3 flex items-center gap-1.5">
+          <div className="mb-2 flex items-center gap-1.5">
             {PERIOD_OPTIONS.map((item) => (
               <button
                 key={item.key}
                 type="button"
-                className={`rounded-sm px-2.5 py-1 text-[10px] font-bold ${
-                  period === item.key ? "bg-[#00193c] text-white" : "bg-[#f2f3ff] text-[#57657a]"
+                className={`rounded-md border px-2.5 py-1 text-[11px] font-bold ${
+                  period === item.key ? "border-[#a9c3ff] bg-[#dce8ff] text-[#0f2c66]" : "border-transparent bg-[#f2f3ff] text-[#57657a]"
                 }`}
                 onClick={() => setPeriod(item.key)}
               >
@@ -162,7 +220,8 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
           </div>
 
           <div className="rounded-xl border border-[#e2e7ff] bg-white p-2.5">
-            <PerformanceLineChart data={filteredPoints} height={180} />
+            <p className="mb-1 px-1 text-[11px] font-semibold tracking-[0.06em] text-[#57657a]">净值变化</p>
+            <Area {...areaConfig} height={220} />
           </div>
         </section>
 
@@ -171,31 +230,18 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
             <h2 className="text-[10px] font-black tracking-[0.14em] text-[#747781]">前十重仓股</h2>
             <span className="text-[10px] font-semibold text-[#747781]">{fund.holdingsReportDate ? `披露日 ${fund.holdingsReportDate}` : "截至最近披露"}</span>
           </div>
-          <div className="bg-[#f8f9ff] px-3 py-2">
-            <div className="grid grid-cols-12 text-[10px] font-bold tracking-[0.08em] text-[#747781]">
-              <div className="col-span-6">股票名称</div>
-              <div className="col-span-3 text-right">持仓占比</div>
-              <div className="col-span-3 text-right">涨跌幅</div>
-            </div>
-          </div>
-          <div className="divide-y divide-[#f2f3ff]">
-            {holdings.length ? (
-              holdings.map((item) => (
-                <div key={`${item.code}-${item.name}`} className="grid grid-cols-12 px-3 py-3 text-sm">
-                  <div className="col-span-6 truncate font-semibold">{item.name || item.code || "—"}</div>
-                  <div className="col-span-3 text-right tabular-nums">{item.weight || "—"}</div>
-                  <div className={`col-span-3 text-right font-semibold tabular-nums ${toNumber(item.change) >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>
-                    {item.change == null ? "—" : formatPercent(Number(item.change))}
-                  </div>
-                </div>
-              ))
+          <div className="px-3">
+            {holdingPieData.length ? (
+              <div className="rounded-xl border border-[#e2e7ff] bg-white p-3">
+                <Pie {...pieConfig} height={240} />
+              </div>
             ) : (
               <div className="px-3 py-6 text-center text-sm text-[#747781]">暂无重仓数据</div>
             )}
           </div>
         </section>
 
-        <section className="py-3">
+        <section className="pt-3">
           <div className="mb-2 flex items-center justify-between px-3">
             <h2 className="text-[10px] font-black tracking-[0.14em] text-[#747781]">历史成交</h2>
             <Link href="/history" className="inline-flex items-center gap-1 text-[10px] font-bold text-[#24467c]">
@@ -238,20 +284,20 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
 
       </main>
 
-      <nav className="fixed bottom-2 left-3 right-3 z-30 grid grid-cols-4 gap-1 rounded-2xl border border-[#002366]/15 bg-[#181c21] p-2 shadow-[0_-8px_24px_rgba(0,0,0,0.15)] md:left-1/2 md:right-auto md:w-[560px] md:-translate-x-1/2">
-        <Link href={`/portfolio/${fund.code}/buy?from=detail`} className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-[#e0e2ea]">
+      <nav className="fixed bottom-2 left-3 right-3 z-30 grid grid-cols-4 gap-1.5 rounded-2xl border border-slate-200 bg-white/90 p-2 shadow-soft backdrop-blur md:left-1/2 md:right-auto md:w-[560px] md:-translate-x-1/2">
+        <Link href={`/portfolio/${fund.code}/buy?from=detail`} className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-600">
           <CirclePlus size={18} />
           <span className="text-[11px]">加仓</span>
         </Link>
-        <Link href={`/portfolio/${fund.code}/sell?from=detail`} className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-[#e0e2ea]">
+        <Link href={`/portfolio/${fund.code}/sell?from=detail`} className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-600">
           <CircleMinus size={18} />
           <span className="text-[11px]">减仓</span>
         </Link>
-        <Link href={`/portfolio/${fund.code}/manage`} className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-[#e0e2ea]">
+        <Link href={`/portfolio/${fund.code}/manage`} className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-600">
           <PenSquare size={18} />
           <span className="text-[11px]">编辑持仓</span>
         </Link>
-        <button type="button" className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-[#e0e2ea]" onClick={() => setClearModalOpen(true)}>
+        <button type="button" className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-600" onClick={() => setClearModalOpen(true)}>
           <Trash2 size={18} />
           <span className="text-[11px]">清空持仓</span>
         </button>

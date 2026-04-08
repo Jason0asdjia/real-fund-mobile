@@ -4,6 +4,7 @@ import { AppProvider } from "@/components/app-provider";
 import { AppShell } from "@/components/app-shell";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 
+import "antd/dist/reset.css";
 import "./globals.css";
 
 export const metadata: Metadata = {

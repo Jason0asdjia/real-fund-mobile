@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Repeat2 } from "lucide-react";
+import { DatePicker } from "antd";
+import dayjs from "dayjs";
 
 import { useAppState } from "@/components/app-provider";
 import { formatCurrency, formatSignedCurrency, getHoldingMetrics } from "@/lib/portfolio";
@@ -183,11 +185,13 @@ export function FundManageView({ code, onBack, asModal = false }: FundManageView
             </label>
             <label className="rounded-xl border border-[#e2e7ff] bg-[#f8f9ff] p-3">
               <p className="mb-1 text-[10px] font-semibold tracking-[0.14em] text-[#747781]">首次买入日期</p>
-              <input
-                type="date"
-                value={dateInput}
-                onChange={(event) => setDateInput(event.target.value)}
-                className="w-full border-0 bg-transparent p-0 text-sm font-bold text-[#131b2e] outline-none focus:ring-0"
+              <DatePicker
+                value={dateInput ? dayjs(dateInput, "YYYY-MM-DD") : null}
+                format="YYYY-MM-DD"
+                allowClear
+                inputReadOnly
+                style={{ width: "100%" }}
+                onChange={(_, dateString) => setDateInput(Array.isArray(dateString) ? dateString[0] || "" : dateString || "")}
               />
             </label>
           </div>
@@ -215,7 +219,7 @@ export function FundManageView({ code, onBack, asModal = false }: FundManageView
         <button
           type="button"
           onClick={handleConfirm}
-          className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-[#00193c] px-3 text-sm font-bold text-white"
+          className="inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-[#d5dbea] bg-white px-3 text-sm font-bold text-[#131b2e]"
         >
           确认修改
         </button>

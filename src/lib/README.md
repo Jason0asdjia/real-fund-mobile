@@ -26,6 +26,46 @@
 - `FundSnapshot` 当前承载：净值/估值、来源状态、基金基础资料、重仓披露信息等页面使用字段
 - `SearchFundResult` 当前承载：代码、名称、分类、基金类型、拼音等搜索结果字段
 
+## 基金数据取值规则（`/src/lib/fund-api.ts`）
+
+### 1) 估值链路（双源）
+- 主源：东方财富估值脚本 `fundgz.1234567.com.cn/js/{code}.js`
+- 备源：腾讯基金行情 `qt.gtimg.cn/q=jj{code}`
+- 触发规则：
+  - 主源成功且 `gsz/gszzl/gztime` 完整 -> 直接使用
+  - 主源失败或字段不完整 -> 切换腾讯估值备源
+- `gztime` 规则：保留数据源日期语义，不再强制改成当天，避免把陈旧数据误判为盘中实时数据。
+
+### 2) 官方净值链路（多源回退）
+- 主源：东财历史净值（F10DataApi）
+- 备源1：腾讯基金行情
+- 备源2：蛋卷基金 `danjuanfunds.com/djapi/fund/{code}`
+- 字段目标：`dwjz / jzrq / zzl / lastNav`
+
+### 3) 来源标记（`FundSnapshot.source`）
+- `eastmoney`：当前记录主要来自东方财富
+- `tencent`：当前记录主要来自腾讯
+- `danjuan`：当前记录主要来自蛋卷
+- `fallback`：兼容历史状态值（现行链路尽量写具体来源）
+
+### 4) 刷新与防 ban 最小访问间隔
+- `eastmoneyEstimate`: `1200ms`
+- `eastmoneyHistory`: `1000ms`
+- `tencentQuote`: `1500ms`
+- `danjuanQuote`: `2000ms`
+- `eastmoneySearch`: `800ms`
+
+额外策略：
+- 同源请求串行队列（`runWithSourceInterval`）
+- 估值缓存 `ESTIMATE_CACHE_MS = 45s`
+- 超时保护：估值/官方回退请求均有 timeout
+
+### 5) 与页面计算直接相关的字段语义
+- `dwjz/jzrq/zzl`：官方确定值（日终口径）
+- `gsz/gztime/gszzl`：盘中估值口径
+- `quoteStatus`：`estimated | official`
+- `noValuation`：当前是否缺估值链路
+
 ## 约束
 - 保持纯函数优先，减少 UI 耦合
 - 不破坏既有 localStorage 键结构

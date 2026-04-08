@@ -11,17 +11,24 @@
 
 ## 模块与文档路径索引
 
-### 根目录文档
-- `/README.md`
-- `/agent.md`
-- `/API_AND_FIELDS_UPDATES.md`
-- `/TODO.md`
+### Markdown 全量索引（路径 + 摘要）
 
-### 模块文档
-- `/src/app/README.md`：路由、页面入口、页面级组合
-- `/src/components/README.md`：复用组件、壳层、导航、详情/操作流
-- `/src/lib/README.md`：API、字段、时间、持仓计算、本地存储
-- `/public/README.md`：PWA 资源与静态文件
+| 路径 | 摘要 |
+|---|---|
+| `/README.md` | 项目总览、运行方式、功能入口说明 |
+| `/agent.md` | 协作规则、实现约束、文档索引总入口 |
+| `/API_AND_FIELDS_UPDATES.md` | API/字段历史归档（当前规范不在此扩写） |
+| `/TODO.md` | 阶段任务记录与执行清单 |
+| `/src/app/README.md` | 页面模块说明；持仓表格各列计算公式、列口径与时间显示规则 |
+| `/src/components/README.md` | 组件层职责；`app-provider` 刷新调度、估值粘性保留、演示数据入口规则 |
+| `/src/lib/README.md` | 数据源与字段规范；估值双源/官方多源回退、最小访问间隔、防 ban 策略 |
+| `/public/README.md` | 静态资源与 PWA 相关文件说明 |
+
+### 模块文档落地原则
+- **app 模块文档**：描述页面展示口径（列计算、时间显示、标题汇总规则）。
+- **components 模块文档**：描述状态流与交互编排（刷新、合并、演示数据操作）。
+- **lib 模块文档**：描述 API 源、字段语义、回退顺序、限频与缓存策略。
+- 历史归档与当前规范分离：历史放 `/API_AND_FIELDS_UPDATES.md`，当前规则写模块 README。
 
 ### 关键实现路径
 - `/src/app/layout.tsx`

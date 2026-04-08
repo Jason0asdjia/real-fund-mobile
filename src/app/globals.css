@@ -26,6 +26,11 @@
     @apply text-inherit no-underline;
   }
 
+  p {
+    margin-top: 0 !important;
+    margin-bottom: 0.25em !important;
+  }
+
   button,
   input {
     font: inherit;

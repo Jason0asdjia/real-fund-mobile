@@ -22,3 +22,53 @@
 - 优先使用 Tailwind utility 与组件层类
 - 页面字体、间距、标题层级等全局约束遵循 `/agent.md`
 - 弹窗行为遵循 `/agent.md` 中的弹窗统一规范
+
+## 持仓表格（`/src/app/portfolio/page.tsx`）列计算规则
+
+> 口径约定：
+> - **官方链路**：`dwjz/jzrq/zzl`（日终确定值）
+> - **估值链路**：`gsz/gztime/gszzl`（盘中估算值）
+
+- `最新净值`（`latestNav`）
+  - 展示：`dwjz`
+  - 时间：`officialUpdatedAt`（由 `jzrq` 显示 `MM-DD`）
+
+- `估算净值`（`estimateNav`）
+  - 展示：`gsz`
+  - 时间：`estimateUpdatedAt`（由 `gztime` 显示 `MM-DD HH:mm`）
+
+- `昨日涨幅`（`yesterdayChangePercent`）
+  - 展示：`zzl`（百分比）
+  - 时间：`officialUpdatedAt`
+
+- `估值涨幅`（`estimateChangePercent`）
+  - 展示：`gszzl`（百分比）
+  - 时间：`estimateUpdatedAt`
+
+- `估算收益`（`totalChangePercent`，金额口径）
+  - 优先：`(gsz - cost) * share`
+  - 回退：`metrics.profitTotal`
+  - 时间：`estimatedProfitUpdatedAt`（估值可用时显示估值时间，否则官方时间）
+
+- `持仓金额`（`holdingAmount`）
+  - 来源：`getHoldingMetrics().amount`
+  - 盘中估值可用时跟随 `gsz`，否则回落官方链路
+  - 时间：`currentValueUpdatedAt`
+
+- `当日收益`（`todayProfit`）
+  - 盘中：使用估值涨幅链路
+  - 当天官方值已出：切换官方涨幅链路
+  - 时间：`currentValueUpdatedAt`
+  - 图标：`official`=圈内对号，`estimated`=圆圈
+
+- `持有收益`（`holdingProfit`）
+  - 仅官方口径：`(dwjz - cost) * share`
+  - 时间：`officialUpdatedAt`
+
+## 标题栏汇总口径（与表格列区分）
+
+- 总资产：汇总 `row.holdingAmount`
+- 当日收益：汇总 `row.todayProfit`
+- 累计收益：汇总 `row.estimatedHoldingProfit`（估值链路）
+
+说明：标题栏“累计收益”与表格“持有收益”故意分离，前者用于实时资产感知，后者用于官方口径对账。

@@ -7,7 +7,7 @@ import { ArrowDownLeft, ArrowUpRight, Loader2, Sparkles } from "lucide-react";
 import { useAppState } from "@/components/app-provider";
 import { TwSelect } from "@/components/ui/tw-select";
 import { formatCurrency } from "@/lib/portfolio";
-import { nowInMarket, toMarketDay, toMarketTime } from "@/lib/time";
+import { formatMarketDate, nowInMarket, toMarketDay, toMarketTime } from "@/lib/time";
 import type { FundTransaction, FundTransactionType } from "@/lib/types";
 
 type TxItem = FundTransaction & {
@@ -21,6 +21,20 @@ const txOrderToken = (item: TxItem) => {
   const idTs = Number(idPrefix);
   if (Number.isFinite(idTs) && idTs > 0) return idTs;
   return toMarketDay(`${item.date}T00:00:00`).valueOf();
+};
+
+const txDisplayTime = (item: TxItem) => {
+  const idPrefix = String(item.id || "").split("-")[0];
+  const idTs = Number(idPrefix);
+  if (Number.isFinite(idTs) && idTs > 0) {
+    return formatMarketDate(idTs, "YYYY-MM-DD HH:mm");
+  }
+
+  if (/\d{2}:\d{2}/.test(item.date)) {
+    return toMarketDay(item.date).format("YYYY-MM-DD HH:mm");
+  }
+
+  return toMarketDay(`${item.date}T00:00:00`).format("YYYY-MM-DD HH:mm");
 };
 
 const monthLabel = (monthKey: string) => {
@@ -221,7 +235,7 @@ export default function HistoryPage() {
                               <Link href={`/portfolio/${item.code}`} className="text-[10px] font-semibold tabular-nums text-[#57657a] hover:text-[#24467c]">
                                 {item.code}
                               </Link>
-                              <span className="text-[10px] text-[#747781]">{item.date}</span>
+                              <span className="text-[10px] text-[#747781]">{txDisplayTime(item)}</span>
                             </div>
                             <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${confirmed ? "bg-[#f2f3ff] text-[#57657a]" : "bg-[#fff1e6] text-[#a65000]"}`}>
                               {confirmed ? "已确认" : "未确认"}

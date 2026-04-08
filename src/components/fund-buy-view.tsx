@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CalendarDays, ChevronLeft, Info, Repeat2 } from "lucide-react";
+import { ChevronLeft, Info, Repeat2 } from "lucide-react";
+import { DatePicker } from "antd";
+import dayjs from "dayjs";
 
 import { useAppState } from "@/components/app-provider";
 import { formatCurrency, formatSignedCurrency, getHoldingMetrics } from "@/lib/portfolio";
@@ -197,10 +199,14 @@ export function FundBuyView({ code }: FundBuyViewProps) {
         <section className="divide-y divide-[#e2e7ff]">
           <div className="px-3 py-3">
             <label className="mb-1 block text-[10px] font-bold tracking-[0.14em] text-[#747781]">交易确认时间</label>
-            <div className="flex items-center justify-between">
-              <input type="date" value={tradeDate} onChange={(event) => setTradeDate(event.target.value)} className="border-0 bg-transparent p-0 text-sm font-bold text-[#131b2e] outline-none focus:ring-0" />
-              <CalendarDays size={16} className="text-[#747781]" />
-            </div>
+            <DatePicker
+              value={tradeDate ? dayjs(tradeDate, "YYYY-MM-DD") : null}
+              format="YYYY-MM-DD"
+              allowClear={false}
+              inputReadOnly
+              style={{ width: "100%" }}
+              onChange={(_, dateString) => setTradeDate(Array.isArray(dateString) ? dateString[0] || "" : dateString || "")}
+            />
           </div>
           <div className="px-3 py-3">
             <label className="mb-2 block text-[10px] font-bold tracking-[0.14em] text-[#747781]">成交时间节点</label>
@@ -234,7 +240,7 @@ export function FundBuyView({ code }: FundBuyViewProps) {
           type="button"
           onClick={handleConfirm}
           disabled={!amount || !share || !latestNav}
-          className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-[#00193c] px-3 text-sm font-bold text-white disabled:opacity-40"
+          className="inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-[#d5dbea] bg-white px-3 text-sm font-bold text-[#131b2e] disabled:opacity-40"
         >
           确认修改
         </button>

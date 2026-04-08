@@ -9,7 +9,9 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@ant-design/charts": "^2.6.7",
     "@headlessui/react": "^2.2.9",
+    "antd": "^6.3.5",
     "clsx": "^2.1.1",
     "dayjs": "^1.11.13",
     "framer-motion": "^11.18.2",

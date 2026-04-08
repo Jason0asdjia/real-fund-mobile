@@ -554,7 +554,7 @@ export default function PortfolioPage() {
 
   return (
     <div className="-mx-3 -mt-4 flex h-[calc(100dvh-6.6rem)] w-[calc(100%+1.5rem)] max-w-none flex-col gap-0 overflow-hidden bg-white md:-mx-4 md:-mt-4 md:w-[calc(100%+2rem)]">
-      <section className="bg-[#d7e2ff] px-3 pb-5 pt-2 text-[#001b3f]">
+      <section className="bg-[#d7e2ff] px-3 pb-0 pt-2 text-[#001b3f]">
         <header className="flex h-11 items-center justify-between">
           <h1 className="text-2xl font-extrabold leading-none tracking-tight">基金资产概览</h1>
           <Link href="/discover" aria-label="搜索基金" className="rounded-md p-1 text-[#24467c] transition-colors hover:bg-black/5">
