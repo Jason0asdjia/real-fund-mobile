@@ -101,16 +101,16 @@ export default function MarketPage() {
     .slice(0, 6);
 
   return (
-    <div className="-mx-3 -mt-4 min-h-[calc(100dvh-5.5rem)] bg-white text-[#131b2e] md:-mx-4 md:-mt-4">
-      <header className="sticky top-0 z-20 border-b border-[#e2e7ff] bg-white">
-        <div className="flex h-12 items-center justify-between px-3">
-          <h1 className="text-2xl font-extrabold tracking-tight">行情中心</h1>
-          <span />
-        </div>
-      </header>
+    <div className="-mx-3 -mt-4 flex h-[calc(100dvh-5.5rem)] flex-col overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mt-4">
+      <div className="sticky top-0 z-20 shrink-0 bg-white">
+        <header className="border-b border-[#e2e7ff] bg-white">
+          <div className="flex h-12 items-center justify-between px-3">
+            <h1 className="text-2xl font-extrabold tracking-tight">行情中心</h1>
+            <span />
+          </div>
+        </header>
 
-      <main className="pb-24">
-        <section className="flex items-stretch border-b border-[#e2e7ff]">
+        <section className="flex items-stretch border-b border-[#e2e7ff] bg-white">
           <div className="flex flex-1 items-center gap-5 overflow-x-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {marketSnapshot.map((item) => (
               <article key={item.label} className="min-w-fit pr-3">
@@ -124,7 +124,9 @@ export default function MarketPage() {
             <SlidersHorizontal size={16} />
           </div>
         </section>
+      </div>
 
+      <main className="flex-1 overflow-y-auto pb-24">
         <section className="border-b border-[#e2e7ff] py-3">
           <div className="mb-2 flex items-center justify-between px-3">
             <h2 className="text-[10px] font-black tracking-[0.12em]">热门板块</h2>
@@ -158,7 +160,7 @@ export default function MarketPage() {
           </div>
           <div className="divide-y divide-[#f2f3ff]">
             {topFunds.map((item) => (
-              <Link key={item.code} href={`/portfolio/${item.code}`} className="flex items-center justify-between px-3 py-3">
+              <Link key={item.code} href={`/portfolio/${item.code}`} className="flex items-center justify-between px-3 py-1.5">
                 <div className="min-w-0">
                   <p className="truncate text-xs font-bold">{item.name}</p>
                   <p className="text-[10px] font-semibold tabular-nums text-[#747781]">{item.code}</p>

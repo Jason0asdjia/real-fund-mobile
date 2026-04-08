@@ -284,7 +284,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
 
       </main>
 
-      <nav className="fixed bottom-2 left-3 right-3 z-30 grid grid-cols-4 gap-1.5 rounded-2xl border border-slate-200 bg-white/90 p-2 shadow-soft backdrop-blur md:left-1/2 md:right-auto md:w-[560px] md:-translate-x-1/2">
+      <nav className="fixed bottom-2 left-3 right-3 z-30 grid grid-cols-4 gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_3px_10px_rgba(15,23,42,0.12)] md:left-1/2 md:right-auto md:w-[560px] md:-translate-x-1/2">
         <Link href={`/portfolio/${fund.code}/buy?from=detail`} className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-600">
           <CirclePlus size={18} />
           <span className="text-[11px]">加仓</span>

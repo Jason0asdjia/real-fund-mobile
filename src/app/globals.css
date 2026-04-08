@@ -43,7 +43,7 @@
 
 @layer components {
   .app-frame {
-    @apply relative min-h-screen overflow-hidden;
+    @apply relative min-h-[100dvh] overflow-x-hidden bg-white;
   }
 
   .ambient {
@@ -59,7 +59,8 @@
   }
 
   .app-main {
-    @apply relative z-10 px-3 pb-24 pt-4 md:px-4;
+    @apply relative z-10 min-h-[100dvh] bg-white px-3 pt-4 md:px-4;
+    padding-bottom: calc(env(safe-area-inset-bottom) + 4.5rem);
   }
 
   .screen {
@@ -419,7 +420,7 @@
   }
 
   .bottom-nav {
-    @apply fixed bottom-2 left-3 right-3 z-20 grid grid-cols-5 gap-1.5 rounded-2xl border border-slate-200 bg-white/90 p-2 shadow-soft backdrop-blur md:left-1/2 md:right-auto md:w-[560px] md:-translate-x-1/2;
+    @apply fixed bottom-2 left-3 right-3 z-20 grid grid-cols-5 gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_3px_10px_rgba(15,23,42,0.12)] md:left-1/2 md:right-auto md:w-[560px] md:-translate-x-1/2;
     overflow: hidden;
     position: fixed;
     isolation: isolate;
@@ -453,7 +454,7 @@
     -webkit-mask-composite: xor;
     mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     mask-composite: exclude;
-    filter: drop-shadow(0 0 5px rgba(37, 99, 235, 0.34));
+    filter: drop-shadow(0 0 2px rgba(37, 99, 235, 0.18));
     transition: filter 180ms ease-out, background 180ms ease-out;
   }
 
@@ -478,7 +479,7 @@
     mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     mask-composite: exclude;
     padding: var(--bottom-nav-border-width);
-    filter: drop-shadow(0 0 7px rgba(96, 165, 250, 0.68));
+    filter: drop-shadow(0 0 2px rgba(96, 165, 250, 0.24));
   }
 
   .bottom-nav--flash {
