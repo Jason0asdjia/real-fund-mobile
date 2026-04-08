@@ -16,6 +16,8 @@ type FundBoardRow = {
 };
 
 export type MarketSnapshotItem = {
+  id: string;
+  market: "a" | "hk" | "us";
   label: string;
   value: string;
   change: number;
@@ -34,10 +36,17 @@ export type FastNewsItem = {
 
 const JSONP_TIMEOUT_MS = 8000;
 
-const INDEX_TARGETS = [
-  { label: "上证指数", code: "sh000001", varKey: "v_sh000001" },
-  { label: "恒生指数", code: "hkHSI", varKey: "v_hkHSI" },
-  { label: "纳斯达克", code: "usIXIC", varKey: "v_usIXIC" },
+export const MARKET_INDEX_TARGETS = [
+  { id: "sh000001", market: "a", label: "上证指数", code: "sh000001", varKey: "v_sh000001" },
+  { id: "sz399001", market: "a", label: "深证成指", code: "sz399001", varKey: "v_sz399001" },
+  { id: "sz399006", market: "a", label: "创业板指", code: "sz399006", varKey: "v_sz399006" },
+  { id: "sh000300", market: "a", label: "沪深300", code: "sh000300", varKey: "v_sh000300" },
+  { id: "hkHSI", market: "hk", label: "恒生指数", code: "hkHSI", varKey: "v_hkHSI" },
+  { id: "hkHSCEI", market: "hk", label: "恒生国企", code: "hkHSCEI", varKey: "v_hkHSCEI" },
+  { id: "hkHSTECH", market: "hk", label: "恒生科技", code: "hkHSTECH", varKey: "v_hkHSTECH" },
+  { id: "usDJI", market: "us", label: "道琼斯", code: "usDJI", varKey: "v_usDJI" },
+  { id: "usINX", market: "us", label: "标普500", code: "usINX", varKey: "v_usINX" },
+  { id: "usIXIC", market: "us", label: "纳斯达克", code: "usIXIC", varKey: "v_usIXIC" },
 ] as const;
 
 const toNumber = (value: unknown): number | null => {
@@ -152,14 +161,20 @@ const normalizeFundBoardName = (name: string) => {
   return base || name;
 };
 
-export const fetchMarketSnapshot = async (): Promise<MarketSnapshotItem[]> => {
-  const codes = INDEX_TARGETS.map((item) => item.code).join(",");
+export const fetchMarketSnapshot = async (selectedIds?: string[]): Promise<MarketSnapshotItem[]> => {
+  const selectedTargets = (selectedIds?.length
+    ? MARKET_INDEX_TARGETS.filter((item) => selectedIds.includes(item.id))
+    : MARKET_INDEX_TARGETS.slice(0, 3));
+
+  const codes = selectedTargets.map((item) => item.code).join(",");
   await loadScript(`https://qt.gtimg.cn/q=${encodeURIComponent(codes)}&_t=${Date.now()}`);
   const source = window as unknown as Record<string, unknown>;
 
-  return INDEX_TARGETS.map((target) => {
+  return selectedTargets.map((target) => {
     const parsed = parseTencentIndexRaw(source[target.varKey]);
     return {
+      id: target.id,
+      market: target.market,
       label: target.label,
       value: formatValue(parsed.value),
       change: parsed.change,

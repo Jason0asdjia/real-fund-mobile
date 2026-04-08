@@ -1,18 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { SlidersHorizontal } from "lucide-react";
+import { Check, SlidersHorizontal, X } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
-import { fetchFastNews, fetchHotSectors, fetchMarketSnapshot } from "@/lib/market-api";
+import { MARKET_INDEX_TARGETS, fetchFastNews, fetchHotSectors, fetchMarketSnapshot } from "@/lib/market-api";
 import { formatPercent } from "@/lib/portfolio";
 import { todayInMarket } from "@/lib/time";
 
+const MARKET_INDEX_STORAGE_KEY = "real-fund-mobile:market-indices";
+const DEFAULT_MARKET_INDEX_IDS = ["sh000001", "hkHSI", "usIXIC"];
+
 const defaultMarketSnapshot = [
-  { label: "上证指数", value: "3,058.22", change: 0.42 },
-  { label: "恒生指数", value: "16,725.10", change: -1.15 },
-  { label: "纳斯达克", value: "16,085.11", change: 0.82 },
+  { id: "sh000001", market: "a" as const, label: "上证指数", value: "3,058.22", change: 0.42 },
+  { id: "hkHSI", market: "hk" as const, label: "恒生指数", value: "16,725.10", change: -1.15 },
+  { id: "usIXIC", market: "us" as const, label: "纳斯达克", value: "16,085.11", change: 0.82 },
 ];
 
 const defaultHotSectors = [
@@ -44,6 +47,38 @@ export default function MarketPage() {
   const [marketSnapshot, setMarketSnapshot] = useState(defaultMarketSnapshot);
   const [hotSectors, setHotSectors] = useState(defaultHotSectors);
   const [quickNews, setQuickNews] = useState(defaultQuickNews);
+  const [indexModalOpen, setIndexModalOpen] = useState(false);
+  const [selectedIndexIds, setSelectedIndexIds] = useState<string[]>(DEFAULT_MARKET_INDEX_IDS);
+
+  const groupedIndexTargets = useMemo(
+    () => [
+      { key: "a", label: "A股指数", items: MARKET_INDEX_TARGETS.filter((item) => item.market === "a") },
+      { key: "hk", label: "港股指数", items: MARKET_INDEX_TARGETS.filter((item) => item.market === "hk") },
+      { key: "us", label: "美股指数", items: MARKET_INDEX_TARGETS.filter((item) => item.market === "us") },
+    ],
+    [],
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(MARKET_INDEX_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      const next = parsed.filter((item): item is string => typeof item === "string" && MARKET_INDEX_TARGETS.some((target) => target.id === item));
+      if (next.length > 0) {
+        setSelectedIndexIds(next);
+      }
+    } catch {
+      // noop
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(MARKET_INDEX_STORAGE_KEY, JSON.stringify(selectedIndexIds));
+  }, [selectedIndexIds]);
 
   useEffect(() => {
     if (state.funds.length === 0) return;
@@ -51,11 +86,19 @@ export default function MarketPage() {
   }, [refreshFunds, state.funds.length]);
 
   useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.body.classList.toggle("app-modal-open", indexModalOpen);
+    return () => {
+      document.body.classList.remove("app-modal-open");
+    };
+  }, [indexModalOpen]);
+
+  useEffect(() => {
     let active = true;
 
     const loadMarketData = async () => {
       try {
-        const [nextSnapshot, nextSectors, nextQuickNews] = await Promise.all([fetchMarketSnapshot(), fetchHotSectors(2), fetchFastNews(4)]);
+        const [nextSnapshot, nextSectors, nextQuickNews] = await Promise.all([fetchMarketSnapshot(selectedIndexIds), fetchHotSectors(2), fetchFastNews(4)]);
         if (!active) return;
         if (nextSnapshot.length > 0) {
           setMarketSnapshot(nextSnapshot);
@@ -83,7 +126,7 @@ export default function MarketPage() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [state.refreshMs]);
+  }, [selectedIndexIds, state.refreshMs]);
 
   const today = todayInMarket();
 
@@ -100,6 +143,16 @@ export default function MarketPage() {
     .sort((a, b) => (b.change || 0) - (a.change || 0))
     .slice(0, 6);
 
+  const toggleIndexSelection = (id: string) => {
+    setSelectedIndexIds((prev) => {
+      if (prev.includes(id)) {
+        if (prev.length === 1) return prev;
+        return prev.filter((item) => item !== id);
+      }
+      return [...prev, id];
+    });
+  };
+
   return (
     <div className="-mx-3 -mt-4 flex h-[calc(100dvh-5.5rem)] flex-col overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mt-4">
       <div className="sticky top-0 z-20 shrink-0 bg-white">
@@ -113,16 +166,16 @@ export default function MarketPage() {
         <section className="flex items-stretch border-b border-[#e2e7ff] bg-white">
           <div className="flex flex-1 items-center gap-5 overflow-x-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {marketSnapshot.map((item) => (
-              <article key={item.label} className="min-w-fit pr-3">
+              <article key={item.id} className="min-w-fit shrink-0 pr-3">
                 <p className="mb-1 text-base font-extrabold text-[#4e5666]">{item.label}</p>
                 <p className="text-sm font-bold tabular-nums">{item.value}</p>
                 <p className={`text-sm font-semibold ${item.change >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>{formatPercent(item.change)}</p>
               </article>
             ))}
           </div>
-          <div className="flex items-center border-l border-[#e2e7ff] px-3 text-[#747781]">
+          <button type="button" className="flex items-center border-l border-[#e2e7ff] px-3 text-[#747781]" onClick={() => setIndexModalOpen(true)} aria-label="编辑指数显示">
             <SlidersHorizontal size={16} />
-          </div>
+          </button>
         </section>
       </div>
 
@@ -187,6 +240,52 @@ export default function MarketPage() {
           </div>
         </section>
       </main>
+
+      {indexModalOpen ? (
+        <div className="app-modal-backdrop" onClick={() => setIndexModalOpen(false)}>
+          <div className="app-modal-sheet" onClick={(event) => event.stopPropagation()}>
+            <div className="app-modal-sheet__grabber" />
+            <div className="app-modal-sheet__header">
+              <h3 className="m-0 text-base font-bold text-[#131b2e]">指数显示设置</h3>
+              <button
+                type="button"
+                onClick={() => setIndexModalOpen(false)}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[#53617a] hover:bg-slate-100"
+                aria-label="关闭指数设置"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="app-modal-sheet__content">
+              <div className="space-y-4 pb-4">
+                {groupedIndexTargets.map((group) => (
+                  <section key={group.key}>
+                    <h4 className="mb-2 px-1 typo-section-title text-[#131b2e]">{group.label}</h4>
+                    <div className="grid grid-cols-2 gap-2">
+                      {group.items.map((item) => {
+                        const checked = selectedIndexIds.includes(item.id);
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => toggleIndexSelection(item.id)}
+                            className="flex items-center gap-2 rounded-lg border border-[#e2e7ff] px-2.5 py-2 text-left text-sm text-[#131b2e]"
+                          >
+                            <span className={`inline-flex h-4 w-4 items-center justify-center rounded border ${checked ? "border-[#a06d47] bg-[#a06d47] text-white" : "border-[#a3aab8] bg-white text-transparent"}`}>
+                              <Check size={12} strokeWidth={3} />
+                            </span>
+                            <span className="flex-1 leading-5">{item.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
