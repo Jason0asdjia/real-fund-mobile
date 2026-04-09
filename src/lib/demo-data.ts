@@ -1,294 +1,37 @@
-import type { AppState, FundSnapshot, FundTransaction, ValuationPoint } from "@/lib/types";
-import { formatMarketDate, nowInMarket, shiftMarketDay } from "@/lib/time";
+import type { AppState, ValuationPoint } from "@/lib/types";
 
 type DemoSeed = {
   state: AppState;
   valuationSeries: Record<string, ValuationPoint[]>;
 };
 
-type FundSeedConfig = {
-  code: string;
-  name: string;
-  base: number;
-  drift: number;
-  wave: number;
-  dwjz: string;
-  lastNav: string;
-  gszzl: number;
-  zzl: number;
-  holding: {
-    share: number;
-    cost: number;
-    firstPurchaseDate: string;
-  };
-  transactions: Array<Omit<FundTransaction, "id">>;
-  favorite?: boolean;
-};
+const DEMO_STATE_RAW = `{"funds":[{"code":"019260","name":"富国恒生红利ETF联接A","dwjz":"1.3633","gsz":1.3623,"gztime":"2026-04-09 14:56","jzrq":"2026-04-08","gszzl":-0.07,"source":"eastmoney","quoteStatus":"estimated","zzl":0.91,"lastNav":"1.351","officialConfirmedAt":"2026-04-09 14:49:09","officialConfirmedForDate":"2026-04-08","fundType":null,"riskLevel":null,"fundManager":null,"fundCompany":null,"fundScale":null,"trackingTarget":null,"inceptionDate":null,"holdings":[],"holdingsReportDate":null,"holdingsIsLastQuarter":false,"archiveStatus":"empty"},{"code":"023298","name":"汇添富中证A500指数增强A","dwjz":"1.4381","gsz":1.4311,"gztime":"2026-04-09 14:56","jzrq":"2026-04-08","gszzl":-0.48,"source":"eastmoney","quoteStatus":"estimated","zzl":3.6,"lastNav":"1.3881","officialConfirmedAt":"2026-04-09 14:40:37","officialConfirmedForDate":"2026-04-08","fundType":null,"riskLevel":null,"fundManager":null,"fundCompany":null,"fundScale":null,"trackingTarget":null,"inceptionDate":null,"holdings":[{"code":"300750","name":"宁德时代","weight":"3.41%","change":null},{"code":"601318","name":"中国平安","weight":"2.63%","change":null},{"code":"300308","name":"中际旭创","weight":"2.46%","change":null},{"code":"601899","name":"紫金矿业","weight":"2.12%","change":null},{"code":"600519","name":"贵州茅台","weight":"1.82%","change":null},{"code":"300502","name":"新易盛","weight":"1.66%","change":null},{"code":"000333","name":"美的集团","weight":"1.52%","change":null},{"code":"600036","name":"招商银行","weight":"1.24%","change":null},{"code":"002475","name":"立讯精密","weight":"1.21%","change":null},{"code":"688256","name":"寒武纪","weight":"1.19%","change":null}],"holdingsReportDate":"2025-12-31","holdingsIsLastQuarter":false,"archiveStatus":"ready"},{"code":"006327","name":"易方达中证海外互联网50ETF联接(QDII)A","dwjz":"0.9234","gsz":null,"gztime":null,"jzrq":"2026-04-07","zzl":-0.22,"gszzl":null,"lastNav":"0.9254","noValuation":true,"officialConfirmedAt":"2026-04-09 14:40:12","officialConfirmedForDate":"2026-04-07","source":"eastmoney","quoteStatus":"official","fundType":null,"riskLevel":null,"fundManager":null,"fundCompany":null,"fundScale":null,"trackingTarget":null,"inceptionDate":null,"holdings":[],"holdingsReportDate":null,"holdingsIsLastQuarter":false,"archiveStatus":"empty"},{"code":"008163","name":"南方标普红利低波50ETF联接A","dwjz":"1.0721","gsz":null,"gztime":null,"jzrq":"2026-04-08","zzl":0.83,"gszzl":null,"lastNav":"1.0633","noValuation":true,"officialConfirmedAt":"2026-04-09 14:39:49","officialConfirmedForDate":"2026-04-08","source":"eastmoney","quoteStatus":"official","fundType":null,"riskLevel":null,"fundManager":null,"fundCompany":null,"fundScale":null,"trackingTarget":null,"inceptionDate":null,"holdings":[{"code":"603156","name":"养元饮品","weight":"0.01%","change":null},{"code":"601225","name":"陕西煤业","weight":"0.01%","change":null},{"code":"600177","name":"雅戈尔","weight":"0.01%","change":null},{"code":"601598","name":"中国外运","weight":"0.01%","change":null},{"code":"002304","name":"洋河股份","weight":"0.01%","change":null},{"code":"600219","name":"南山铝业","weight":"0.01%","change":null},{"code":"601088","name":"中国神华","weight":"0.01%","change":null},{"code":"000895","name":"双汇发展","weight":"0.01%","change":null},{"code":"600028","name":"中国石化","weight":"0.01%","change":null},{"code":"600873","name":"梅花生物","weight":"0.01%","change":null}],"holdingsReportDate":"2025-12-31","holdingsIsLastQuarter":false,"archiveStatus":"ready"},{"code":"012538","name":"华宝中证细分化工产业主题ETF联接C","dwjz":"0.8733","gsz":0.8757,"gztime":"2026-04-09 14:56","jzrq":"2026-04-08","gszzl":0.27,"source":"eastmoney","quoteStatus":"estimated","zzl":1.63,"lastNav":"0.8593","officialConfirmedAt":"2026-04-09 14:39:22","officialConfirmedForDate":"2026-04-08","fundType":null,"riskLevel":null,"fundManager":null,"fundCompany":null,"fundScale":null,"trackingTarget":null,"inceptionDate":null,"holdings":[{"code":"600500","name":"中化国际","weight":"0.00%","change":null}],"holdingsReportDate":"2024-09-30","holdingsIsLastQuarter":false,"archiveStatus":"ready"},{"code":"163407","name":"兴全沪深300指数(LOF)A","dwjz":"2.6669","gsz":2.6498,"gztime":"2026-04-09 14:56","jzrq":"2026-04-08","gszzl":-0.64,"source":"eastmoney","quoteStatus":"estimated","zzl":2.78,"lastNav":"2.5947","officialConfirmedAt":"2026-04-09 14:38:32","officialConfirmedForDate":"2026-04-08","holdings":[{"code":"601318","name":"中国平安","weight":"7.01%","change":null},{"code":"000938","name":"紫光股份","weight":"5.46%","change":null},{"code":"601888","name":"中国中免","weight":"4.33%","change":null},{"code":"600741","name":"华域汽车","weight":"4.01%","change":null},{"code":"000895","name":"双汇发展","weight":"3.85%","change":null},{"code":"601138","name":"工业富联","weight":"3.58%","change":null},{"code":"600519","name":"贵州茅台","weight":"3.40%","change":null},{"code":"601009","name":"南京银行","weight":"2.76%","change":null},{"code":"000100","name":"TCL科技","weight":"2.64%","change":null},{"code":"601601","name":"中国太保","weight":"2.40%","change":null}],"holdingsReportDate":"2025-12-31","holdingsIsLastQuarter":false,"archiveStatus":"ready","fundType":null,"riskLevel":null,"fundManager":null,"fundCompany":null,"fundScale":null,"trackingTarget":null,"inceptionDate":null},{"code":"001717","name":"工银前沿医疗股票A","dwjz":"3.235","gsz":3.1731,"gztime":"2026-04-09 14:56","jzrq":"2026-04-08","gszzl":-1.91,"source":"eastmoney","quoteStatus":"estimated","zzl":1.25,"lastNav":"3.195","officialConfirmedAt":"2026-04-09 14:38:00","officialConfirmedForDate":"2026-04-08","holdings":[{"code":"600276","name":"恒瑞医药","weight":"9.88%","change":null},{"code":"002653","name":"海思科","weight":"9.15%","change":null},{"code":"002422","name":"科伦药业","weight":"7.33%","change":null},{"code":"002294","name":"信立泰","weight":"7.20%","change":null},{"code":"688235","name":"百济神州","weight":"6.10%","change":null},{"code":"300765","name":"新诺威","weight":"5.94%","change":null},{"code":"688266","name":"泽璟制药","weight":"4.95%","change":null},{"code":"000963","name":"华东医药","weight":"4.48%","change":null},{"code":"300347","name":"泰格医药","weight":"4.19%","change":null},{"code":"603259","name":"药明康德","weight":"4.12%","change":null}],"holdingsReportDate":"2025-12-31","holdingsIsLastQuarter":false,"archiveStatus":"ready","fundType":null,"riskLevel":null,"fundManager":null,"fundCompany":null,"fundScale":null,"trackingTarget":null,"inceptionDate":null},{"code":"519704","name":"交银先进制造混合A","dwjz":"6.0778","gsz":6.0483,"gztime":"2026-04-09 14:56","jzrq":"2026-04-08","gszzl":-0.49,"source":"eastmoney","quoteStatus":"estimated","zzl":3.35,"lastNav":"5.881","officialConfirmedAt":"2026-04-09 14:37:17","officialConfirmedForDate":"2026-04-08","holdings":[{"code":"688002","name":"睿创微纳","weight":"5.71%","change":null},{"code":"300502","name":"新易盛","weight":"4.76%","change":null},{"code":"605117","name":"德业股份","weight":"4.65%","change":null},{"code":"300308","name":"中际旭创","weight":"4.44%","change":null},{"code":"600316","name":"洪都航空","weight":"4.37%","change":null},{"code":"601899","name":"紫金矿业","weight":"3.58%","change":null},{"code":"688639","name":"华恒生物","weight":"3.15%","change":null},{"code":"000975","name":"山金国际","weight":"2.87%","change":null},{"code":"603986","name":"兆易创新","weight":"2.85%","change":null},{"code":"000333","name":"美的集团","weight":"2.81%","change":null}],"holdingsReportDate":"2025-12-31","holdingsIsLastQuarter":false,"archiveStatus":"ready","fundType":null,"riskLevel":null,"fundManager":null,"fundCompany":null,"fundScale":null,"trackingTarget":null,"inceptionDate":null},{"code":"014805","name":"国金量化精选混合A","dwjz":"2.0719","gsz":2.071,"gztime":"2026-04-09 14:56","jzrq":"2026-04-08","gszzl":-0.04,"source":"eastmoney","quoteStatus":"estimated","zzl":4.493645350010085,"lastNav":"1.9828","officialConfirmedAt":"2026-04-09 14:36:53","officialConfirmedForDate":"2026-04-08","holdings":[{"code":"300058","name":"蓝色光标","weight":"1.56%","change":null},{"code":"301308","name":"江波龙","weight":"1.54%","change":null},{"code":"000063","name":"中兴通讯","weight":"1.13%","change":null},{"code":"002384","name":"东山精密","weight":"1.05%","change":null},{"code":"000651","name":"格力电器","weight":"1.03%","change":null},{"code":"000338","name":"潍柴动力","weight":"1.03%","change":null},{"code":"300274","name":"阳光电源","weight":"1.01%","change":null},{"code":"300438","name":"鹏辉能源","weight":"0.98%","change":null},{"code":"002074","name":"国轩高科","weight":"0.95%","change":null},{"code":"600487","name":"亨通光电","weight":"0.95%","change":null}],"holdingsReportDate":"2025-12-31","holdingsIsLastQuarter":false,"archiveStatus":"ready","fundType":null,"riskLevel":null,"fundManager":null,"fundCompany":null,"fundScale":null,"trackingTarget":null,"inceptionDate":null},{"code":"000628","name":"大成高鑫股票A","dwjz":"5.1475","gsz":5.127,"gztime":"2026-04-09 14:56","jzrq":"2026-04-08","gszzl":-0.4,"source":"eastmoney","quoteStatus":"estimated","zzl":1.9912819496730783,"lastNav":"5.047","officialConfirmedAt":"2026-04-09 14:36:25","officialConfirmedForDate":"2026-04-08","holdings":[{"code":"000333","name":"美的集团","weight":"9.03%","change":null},{"code":"00941","name":"中国移动","weight":"8.76%","change":null},{"code":"002595","name":"豪迈科技","weight":"8.63%","change":null},{"code":"600690","name":"海尔智家","weight":"6.62%","change":null},{"code":"00700","name":"腾讯控股","weight":"5.05%","change":null},{"code":"600660","name":"福耀玻璃","weight":"5.03%","change":null},{"code":"00883","name":"中国海洋石油","weight":"4.94%","change":null},{"code":"600741","name":"华域汽车","weight":"3.36%","change":null},{"code":"600352","name":"浙江龙盛","weight":"3.23%","change":null},{"code":"300750","name":"宁德时代","weight":"3.02%","change":null}],"holdingsReportDate":"2025-12-31","holdingsIsLastQuarter":false,"archiveStatus":"ready","fundType":null,"riskLevel":null,"fundManager":null,"fundCompany":null,"fundScale":null,"trackingTarget":null,"inceptionDate":null},{"code":"166001","name":"中欧新趋势混合A","dwjz":"1.6695","gsz":1.6703,"gztime":"2026-04-09 14:56","jzrq":"2026-04-08","gszzl":0.05,"source":"eastmoney","quoteStatus":"estimated","zzl":3.844000746407917,"lastNav":"1.6077","officialConfirmedAt":"2026-04-09 14:35:58","officialConfirmedForDate":"2026-04-08","holdings":[{"code":"600309","name":"万华化学","weight":"8.14%","change":null},{"code":"000807","name":"云铝股份","weight":"6.54%","change":null},{"code":"300308","name":"中际旭创","weight":"6.03%","change":null},{"code":"603259","name":"药明康德","weight":"5.69%","change":null},{"code":"603993","name":"洛阳钼业","weight":"5.67%","change":null},{"code":"601318","name":"中国平安","weight":"5.34%","change":null},{"code":"300502","name":"新易盛","weight":"5.03%","change":null},{"code":"601600","name":"中国铝业","weight":"4.72%","change":null},{"code":"603228","name":"景旺电子","weight":"4.30%","change":null},{"code":"000933","name":"神火股份","weight":"3.95%","change":null}],"holdingsReportDate":"2025-12-31","holdingsIsLastQuarter":false,"archiveStatus":"ready","fundType":null,"riskLevel":null,"fundManager":null,"fundCompany":null,"fundScale":null,"trackingTarget":null,"inceptionDate":null},{"code":"450009","name":"国富中小盘股票A","dwjz":"2.6646","gsz":2.6311,"gztime":"2026-04-09 14:56","jzrq":"2026-04-08","gszzl":-1.26,"source":"eastmoney","quoteStatus":"estimated","zzl":1.9630352427964606,"lastNav":"2.6133","officialConfirmedAt":"2026-04-09 14:35:35","officialConfirmedForDate":"2026-04-08","fundType":null,"riskLevel":null,"fundManager":null,"fundCompany":null,"fundScale":null,"trackingTarget":null,"inceptionDate":null,"holdings":[{"code":"601577","name":"长沙银行","weight":"8.44%","change":null},{"code":"600016","name":"民生银行","weight":"7.24%","change":null},{"code":"601128","name":"常熟银行","weight":"7.13%","change":null},{"code":"002568","name":"百润股份","weight":"5.95%","change":null},{"code":"002035","name":"华帝股份","weight":"5.51%","change":null},{"code":"601665","name":"齐鲁银行","weight":"4.53%","change":null},{"code":"000683","name":"博源化工","weight":"3.58%","change":null},{"code":"001979","name":"招商蛇口","weight":"3.52%","change":null},{"code":"601155","name":"新城控股","weight":"3.46%","change":null},{"code":"600048","name":"保利发展","weight":"3.20%","change":null}],"holdingsReportDate":"2025-12-31","holdingsIsLastQuarter":false,"archiveStatus":"ready"},{"code":"090013","name":"大成竞争优势混合A","dwjz":"2.077","gsz":2.0757,"gztime":"2026-04-09 14:56","jzrq":"2026-04-08","gszzl":-0.06,"source":"eastmoney","quoteStatus":"estimated","zzl":1.0164875249258374,"lastNav":"2.0561","officialConfirmedAt":"2026-04-09 14:35:09","officialConfirmedForDate":"2026-04-08","holdings":[{"code":"002773","name":"康弘药业","weight":"5.81%","change":null},{"code":"600938","name":"中国海油","weight":"5.09%","change":null},{"code":"000739","name":"普洛药业","weight":"5.00%","change":null},{"code":"00941","name":"中国移动","weight":"4.81%","change":null},{"code":"002318","name":"久立特材","weight":"3.20%","change":null},{"code":"601333","name":"广深铁路","weight":"2.78%","change":null},{"code":"601949","name":"中国出版","weight":"2.42%","change":null},{"code":"600233","name":"圆通速递","weight":"2.23%","change":null},{"code":"603296","name":"华勤技术","weight":"2.18%","change":null},{"code":"603658","name":"安图生物","weight":"2.11%","change":null}],"holdingsReportDate":"2025-12-31","holdingsIsLastQuarter":false,"archiveStatus":"ready","fundType":null,"riskLevel":null,"fundManager":null,"fundCompany":null,"fundScale":null,"trackingTarget":null,"inceptionDate":null},{"code":"005827","name":"易方达蓝筹精选混合","dwjz":"1.7877","gsz":1.7612,"gztime":"2026-04-09 14:56","jzrq":"2026-04-08","gszzl":-1.48,"zzl":2.0027387880862793,"lastNav":"1.7526","holdings":[{"code":"00700","name":"腾讯控股","weight":"9.98%","change":null},{"code":"600519","name":"贵州茅台","weight":"9.90%","change":null},{"code":"000858","name":"五粮液","weight":"9.63%","change":null},{"code":"09988","name":"阿里巴巴-W","weight":"9.60%","change":null},{"code":"600809","name":"山西汾酒","weight":"9.58%","change":null},{"code":"000568","name":"泸州老窖","weight":"9.57%","change":null},{"code":"09987","name":"百胜中国","weight":"8.99%","change":null},{"code":"00883","name":"中国海洋石油","weight":"8.06%","change":null},{"code":"06618","name":"京东健康","weight":"5.11%","change":null},{"code":"002027","name":"分众传媒","weight":"4.68%","change":null}],"holdingsReportDate":"2025-12-31","holdingsIsLastQuarter":false,"source":"eastmoney","quoteStatus":"estimated","officialConfirmedAt":"2026-04-09 01:33:46","officialConfirmedForDate":"2026-04-08","fundType":null,"riskLevel":null,"fundManager":null,"fundCompany":null,"fundScale":null,"trackingTarget":null,"inceptionDate":null,"archiveStatus":"ready"}],"holdings":{"163407":{"share":1159.8785106303199,"cost":2.401889486241142,"firstPurchaseDate":"2026-04-09"},"166001":{"share":612.512728361785,"cost":1.5723754877321312,"firstPurchaseDate":"2026-04-09"},"450009":{"share":617.4885536290625,"cost":2.6047284448388193,"firstPurchaseDate":"2026-04-09"},"519704":{"share":437.7702458126295,"cost":4.307305071635822,"firstPurchaseDate":"2026-04-09"},"005827":{"share":2298.1820215919897,"cost":1.9865832893590298,"firstPurchaseDate":"2025-06-03"},"090013":{"share":267.7804525758305,"cost":2.0539213923549933,"firstPurchaseDate":"2026-04-09"},"000628":{"share":723.0908207867898,"cost":4.42135331841348,"firstPurchaseDate":"2026-04-09"},"014805":{"share":1905.970365365124,"cost":1.4752852673348558,"firstPurchaseDate":"2026-04-09"},"001717":{"share":1418.9304482225657,"cost":3.23234306920771,"firstPurchaseDate":"2026-04-09"},"012538":{"share":1240.2725294858585,"cost":0.8661241577649957,"firstPurchaseDate":"2026-04-09"},"008163":{"share":751.4037869601716,"cost":1.0622783832766456,"firstPurchaseDate":"2026-04-09"},"006327":{"share":827.485380116959,"cost":1.1655432508833923,"firstPurchaseDate":"2026-04-09"},"023298":{"share":353.3133996245046,"cost":1.4208348750246014,"firstPurchaseDate":"2026-04-09"},"019260":{"share":1752.0795129465268,"cost":1.36450428324423,"firstPurchaseDate":"2026-04-09"}},"transactions":{"005827":[{"date":"2026-04-09","type":"buy","share":11.187559433909492,"price":1.7877,"fee":0.03,"note":"15:00前下单","id":"1775717479968-6p5tws"},{"date":"2025-10-09","type":"buy","share":700,"price":1.3624,"fee":0.9,"note":"续持","id":"demo-buy-2-2025-10-09"},{"date":"2025-06-03","type":"buy","share":1200,"price":1.2453,"fee":1,"note":"首发买入","id":"demo-buy-1-2025-06-03"}]},"favorites":[],"refreshMs":60000,"searchHistory":["富国恒生红利ETF联接A","汇添富中证A500指数增强A","易方达中证海外互联网50ETF联接(QDII)A","南方标普红利低波50ETF联接A","华宝中证细分化工产业主题ETF联接C","兴全沪深300指数(LOF)A"],"lastUpdatedAt":"2026-04-09 14:59:56"}`;
 
-const createTransactions = (items: Array<Omit<FundTransaction, "id">>) =>
-  items.map((item, index) => ({ ...item, id: `demo-${item.type}-${index + 1}-${item.date}` }));
+const DEMO_VALUATION_RAW = `{"161725":[{"time":"14:10","value":0.6325,"date":"2026-04-09"}],"163407":[{"time":"14:33","value":2.649,"date":"2026-04-09"},{"time":"14:35","value":2.649,"date":"2026-04-09"},{"time":"14:36","value":2.6488,"date":"2026-04-09"},{"time":"14:38","value":2.6485,"date":"2026-04-09"},{"time":"14:40","value":2.6485,"date":"2026-04-09"},{"time":"14:45","value":2.6477,"date":"2026-04-09"},{"time":"14:47","value":2.6478,"date":"2026-04-09"},{"time":"14:48","value":2.648,"date":"2026-04-09"},{"time":"14:50","value":2.649,"date":"2026-04-09"},{"time":"14:52","value":2.6498,"date":"2026-04-09"},{"time":"14:55","value":2.6497,"date":"2026-04-09"},{"time":"14:56","value":2.6498,"date":"2026-04-09"},{"time":"14:57","value":2.6501,"date":"2026-04-09"},{"time":"14:59","value":2.65,"date":"2026-04-09"},{"time":"15:00","value":2.6498,"date":"2026-04-09"}],"166001":[{"time":"14:32","value":1.67,"date":"2026-04-09"},{"time":"14:33","value":1.6699,"date":"2026-04-09"},{"time":"14:35","value":1.67,"date":"2026-04-09"},{"time":"14:36","value":1.6699,"date":"2026-04-09"},{"time":"14:37","value":1.67,"date":"2026-04-09"},{"time":"14:40","value":1.6694,"date":"2026-04-09"},{"time":"14:45","value":1.6688,"date":"2026-04-09"},{"time":"14:47","value":1.6691,"date":"2026-04-09"},{"time":"14:48","value":1.6694,"date":"2026-04-09"},{"time":"14:50","value":1.6702,"date":"2026-04-09"},{"time":"14:51","value":1.67,"date":"2026-04-09"},{"time":"14:55","value":1.6703,"date":"2026-04-09"},{"time":"14:56","value":1.6703,"date":"2026-04-09"},{"time":"14:57","value":1.6706,"date":"2026-04-09"},{"time":"14:59","value":1.6706,"date":"2026-04-09"},{"time":"15:00","value":1.6702,"date":"2026-04-09"}],"450009":[{"time":"14:32","value":2.6293,"date":"2026-04-09"},{"time":"14:33","value":2.6291,"date":"2026-04-09"},{"time":"14:35","value":2.6286,"date":"2026-04-09"},{"time":"14:36","value":2.6287,"date":"2026-04-09"},{"time":"14:37","value":2.6283,"date":"2026-04-09"},{"time":"14:40","value":2.6284,"date":"2026-04-09"},{"time":"14:45","value":2.6281,"date":"2026-04-09"},{"time":"14:46","value":2.6285,"date":"2026-04-09"},{"time":"14:47","value":2.6284,"date":"2026-04-09"},{"time":"14:48","value":2.6286,"date":"2026-04-09"},{"time":"14:50","value":2.6296,"date":"2026-04-09"},{"time":"14:51","value":2.6294,"date":"2026-04-09"},{"time":"14:55","value":2.6299,"date":"2026-04-09"},{"time":"14:56","value":2.6311,"date":"2026-04-09"},{"time":"14:57","value":2.6313,"date":"2026-04-09"},{"time":"14:59","value":2.6313,"date":"2026-04-09"},{"time":"15:00","value":2.6299,"date":"2026-04-09"}],"519704":[{"time":"14:32","value":6.0455,"date":"2026-04-09"},{"time":"14:33","value":6.044,"date":"2026-04-09"},{"time":"14:35","value":6.0441,"date":"2026-04-09"},{"time":"14:36","value":6.0456,"date":"2026-04-09"},{"time":"14:37","value":6.0448,"date":"2026-04-09"},{"time":"14:40","value":6.0444,"date":"2026-04-09"},{"time":"14:45","value":6.0424,"date":"2026-04-09"},{"time":"14:47","value":6.0445,"date":"2026-04-09"},{"time":"14:50","value":6.048,"date":"2026-04-09"},{"time":"14:51","value":6.0463,"date":"2026-04-09"},{"time":"14:55","value":6.048,"date":"2026-04-09"},{"time":"14:56","value":6.0483,"date":"2026-04-09"},{"time":"14:57","value":6.0484,"date":"2026-04-09"},{"time":"15:00","value":6.0482,"date":"2026-04-09"}],"005827":[{"date":"2025-12-10","time":"14:50","value":1.3255},{"date":"2025-12-11","time":"14:50","value":1.3253},{"date":"2025-12-12","time":"14:50","value":1.3251},{"date":"2025-12-13","time":"14:50","value":1.3247},{"date":"2025-12-14","time":"14:50","value":1.3243},{"date":"2025-12-15","time":"14:50","value":1.3238},{"date":"2025-12-16","time":"14:50","value":1.3233},{"date":"2025-12-17","time":"14:50","value":1.3227},{"date":"2025-12-18","time":"14:50","value":1.3221},{"date":"2025-12-19","time":"14:50","value":1.3214},{"date":"2025-12-20","time":"14:50","value":1.3207},{"date":"2025-12-21","time":"14:50","value":1.3199},{"date":"2025-12-22","time":"14:50","value":1.3192},{"date":"2025-12-23","time":"14:50","value":1.3184},{"date":"2025-12-24","time":"14:50","value":1.3176},{"date":"2025-12-25","time":"14:50","value":1.3168},{"date":"2025-12-26","time":"14:50","value":1.316},{"date":"2025-12-27","time":"14:50","value":1.3152},{"date":"2025-12-28","time":"14:50","value":1.3145},{"date":"2025-12-29","time":"14:50","value":1.3137},{"date":"2025-12-30","time":"14:50","value":1.313},{"date":"2025-12-31","time":"14:50","value":1.3123},{"date":"2026-01-01","time":"14:50","value":1.3117},{"date":"2026-01-02","time":"14:50","value":1.3111},{"date":"2026-01-03","time":"14:50","value":1.3106},{"date":"2026-01-04","time":"14:50","value":1.3101},{"date":"2026-01-05","time":"14:50","value":1.3097},{"date":"2026-01-06","time":"14:50","value":1.3094},{"date":"2026-01-07","time":"14:50","value":1.3091},{"date":"2026-01-08","time":"14:50","value":1.309},{"date":"2026-01-09","time":"14:50","value":1.3089},{"date":"2026-01-10","time":"14:50","value":1.3089},{"date":"2026-01-11","time":"14:50","value":1.3089},{"date":"2026-01-12","time":"14:50","value":1.3091},{"date":"2026-01-13","time":"14:50","value":1.3094},{"date":"2026-01-14","time":"14:50","value":1.3097},{"date":"2026-01-15","time":"14:50","value":1.3102},{"date":"2026-01-16","time":"14:50","value":1.3107},{"date":"2026-01-17","time":"14:50","value":1.3113},{"date":"2026-01-18","time":"14:50","value":1.312},{"date":"2026-01-19","time":"14:50","value":1.3129},{"date":"2026-01-20","time":"14:50","value":1.3138},{"date":"2026-01-21","time":"14:50","value":1.3148},{"date":"2026-01-22","time":"14:50","value":1.3158},{"date":"2026-01-23","time":"14:50","value":1.317},{"date":"2026-01-24","time":"14:50","value":1.3182},{"date":"2026-01-25","time":"14:50","value":1.3196},{"date":"2026-01-26","time":"14:50","value":1.321},{"date":"2026-01-27","time":"14:50","value":1.3224},{"date":"2026-01-28","time":"14:50","value":1.3239},{"date":"2026-01-29","time":"14:50","value":1.3255},{"date":"2026-01-30","time":"14:50","value":1.3271},{"date":"2026-01-31","time":"14:50","value":1.3288},{"date":"2026-02-01","time":"14:50","value":1.3305},{"date":"2026-02-02","time":"14:50","value":1.3322},{"date":"2026-02-03","time":"14:50","value":1.334},{"date":"2026-02-04","time":"14:50","value":1.3358},{"date":"2026-02-05","time":"14:50","value":1.3376},{"date":"2026-02-06","time":"14:50","value":1.3394},{"date":"2026-02-07","time":"14:50","value":1.3412},{"date":"2026-02-08","time":"14:50","value":1.343},{"date":"2026-02-09","time":"14:50","value":1.3448},{"date":"2026-02-10","time":"14:50","value":1.3465},{"date":"2026-02-11","time":"14:50","value":1.3483},{"date":"2026-02-12","time":"14:50","value":1.35},{"date":"2026-02-13","time":"14:50","value":1.3516},{"date":"2026-02-14","time":"14:50","value":1.3532},{"date":"2026-02-15","time":"14:50","value":1.3548},{"date":"2026-02-16","time":"14:50","value":1.3563},{"date":"2026-02-17","time":"14:50","value":1.3577},{"date":"2026-02-18","time":"14:50","value":1.3591},{"date":"2026-02-19","time":"14:50","value":1.3604},{"date":"2026-02-20","time":"14:50","value":1.3616},{"date":"2026-02-21","time":"14:50","value":1.3628},{"date":"2026-02-22","time":"14:50","value":1.3638},{"date":"2026-02-23","time":"14:50","value":1.3648},{"date":"2026-02-24","time":"14:50","value":1.3657},{"date":"2026-02-25","time":"14:50","value":1.3665},{"date":"2026-02-26","time":"14:50","value":1.3672},{"date":"2026-02-27","time":"14:50","value":1.3678},{"date":"2026-02-28","time":"14:50","value":1.3683},{"date":"2026-03-01","time":"14:50","value":1.3688},{"date":"2026-03-02","time":"14:50","value":1.3691},{"date":"2026-03-03","time":"14:50","value":1.3693},{"date":"2026-03-04","time":"14:50","value":1.3695},{"date":"2026-03-05","time":"14:50","value":1.3695},{"date":"2026-03-06","time":"14:50","value":1.3695},{"date":"2026-03-07","time":"14:50","value":1.3694},{"date":"2026-03-08","time":"14:50","value":1.3692},{"date":"2026-03-09","time":"14:50","value":1.3689},{"date":"2026-03-10","time":"14:50","value":1.3685},{"date":"2026-03-11","time":"14:50","value":1.3681},{"date":"2026-03-12","time":"14:50","value":1.3676},{"date":"2026-03-13","time":"14:50","value":1.3671},{"date":"2026-03-14","time":"14:50","value":1.3665},{"date":"2026-03-15","time":"14:50","value":1.3659},{"date":"2026-03-16","time":"14:50","value":1.3652},{"date":"2026-03-17","time":"14:50","value":1.3645},{"date":"2026-03-18","time":"14:50","value":1.3637},{"date":"2026-03-19","time":"14:50","value":1.363},{"date":"2026-03-20","time":"14:50","value":1.3622},{"date":"2026-03-21","time":"14:50","value":1.3614},{"date":"2026-03-22","time":"14:50","value":1.3606},{"date":"2026-03-23","time":"14:50","value":1.3598},{"date":"2026-03-24","time":"14:50","value":1.359},{"date":"2026-03-25","time":"14:50","value":1.3583},{"date":"2026-03-26","time":"14:50","value":1.3575},{"date":"2026-03-27","time":"14:50","value":1.3568},{"date":"2026-03-28","time":"14:50","value":1.3561},{"date":"2026-03-29","time":"14:50","value":1.3555},{"date":"2026-03-30","time":"14:50","value":1.3549},{"date":"2026-03-31","time":"14:50","value":1.3544},{"date":"2026-04-01","time":"14:50","value":1.3539},{"date":"2026-04-02","time":"14:50","value":1.3536},{"date":"2026-04-03","time":"14:50","value":1.3532},{"date":"2026-04-04","time":"14:50","value":1.353},{"date":"2026-04-05","time":"14:50","value":1.3528},{"date":"2026-04-06","time":"14:50","value":1.3527},{"date":"2026-04-07","time":"14:50","value":1.3527},{"date":"2026-04-08","time":"14:50","value":1.3528},{"time":"15:00","value":1.783,"date":"2026-04-08"},{"date":"2026-04-09","time":"09:35","value":1.351},{"date":"2026-04-09","time":"10:10","value":1.3562},{"date":"2026-04-09","time":"10:45","value":1.3601},{"date":"2026-04-09","time":"11:20","value":1.361},{"date":"2026-04-09","time":"13:15","value":1.3588},{"date":"2026-04-09","time":"13:50","value":1.355},{"time":"14:10","value":1.7602,"date":"2026-04-09"},{"time":"14:11","value":1.7604,"date":"2026-04-09"},{"time":"14:12","value":1.7607,"date":"2026-04-09"},{"time":"14:13","value":1.7608,"date":"2026-04-09"},{"time":"14:15","value":1.7607,"date":"2026-04-09"},{"time":"14:16","value":1.7604,"date":"2026-04-09"},{"time":"14:17","value":1.7605,"date":"2026-04-09"},{"time":"14:18","value":1.7608,"date":"2026-04-09"},{"date":"2026-04-09","time":"14:20","value":1.3517},{"time":"14:22","value":1.7608,"date":"2026-04-09"},{"time":"14:23","value":1.7608,"date":"2026-04-09"},{"time":"14:24","value":1.7611,"date":"2026-04-09"},{"time":"14:25","value":1.7613,"date":"2026-04-09"},{"time":"14:27","value":1.7612,"date":"2026-04-09"},{"time":"14:29","value":1.7611,"date":"2026-04-09"},{"time":"14:30","value":1.7612,"date":"2026-04-09"},{"time":"14:32","value":1.7604,"date":"2026-04-09"},{"time":"14:33","value":1.7603,"date":"2026-04-09"},{"time":"14:35","value":1.7602,"date":"2026-04-09"},{"time":"14:36","value":1.7602,"date":"2026-04-09"},{"time":"14:37","value":1.7601,"date":"2026-04-09"},{"time":"14:38","value":1.7605,"date":"2026-04-09"},{"time":"14:40","value":1.7605,"date":"2026-04-09"},{"time":"14:41","value":1.7607,"date":"2026-04-09"},{"time":"14:46","value":1.7605,"date":"2026-04-09"},{"time":"14:47","value":1.7603,"date":"2026-04-09"},{"time":"14:48","value":1.7606,"date":"2026-04-09"},{"time":"14:50","value":1.7611,"date":"2026-04-09"},{"time":"14:53","value":1.7611,"date":"2026-04-09"},{"time":"14:55","value":1.7611,"date":"2026-04-09"},{"time":"14:56","value":1.7612,"date":"2026-04-09"},{"time":"14:57","value":1.7615,"date":"2026-04-09"},{"time":"14:58","value":1.7615,"date":"2026-04-09"},{"time":"15:00","value":1.7611,"date":"2026-04-09"}],"012001":[{"time":"15:00","value":0.9189,"date":"2026-04-08"}],"007333":[{"time":"14:11","value":1.132,"date":"2026-04-09"}],"023333":[{"time":"14:10","value":1.1251,"date":"2026-04-09"}],"011111":[{"time":"14:11","value":1.2031,"date":"2026-04-09"}],"009999":[{"time":"14:11","value":0.821,"date":"2026-04-09"}],"018888":[{"time":"14:12","value":5.0689,"date":"2026-04-09"}],"003096":[{"time":"14:13","value":1.7551,"date":"2026-04-09"}],"090013":[{"time":"14:32","value":2.0754,"date":"2026-04-09"},{"time":"14:33","value":2.0753,"date":"2026-04-09"},{"time":"14:35","value":2.0755,"date":"2026-04-09"},{"time":"14:36","value":2.0758,"date":"2026-04-09"},{"time":"14:37","value":2.0754,"date":"2026-04-09"},{"time":"14:38","value":2.076,"date":"2026-04-09"},{"time":"14:40","value":2.076,"date":"2026-04-09"},{"time":"14:45","value":2.0754,"date":"2026-04-09"},{"time":"14:47","value":2.0753,"date":"2026-04-09"},{"time":"14:48","value":2.0754,"date":"2026-04-09"},{"time":"14:50","value":2.0759,"date":"2026-04-09"},{"time":"14:51","value":2.076,"date":"2026-04-09"},{"time":"14:53","value":2.0761,"date":"2026-04-09"},{"time":"14:56","value":2.0757,"date":"2026-04-09"},{"time":"14:57","value":2.0758,"date":"2026-04-09"},{"time":"14:58","value":2.0758,"date":"2026-04-09"},{"time":"15:00","value":2.0752,"date":"2026-04-09"}],"000628":[{"time":"14:33","value":5.1241,"date":"2026-04-09"},{"time":"14:35","value":5.1235,"date":"2026-04-09"},{"time":"14:36","value":5.1243,"date":"2026-04-09"},{"time":"14:37","value":5.1233,"date":"2026-04-09"},{"time":"14:40","value":5.1234,"date":"2026-04-09"},{"time":"14:41","value":5.1241,"date":"2026-04-09"},{"time":"14:46","value":5.124,"date":"2026-04-09"},{"time":"14:48","value":5.1241,"date":"2026-04-09"},{"time":"14:50","value":5.1253,"date":"2026-04-09"},{"time":"14:52","value":5.1261,"date":"2026-04-09"},{"time":"14:55","value":5.1264,"date":"2026-04-09"},{"time":"14:56","value":5.127,"date":"2026-04-09"},{"time":"14:57","value":5.1285,"date":"2026-04-09"},{"time":"14:58","value":5.1283,"date":"2026-04-09"},{"time":"15:00","value":5.1272,"date":"2026-04-09"}],"014805":[{"time":"14:32","value":2.0701,"date":"2026-04-09"},{"time":"14:35","value":2.07,"date":"2026-04-09"},{"time":"14:36","value":2.0699,"date":"2026-04-09"},{"time":"14:37","value":2.0701,"date":"2026-04-09"},{"time":"14:38","value":2.07,"date":"2026-04-09"},{"time":"14:40","value":2.0694,"date":"2026-04-09"},{"time":"14:41","value":2.0695,"date":"2026-04-09"},{"time":"14:46","value":2.0691,"date":"2026-04-09"},{"time":"14:47","value":2.0693,"date":"2026-04-09"},{"time":"14:48","value":2.0695,"date":"2026-04-09"},{"time":"14:50","value":2.0703,"date":"2026-04-09"},{"time":"14:51","value":2.0703,"date":"2026-04-09"},{"time":"14:52","value":2.071,"date":"2026-04-09"},{"time":"14:55","value":2.0709,"date":"2026-04-09"},{"time":"14:56","value":2.071,"date":"2026-04-09"},{"time":"14:57","value":2.0714,"date":"2026-04-09"},{"time":"14:58","value":2.0715,"date":"2026-04-09"},{"time":"15:00","value":2.071,"date":"2026-04-09"}],"001717":[{"time":"14:35","value":3.1705,"date":"2026-04-09"},{"time":"14:36","value":3.171,"date":"2026-04-09"},{"time":"14:40","value":3.1712,"date":"2026-04-09"},{"time":"14:41","value":3.1723,"date":"2026-04-09"},{"time":"14:46","value":3.1719,"date":"2026-04-09"},{"time":"14:48","value":3.1729,"date":"2026-04-09"},{"time":"14:50","value":3.1735,"date":"2026-04-09"},{"time":"14:52","value":3.1747,"date":"2026-04-09"},{"time":"14:55","value":3.1736,"date":"2026-04-09"},{"time":"14:56","value":3.1731,"date":"2026-04-09"},{"time":"14:57","value":3.1736,"date":"2026-04-09"},{"time":"14:58","value":3.1738,"date":"2026-04-09"},{"time":"15:00","value":3.1726,"date":"2026-04-09"}],"019260":[{"time":"14:35","value":1.3625,"date":"2026-04-09"},{"time":"14:46","value":1.3628,"date":"2026-04-09"},{"time":"14:47","value":1.3622,"date":"2026-04-09"},{"time":"14:48","value":1.3625,"date":"2026-04-09"},{"time":"14:50","value":1.3623,"date":"2026-04-09"},{"time":"14:52","value":1.3626,"date":"2026-04-09"},{"time":"14:53","value":1.3628,"date":"2026-04-09"},{"time":"14:55","value":1.3622,"date":"2026-04-09"},{"time":"14:56","value":1.3623,"date":"2026-04-09"},{"time":"14:57","value":1.3622,"date":"2026-04-09"},{"time":"14:58","value":1.3623,"date":"2026-04-09"},{"time":"14:59","value":1.3622,"date":"2026-04-09"},{"time":"15:00","value":1.3619,"date":"2026-04-09"}],"012538":[{"time":"14:36","value":0.8755,"date":"2026-04-09"},{"time":"14:38","value":0.8756,"date":"2026-04-09"},{"time":"14:40","value":0.8751,"date":"2026-04-09"},{"time":"14:46","value":0.8753,"date":"2026-04-09"},{"time":"14:48","value":0.8755,"date":"2026-04-09"},{"time":"14:50","value":0.8757,"date":"2026-04-09"},{"time":"14:52","value":0.8758,"date":"2026-04-09"},{"time":"14:55","value":0.8757,"date":"2026-04-09"},{"time":"14:56","value":0.8757,"date":"2026-04-09"},{"time":"14:57","value":0.8757,"date":"2026-04-09"},{"time":"14:58","value":0.8758,"date":"2026-04-09"},{"time":"15:00","value":0.8754,"date":"2026-04-09"}],"023298":[{"time":"14:37","value":1.4303,"date":"2026-04-09"},{"time":"14:38","value":1.4304,"date":"2026-04-09"},{"time":"14:40","value":1.4303,"date":"2026-04-09"},{"time":"14:41","value":1.4302,"date":"2026-04-09"},{"time":"14:46","value":1.4299,"date":"2026-04-09"},{"time":"14:47","value":1.43,"date":"2026-04-09"},{"time":"14:48","value":1.43,"date":"2026-04-09"},{"time":"14:51","value":1.4306,"date":"2026-04-09"},{"time":"14:55","value":1.431,"date":"2026-04-09"},{"time":"14:56","value":1.4311,"date":"2026-04-09"},{"time":"14:57","value":1.4313,"date":"2026-04-09"},{"time":"14:58","value":1.4314,"date":"2026-04-09"},{"time":"15:00","value":1.4311,"date":"2026-04-09"}]}`;
 
-const buildSeries = (code: string, base: number, drift: number, wave: number) => {
-  const now = nowInMarket();
-  const points: ValuationPoint[] = [];
-
-  for (let offset = 120; offset >= 1; offset -= 1) {
-    const date = shiftMarketDay(now, -offset);
-    const progress = (120 - offset) / 119;
-    const value = base + drift * progress + Math.sin(progress * 8.6 + code.length * 0.35) * wave;
-    points.push({
-      date: formatMarketDate(date),
-      time: "14:50",
-      value: Number(value.toFixed(4)),
-    });
-  }
-
-  const today = formatMarketDate(now);
-  const intradayBase = points[points.length - 1]?.value ?? base;
-  const intradayOffsets = ["09:35", "10:10", "10:45", "11:20", "13:15", "13:50", "14:20", "14:50"];
-  intradayOffsets.forEach((time, index) => {
-    const value = intradayBase + Math.sin(index * 0.72 + code.length) * wave * 0.36 + index * drift * 0.011;
-    points.push({
-      date: today,
-      time,
-      value: Number(value.toFixed(4)),
-    });
+const buildValuationSeriesFromState = (state: AppState): Record<string, ValuationPoint[]> => {
+  const series: Record<string, ValuationPoint[]> = {};
+  state.funds.forEach((fund) => {
+    const gsz = Number(fund.gsz);
+    const gztime = fund.gztime;
+    if (Number.isFinite(gsz) && gztime && typeof gztime === "string" && gztime.length >= 16) {
+      series[fund.code] = [{
+        date: gztime.slice(0, 10),
+        time: gztime.slice(11, 16),
+        value: gsz,
+      }];
+    } else {
+      series[fund.code] = [];
+    }
   });
-
-  return points;
+  return series;
 };
 
-const buildDemoHoldings = (seed: number) => {
-  const list = [
-    { code: "600519", name: "贵州茅台" },
-    { code: "300750", name: "宁德时代" },
-    { code: "601318", name: "中国平安" },
-    { code: "600036", name: "招商银行" },
-    { code: "000333", name: "美的集团" },
-  ];
-  return list.map((item, index) => ({
-    ...item,
-    weight: `${(9.2 - index * 1.1 + (seed % 3) * 0.2).toFixed(2)}%`,
-    change: Number((Math.sin(seed + index * 0.73) * 1.8).toFixed(2)),
-  }));
-};
-
-const fundConfigs: FundSeedConfig[] = [
-  {
-    code: "003333",
-    name: "泰信智选成长灵活配置混合A",
-    base: 0.92,
-    drift: -0.08,
-    wave: 0.03,
-    dwjz: "0.8426",
-    lastNav: "0.8382",
-    gszzl: 0.58,
-    zzl: -0.24,
-    holding: { share: 4100, cost: 0.8924, firstPurchaseDate: "2025-10-15" },
-    transactions: [
-      { date: "2025-10-15", type: "buy", share: 2000, price: 0.9682, fee: 1.8, note: "首次建仓" },
-      { date: "2025-12-12", type: "buy", share: 1800, price: 0.9134, fee: 1.4, note: "补仓" },
-      { date: "2026-02-18", type: "sell", share: 900, price: 0.9578, fee: 1.2, note: "止盈一部分" },
-      { date: "2026-03-10", type: "buy", share: 1200, price: 0.8264, fee: 1.0, note: "回补" },
-    ],
-    favorite: true,
-  },
-  {
-    code: "007333",
-    name: "嘉百馨升纯债C",
-    base: 1.01,
-    drift: 0.12,
-    wave: 0.025,
-    dwjz: "1.1270",
-    lastNav: "1.1252",
-    gszzl: 0.16,
-    zzl: 0.03,
-    holding: { share: 5500, cost: 1.0497, firstPurchaseDate: "2025-09-08" },
-    transactions: [
-      { date: "2025-09-08", type: "buy", share: 3500, price: 1.0311, fee: 1.5, note: "稳健仓位" },
-      { date: "2026-01-22", type: "buy", share: 2000, price: 1.0822, fee: 1.3, note: "继续加仓" },
-    ],
-  },
-  {
-    code: "023333",
-    name: "金鹰中证A500指数发起A",
-    base: 1.18,
-    drift: -0.02,
-    wave: 0.02,
-    dwjz: "1.1055",
-    lastNav: "1.1093",
-    gszzl: -0.34,
-    zzl: 0.41,
-    holding: { share: 3400, cost: 1.1541, firstPurchaseDate: "2025-11-01" },
-    transactions: [
-      { date: "2025-11-01", type: "buy", share: 2600, price: 1.2145, fee: 1.6, note: "指数底仓" },
-      { date: "2026-02-05", type: "buy", share: 1400, price: 1.0962, fee: 1.1, note: "低位加仓" },
-      { date: "2026-03-14", type: "sell", share: 600, price: 1.1428, fee: 1.0, note: "减仓测试" },
-    ],
-    favorite: true,
-  },
-  {
-    code: "016161",
-    name: "天弘永利优享债券A",
-    base: 1.06,
-    drift: 0.08,
-    wave: 0.014,
-    dwjz: "1.1379",
-    lastNav: "1.1365",
-    gszzl: 0.12,
-    zzl: 0.05,
-    holding: { share: 6200, cost: 1.0832, firstPurchaseDate: "2025-08-20" },
-    transactions: [
-      { date: "2025-08-20", type: "buy", share: 4000, price: 1.0516, fee: 1.4, note: "底仓" },
-      { date: "2026-01-12", type: "buy", share: 2200, price: 1.1391, fee: 1.2, note: "滚动增配" },
-    ],
-  },
-  {
-    code: "011111",
-    name: "华泰柏瑞行业严选混合A",
-    base: 1.22,
-    drift: -0.15,
-    wave: 0.038,
-    dwjz: "1.0825",
-    lastNav: "1.0731",
-    gszzl: 0.88,
-    zzl: -0.62,
-    holding: { share: 2800, cost: 1.1648, firstPurchaseDate: "2025-07-18" },
-    transactions: [
-      { date: "2025-07-18", type: "buy", share: 1800, price: 1.2562, fee: 1.4, note: "主题仓" },
-      { date: "2025-12-30", type: "buy", share: 1000, price: 0.9993, fee: 1.0, note: "左侧补仓" },
-    ],
-  },
-  {
-    code: "005827",
-    name: "易方达蓝筹精选混合",
-    base: 1.31,
-    drift: 0.06,
-    wave: 0.018,
-    dwjz: "1.3755",
-    lastNav: "1.3726",
-    gszzl: 0.21,
-    zzl: 0.08,
-    holding: { share: 1900, cost: 1.2886, firstPurchaseDate: "2025-06-03" },
-    transactions: [
-      { date: "2025-06-03", type: "buy", share: 1200, price: 1.2453, fee: 1.0, note: "首发买入" },
-      { date: "2025-10-09", type: "buy", share: 700, price: 1.3624, fee: 0.9, note: "续持" },
-    ],
-  },
-  {
-    code: "161725",
-    name: "招商中证白酒指数(LOF)A",
-    base: 1.48,
-    drift: -0.11,
-    wave: 0.041,
-    dwjz: "1.2968",
-    lastNav: "1.2875",
-    gszzl: 0.72,
-    zzl: -0.44,
-    holding: { share: 2300, cost: 1.3521, firstPurchaseDate: "2025-05-16" },
-    transactions: [
-      { date: "2025-05-16", type: "buy", share: 1400, price: 1.4612, fee: 1.1, note: "价值仓" },
-      { date: "2025-11-25", type: "sell", share: 500, price: 1.4026, fee: 1.0, note: "减仓" },
-      { date: "2026-03-07", type: "buy", share: 1400, price: 1.2872, fee: 1.2, note: "回补" },
-    ],
-  },
-  {
-    code: "009999",
-    name: "招商量化精选股票A",
-    base: 1.14,
-    drift: 0.1,
-    wave: 0.033,
-    dwjz: "1.2462",
-    lastNav: "1.2388",
-    gszzl: 0.6,
-    zzl: 0.19,
-    holding: { share: 3600, cost: 1.1685, firstPurchaseDate: "2025-09-30" },
-    transactions: [
-      { date: "2025-09-30", type: "buy", share: 1800, price: 1.1036, fee: 1.2, note: "量化策略" },
-      { date: "2026-01-08", type: "buy", share: 1800, price: 1.2334, fee: 1.2, note: "趋势确认" },
-    ],
-  },
-  {
-    code: "018888",
-    name: "易方达消费精选混合A",
-    base: 1.36,
-    drift: -0.18,
-    wave: 0.046,
-    dwjz: "1.1027",
-    lastNav: "1.0945",
-    gszzl: 0.75,
-    zzl: -0.83,
-    holding: { share: 2700, cost: 1.2143, firstPurchaseDate: "2025-04-11" },
-    transactions: [
-      { date: "2025-04-11", type: "buy", share: 1600, price: 1.3384, fee: 1.3, note: "消费配置" },
-      { date: "2025-12-02", type: "buy", share: 1100, price: 1.0321, fee: 1.0, note: "低位吸纳" },
-    ],
-  },
-  {
-    code: "003096",
-    name: "中欧医疗健康混合C",
-    base: 1.58,
-    drift: -0.24,
-    wave: 0.052,
-    dwjz: "1.2041",
-    lastNav: "1.1932",
-    gszzl: 0.91,
-    zzl: -0.97,
-    holding: { share: 2100, cost: 1.3369, firstPurchaseDate: "2025-03-28" },
-    transactions: [
-      { date: "2025-03-28", type: "buy", share: 1300, price: 1.4972, fee: 1.2, note: "医药仓位" },
-      { date: "2025-10-18", type: "sell", share: 400, price: 1.4215, fee: 1.0, note: "降低波动" },
-      { date: "2026-02-26", type: "buy", share: 1200, price: 1.1128, fee: 1.1, note: "再平衡" },
-    ],
-  },
-];
+const parsedDemoState = JSON.parse(DEMO_STATE_RAW) as AppState;
+const parsedDemoValuationSeries = JSON.parse(DEMO_VALUATION_RAW) as Record<string, ValuationPoint[]>;
 
 export const buildDemoSeed = (): DemoSeed => {
-  const now = nowInMarket();
-  const today = formatMarketDate(now);
-  const lastTradeDay = formatMarketDate(shiftMarketDay(now, -1));
-
-  const valuationSeries = Object.fromEntries(
-    fundConfigs.map((item) => [item.code, buildSeries(item.code, item.base, item.drift, item.wave)]),
-  );
-
-  const funds: FundSnapshot[] = fundConfigs.map((item) => ({
-    code: item.code,
-    name: item.name,
-    dwjz: item.dwjz,
-    gsz: valuationSeries[item.code].at(-1)?.value ?? Number(item.dwjz),
-    gztime: `${today} 14:50`,
-    jzrq: lastTradeDay,
-    gszzl: item.gszzl,
-    zzl: item.zzl,
-    lastNav: item.lastNav,
-    holdings: buildDemoHoldings(Number(item.code.slice(-2))),
-    holdingsReportDate: lastTradeDay,
-    holdingsIsLastQuarter: true,
-    source: "eastmoney",
-    quoteStatus: "estimated",
-  }));
-
-  const transactions: Record<string, FundTransaction[]> = Object.fromEntries(
-    fundConfigs.map((item) => [item.code, createTransactions(item.transactions)]),
-  );
-
-  const holdings = Object.fromEntries(
-    fundConfigs.map((item) => [item.code, item.holding]),
-  );
-
-  const favorites = fundConfigs.filter((item) => item.favorite).map((item) => item.code);
-  const searchHistory = fundConfigs.slice(0, 8).map((item) => item.name);
-
-  const state: AppState = {
-    funds,
-    holdings,
-    transactions,
-    favorites,
-    refreshMs: 60000,
-    searchHistory,
-    lastUpdatedAt: nowInMarket().format("YYYY-MM-DD HH:mm:ss"),
-  };
-
+  const state = JSON.parse(JSON.stringify(parsedDemoState)) as AppState;
+  const valuationSeries = JSON.parse(JSON.stringify(parsedDemoValuationSeries || buildValuationSeriesFromState(state))) as Record<string, ValuationPoint[]>;
   return { state, valuationSeries };
 };

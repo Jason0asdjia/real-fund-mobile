@@ -5,7 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Check, Circle, GripVertical, Search, SlidersHorizontal, X } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
-import { applyConfirmedTransactionsToHolding, formatCurrency, formatSignedCurrency } from "@/lib/portfolio";
+import { formatCurrency, formatSignedCurrency } from "@/lib/portfolio";
 import { holdingDaysInMarket, isEstimateTimestampUsable, toMarketDay, todayInMarket } from "@/lib/time";
 import type { FundHolding, FundSnapshot, FundTransaction } from "@/lib/types";
 
@@ -123,13 +123,13 @@ const resolveTodayProfitStatus = (hasOfficialToday: boolean, todayProfit: number
 const buildRows = (
   funds: FundSnapshot[],
   holdings: Record<string, FundHolding>,
-  transactions: Record<string, FundTransaction[]>,
+  _transactions: Record<string, FundTransaction[]>,
   today: string,
 ): PortfolioRow[] => {
   const holdingDaysSettlementLabel = toMarketDay(`${today}T00:00:00`).format("MM-DD");
 
   return funds.map((fund) => {
-    const holding = applyConfirmedTransactionsToHolding(holdings[fund.code], transactions[fund.code] || []);
+    const holding = holdings[fund.code];
     const share = holding?.share != null ? Number(holding.share) : null;
     const unitCost = holding?.cost != null ? Number(holding.cost) : null;
     const hasValidPosition = share != null && Number.isFinite(share) && share > 0;
@@ -192,7 +192,7 @@ const buildRows = (
       fund.officialConfirmedAt && fund.officialConfirmedForDate === fund.jzrq
         ? toMarketDay(fund.officialConfirmedAt).format("MM-DD HH:mm")
         : officialUpdatedAt;
-    const yesterdayChangeUpdatedAt = fund.officialConfirmedAt ? toMarketDay(fund.officialConfirmedAt).format("MM-DD HH:mm") : officialUpdatedAt;
+    const yesterdayChangeUpdatedAt = officialUpdatedAt;
     const estimateUpdatedAt = hasEstimateForDisplay && fund.gztime ? toMarketDay(fund.gztime).format("MM-DD HH:mm") : "—";
     const holdingAmountUpdatedAt = officialConfirmedUpdatedAt;
     const currentValueUpdatedAt = useOfficialForTodayProfit ? officialConfirmedUpdatedAt : canUseEstimate ? estimateUpdatedAt : officialUpdatedAt;
@@ -553,7 +553,7 @@ export default function PortfolioPage() {
 
     const updatedAt =
       id === "latestNav"
-        ? row.officialConfirmedUpdatedAt
+        ? row.officialUpdatedAt
         : id === "yesterdayChangePercent"
           ? row.yesterdayChangeUpdatedAt
         : id === "estimateNav" || id === "estimateChangePercent"
@@ -561,7 +561,7 @@ export default function PortfolioPage() {
         : id === "totalChangePercent"
           ? row.estimatedProfitUpdatedAt
         : id === "holdingProfit"
-          ? row.officialConfirmedUpdatedAt
+          ? row.officialUpdatedAt
         : id === "holdingAmount"
           ? row.holdingAmountUpdatedAt
         : id === "holdingDays"

@@ -138,13 +138,14 @@ export default function MarketPage() {
   const topFunds = [...state.funds]
     .map((fund) => {
       const officialToday = fund.jzrq === today;
+      const nav = officialToday ? toNumber(fund.dwjz) : toNumber(fund.gsz) ?? toNumber(fund.dwjz);
       return {
         ...fund,
         change: getRankedFundChange(fund, today),
-        nav: officialToday ? toNumber(fund.dwjz) : toNumber(fund.gsz) ?? toNumber(fund.dwjz),
+        nav,
       };
     })
-    .filter((fund) => fund.change != null)
+    .filter((fund) => Number.isFinite(fund.change) && fund.nav != null && Number.isFinite(fund.nav) && fund.nav > 0)
     .sort((a, b) => (b.change || 0) - (a.change || 0))
     .slice(0, 6);
 

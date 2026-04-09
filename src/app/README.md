@@ -41,6 +41,7 @@
 - `最新净值`（`latestNav`）
   - 展示：`dwjz`
   - 时间：`officialUpdatedAt`（由 `jzrq` 显示 `MM-DD`）
+  - 规则：当日官方未发布时保留上一交易日日期；发布后切到当日日期
 
 - `估算净值`（`estimateNav`）
   - 展示：`gsz`
@@ -49,6 +50,7 @@
 - `昨日涨幅`（`yesterdayChangePercent`）
   - 展示：`zzl`（百分比）
   - 时间：`officialUpdatedAt`
+  - 规则：当日官方未发布时保留上一交易日日期；发布后切到当日日期
 
 - `估值涨幅`（`estimateChangePercent`）
   - 展示：`gszzl`（百分比）
@@ -57,7 +59,7 @@
 - `估算收益`（`totalChangePercent`，金额口径）
   - 优先：`(gsz - cost) * share`
   - 回退：`metrics.profitTotal`
-  - 时间：`estimatedProfitUpdatedAt`（估值可用时显示估值时间，否则官方时间）
+  - 时间：`estimatedProfitUpdatedAt`（估值可用时显示估值时间，否则显示 `—`）
 
 - `持仓金额`（`holdingAmount`）
   - 来源：`getHoldingMetrics().amount`
@@ -73,6 +75,7 @@
 - `持有收益`（`holdingProfit`）
   - 仅官方口径：`(dwjz - cost) * share`
   - 时间：`officialUpdatedAt`
+  - 规则：与最新净值同步，未发布当日官方时保持上一交易日日期
 
 ## 标题栏汇总口径（与表格列区分）
 

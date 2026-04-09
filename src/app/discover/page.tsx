@@ -102,7 +102,7 @@ export default function DiscoverPage() {
     try {
       const snapshot = await addFund({ ...item, code: targetCode });
       if (!snapshot) return;
-      router.push(`/portfolio/${targetCode}/manage?from=discover`);
+      router.push(`/portfolio/${snapshot.code}/manage?from=discover`);
     } finally {
       setAddingCode(null);
     }

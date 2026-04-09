@@ -40,11 +40,11 @@
 
 - `officialUpdatedAt`：官方日期时间（由 `jzrq` 格式化为 `MM-DD`）。
 - `officialConfirmedUpdatedAt`：官方首次确认时间（`officialConfirmedAt` 与 `officialConfirmedForDate===jzrq` 时显示 `MM-DD HH:mm`，否则回退 `officialUpdatedAt`）。
-- `yesterdayChangeUpdatedAt`：昨日涨幅对应时间（优先 `officialConfirmedAt`，否则回退 `officialUpdatedAt`）。
+- `yesterdayChangeUpdatedAt`：昨日涨幅对应时间（固定使用 `officialUpdatedAt`，即 `jzrq -> MM-DD`）。
 - `estimateUpdatedAt`：估值时间（`gztime` -> `MM-DD HH:mm`）。
 - `holdingAmountUpdatedAt`：持仓金额时间（当前绑定 `officialConfirmedUpdatedAt`）。
 - `currentValueUpdatedAt`：当前值时间（当日收益官方态用官方确认时间，否则估值时间，再否则官方日期）。
-- `estimatedProfitUpdatedAt`：估算收益时间（估值可用时用估值时间，否则官方日期）。
+- `estimatedProfitUpdatedAt`：估算收益时间（仅估值可用时显示估值时间，否则 `—`）。
 - `holdingDaysUpdatedAt`：持有天数时间（按项目时区当天日期 `MM-DD`，自然日 0 点切日）。
 
 ### 2.3 数据层变量（`lib/fund-api.ts`）
@@ -83,9 +83,8 @@
 
 ### 1) 最新净值（`latestNav`）
 - 值：`formatNav(fund.dwjz)`（官方净值）
-- 时间：`officialConfirmedUpdatedAt`
-  - 当 `officialConfirmedAt` 且 `officialConfirmedForDate === jzrq`：显示 `MM-DD HH:mm`
-  - 否则回退 `officialUpdatedAt`（`jzrq` 的 `MM-DD`）
+- 时间：`officialUpdatedAt`（`jzrq` 的 `MM-DD`）
+- 行为：收盘后若当日官方未发布，持续保留上一交易日官方日期（例如 `04-08`）；发布后切到当日官方日期（例如 `04-09`）。
 
 ### 2) 估算净值（`estimateNav`）
 - 值：`fund.noValuation ? "—" : formatNav(fund.gsz)`
@@ -94,9 +93,8 @@
 ### 3) 昨日涨幅（`yesterdayChangePercent`）
 - 值：仅官方 `zzl`；`Number.isFinite(Number(fund.zzl)) ? Number(fund.zzl) : null`
 - 兜底：若本次未拿到新 `zzl`，数据层会沿用上次 `zzl`
-- 时间：`yesterdayChangeUpdatedAt`
-  - 优先 `officialConfirmedAt -> MM-DD HH:mm`
-  - 无则回退 `officialUpdatedAt`
+- 时间：`yesterdayChangeUpdatedAt = officialUpdatedAt`（`jzrq -> MM-DD`）
+- 行为：当日官方未发布时保留上一交易日日期；当日官方发布后切换为当日日期。
 
 ### 4) 估值涨幅（`estimateChangePercent`）
 - 值：`gszzl`
@@ -130,7 +128,8 @@
 
 ### 9) 持有收益（`holdingProfit`）
 - 值：官方口径，`(dwjz - cost) * share`
-- 时间：`officialConfirmedUpdatedAt`
+- 时间：`officialUpdatedAt`（`jzrq -> MM-DD`）
+- 行为：与最新净值保持一致，官方日期未更新时继续显示上一交易日日期。
 
 ---
 
@@ -148,7 +147,7 @@
 
 ### 场景 C：收盘后，今天官方确认值已到
 - 最新净值、昨日涨幅、持仓金额、持有收益：切换到今天官方值。
-- 对应时间：统一走首次官方确认时间（或官方日期回退）。
+- 对应时间：最新净值/昨日涨幅/持有收益使用官方净值日期（`jzrq -> MM-DD`）；当日收益官方态继续使用官方确认时间。
 - 当日收益：状态从 estimated 切到 official（勾选图标）。
 
 ### 场景 D：跨日到次日盘中（次日官方未出）

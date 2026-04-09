@@ -33,8 +33,9 @@ const formatInputNumber = (value: number | null | undefined, digits = 2) => {
 
 export function FundManageView({ code, onBack, asModal = false, redirectOnConfirm = null }: FundManageViewProps) {
   const router = useRouter();
-  const { state, updateHolding } = useAppState();
+  const { addFund, state, updateHolding } = useAppState();
   const fund = state.funds.find((item) => item.code === code);
+  const [fundLoading, setFundLoading] = useState(false);
   const holding = fund ? state.holdings[fund.code] : undefined;
   const metrics = useMemo(() => (fund ? getHoldingMetrics(fund, holding) : null), [fund, holding]);
 
@@ -52,6 +53,16 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
     return dwjz != null && Number.isFinite(dwjz) && dwjz > 0 ? dwjz : null;
   }, [fund?.dwjz]);
 
+  const holdingShare = holding?.share != null && Number.isFinite(Number(holding.share)) ? Number(holding.share) : null;
+  const holdingCost = holding?.cost != null && Number.isFinite(Number(holding.cost)) ? Number(holding.cost) : null;
+  const amountForEdit = holdingShare != null && officialNav != null
+    ? holdingShare * officialNav
+    : metrics?.amount ?? null;
+  const profitForEdit =
+    holdingShare != null && holdingCost != null && officialNav != null
+      ? (officialNav - holdingCost) * holdingShare
+      : metrics?.profitTotal ?? null;
+
   useEffect(() => {
     if (asModal) return;
     document.body.classList.add("app-detail-open");
@@ -61,14 +72,37 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
   }, [asModal]);
 
   useEffect(() => {
-    const share = holding?.share ?? null;
-    const amount = metrics?.amount ?? null;
-    const profit = metrics?.profitTotal ?? null;
-    setShareInput(formatInputNumber(share, 2));
+    if (fund) return;
+
+    let active = true;
+    setFundLoading(true);
+
+    const ensureFund = async () => {
+      try {
+        await addFund({ code, name: code });
+      } finally {
+        if (active) {
+          setFundLoading(false);
+        }
+      }
+    };
+
+    void ensureFund();
+
+    return () => {
+      active = false;
+    };
+  }, [addFund, code, fund]);
+
+  useEffect(() => {
+    const share = holdingShare;
+    const amount = amountForEdit;
+    const profit = profitForEdit;
+    setShareInput(formatInputNumber(share, 4));
     setAmountInput(formatInputNumber(amount, 2));
     setProfitInput(formatInputNumber(profit, 2));
     setDateInput(holding?.firstPurchaseDate || todayInMarket());
-  }, [holding?.firstPurchaseDate, holding?.share, metrics?.amount, metrics?.profitTotal]);
+  }, [amountForEdit, holding?.firstPurchaseDate, holdingShare, profitForEdit]);
 
   const inputShare = toNumber(shareInput);
   const inputAmount = toNumber(amountInput);
@@ -130,8 +164,10 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
         </header>
         <section className="px-3 py-6">
           <div className="rounded-xl border border-[#e2e7ff] bg-[#f8f9ff] p-4">
-             <h2 className="m-0 typo-body-strong">未找到基金</h2>
-            <p className="mb-0 mt-2 text-sm text-[#57657a]">请返回持仓总览页重新进入。</p>
+            <h2 className="m-0 typo-body-strong">{fundLoading ? "正在加载基金" : "未找到基金"}</h2>
+            <p className="mb-0 mt-2 typo-body-strong font-medium text-[#57657a]">
+              {fundLoading ? "正在尝试同步该基金数据，请稍候。" : "请返回持仓总览页重新进入。"}
+            </p>
           </div>
         </section>
       </div>
@@ -198,9 +234,9 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
       <main className="flex-1 overflow-y-auto pb-24">
         <section className="border-b border-[#e2e7ff] px-3 py-4">
             <div className="mb-2 flex items-center justify-between">
-              <p className="typo-label">{mode === "amount" ? "当前持仓" : "当前份额"}</p>
+              <span className="block text-[10px] font-semibold tracking-[0.12em] text-[#747781]">{mode === "amount" ? "当前持仓" : "当前份额"}</span>
               <div className="flex items-center gap-2 rounded-lg border border-[#e2e7ff] bg-[#f8f9ff] p-1">
-                <p className="typo-meta">{mode === "amount" ? "CNY" : "SHARE"}</p>
+                <span className="block text-[10px] font-medium text-[#747781]">{mode === "amount" ? "CNY" : "SHARE"}</span>
                 <button
                   type="button"
                   className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[#d5dbea] bg-white text-[#24467c]"
@@ -212,7 +248,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
               </div>
             </div>
             <div className="relative">
-              <span className="absolute left-0 top-1/2 -translate-y-1/2 text-lg font-normal text-[#131b2e]">{mode === "amount" ? "¥" : "份"}</span>
+              <span className="absolute left-0 top-1/2 -translate-y-1/2 typo-value-emphasis font-semibold text-[#131b2e]">{mode === "amount" ? "¥" : "份"}</span>
               <input
                 inputMode="decimal"
                 value={mode === "amount" ? amountInput : shareInput}
@@ -227,7 +263,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
           <div className="grid grid-cols-2 gap-3">
             <label className="col-span-2 border-b border-[#d5dbea] px-3 py-4">
               <div className="flex items-center justify-between">
-                <p className="typo-label">持有收益</p>
+                <span className="block text-[10px] font-semibold tracking-[0.12em] text-[#747781]">持有收益</span>
                 <input
                   inputMode="decimal"
                   value={profitInput}
@@ -236,18 +272,18 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
                   className={`typo-value-emphasis w-28 border-0 bg-transparent p-0 text-right outline-none placeholder:text-[#9aa5bb] focus:ring-0 ${profitToneClass}`}
                 />
               </div>
-              <p className={`mt-1 typo-meta ${inputProfit == null ? "text-[#747781]" : inputProfit >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>{profitHint}</p>
+              <span className={`mt-1 block text-[10px] font-medium ${inputProfit == null ? "text-[#747781]" : inputProfit >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>{profitHint}</span>
             </label>
             <label className="col-span-2 flex items-center justify-between border-b border-[#d5dbea] px-3 py-4">
-               <p className="typo-label">首次买入日期</p>
-               <DatePicker
-                 value={dateInput ? dayjs(dateInput, "YYYY-MM-DD") : null}
-                 format="YYYY-MM-DD"
-                 allowClear
-                 inputReadOnly
-                 className="typo-body-strong w-[138px] text-right"
-                 onChange={(_, dateString) => setDateInput(Array.isArray(dateString) ? dateString[0] || "" : dateString || "")}
-               />
+                <span className="block text-[10px] font-semibold tracking-[0.12em] text-[#747781]">首次买入日期</span>
+                  <DatePicker
+                  value={dateInput ? dayjs(dateInput, "YYYY-MM-DD") : null}
+                  format="YYYY-MM-DD"
+                  allowClear
+                  inputReadOnly
+                  className="typo-body-strong tabular-nums w-[138px] text-right"
+                  onChange={(_, dateString) => setDateInput(Array.isArray(dateString) ? dateString[0] || "" : dateString || "")}
+                />
              </label>
           </div>
         </section>
@@ -255,20 +291,20 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
         <section className="divide-y divide-[#e2e7ff]">
           <div className="flex items-center justify-between px-3 py-4">
             <div>
-              <p className="typo-label">最新净值</p>
-              <p className="mt-1 typo-meta">数据时间 {fund?.jzrq || "—"}</p>
+              <span className="block text-[10px] font-semibold tracking-[0.12em] text-[#747781]">最新净值</span>
+              <span className="mt-1 block text-[10px] font-medium text-[#747781]">数据时间 {fund?.jzrq || "—"}</span>
             </div>
-            <p className="typo-value-emphasis">{officialNav != null ? officialNav.toFixed(4) : "—"}</p>
+            <span className="block typo-value-emphasis tabular-nums">{officialNav != null ? officialNav.toFixed(4) : "—"}</span>
           </div>
           <div className="flex items-center justify-between px-3 py-4">
-            <p className="typo-label">持仓成本</p>
-            <p className={`typo-value-emphasis ${(derivedCostPerShare || 0) >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>
+            <span className="block text-[10px] font-semibold tracking-[0.12em] text-[#747781]">持仓成本</span>
+            <span className={`block typo-value-emphasis tabular-nums ${(derivedCostPerShare || 0) >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>
               {derivedCostPerShare != null ? derivedCostPerShare.toFixed(4) : "—"}
-            </p>
+            </span>
           </div>
           <div className="flex items-center justify-between px-3 py-4">
-            <p className="typo-label">持有天数</p>
-            <p className="typo-body-strong tabular-nums">{holdingDays == null ? "—" : `${holdingDays} 天`}</p>
+            <span className="block text-[10px] font-semibold tracking-[0.12em] text-[#747781]">持有天数</span>
+            <span className="block typo-body-strong tabular-nums">{holdingDays == null ? "—" : `${holdingDays} 天`}</span>
           </div>
         </section>
 
@@ -278,7 +314,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
         <button
           type="button"
           onClick={handleConfirm}
-          className="inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-[#d5dbea] bg-white px-3 text-sm font-semibold text-[#131b2e]"
+          className="inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-[#d5dbea] bg-white px-3 typo-body-strong"
         >
           确认修改
         </button>

@@ -12,6 +12,16 @@ export const defaultAppState: AppState = {
   lastUpdatedAt: null,
 };
 
+const dedupeFundsByCode = (funds: AppState["funds"]) => {
+  const seen = new Set<string>();
+  return funds.filter((fund) => {
+    const code = typeof fund?.code === "string" ? fund.code : "";
+    if (!code || seen.has(code)) return false;
+    seen.add(code);
+    return true;
+  });
+};
+
 export const loadAppState = (): AppState => {
   if (typeof window === "undefined") return defaultAppState;
   try {
@@ -21,7 +31,7 @@ export const loadAppState = (): AppState => {
     return {
       ...defaultAppState,
       ...parsed,
-      funds: Array.isArray(parsed.funds) ? parsed.funds : [],
+      funds: Array.isArray(parsed.funds) ? dedupeFundsByCode(parsed.funds) : [],
       holdings: parsed.holdings && typeof parsed.holdings === "object" ? parsed.holdings : {},
       transactions: parsed.transactions && typeof parsed.transactions === "object" ? parsed.transactions : {},
       favorites: Array.isArray(parsed.favorites) ? parsed.favorites : [],

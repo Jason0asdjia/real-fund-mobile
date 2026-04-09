@@ -8,8 +8,7 @@ import { Area, Pie } from "@ant-design/charts";
 
 import { useAppState } from "@/components/app-provider";
 import { fetchFundBaseData, fetchFundData, fetchFundHistoricalNavSeries, fetchFundPreviewData } from "@/lib/fund-api";
-import { applyConfirmedTransactionsToHolding } from "@/lib/portfolio";
-import { formatCurrency, formatPercent, formatSignedCurrency, getHoldingMetrics } from "@/lib/portfolio";
+import { formatCurrency, formatPercent, formatSignedCurrency } from "@/lib/portfolio";
 import type { FundSnapshot } from "@/lib/types";
 
 type FundDetailViewProps = {
@@ -231,12 +230,17 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
     );
   }
 
-  const rawHolding = state.holdings[fund.code];
   const transactions = (state.transactions[fund.code] || []).slice().sort((a, b) => `${b.date}`.localeCompare(`${a.date}`));
-  const holding = applyConfirmedTransactionsToHolding(rawHolding, transactions);
-  const hasHolding = typeof holding?.share === "number" && Number.isFinite(holding.share) && holding.share > 0;
+  const holding = state.holdings[fund.code];
+  const holdingShare = typeof holding?.share === "number" && Number.isFinite(holding.share) ? Number(holding.share) : null;
+  const holdingCost = typeof holding?.cost === "number" && Number.isFinite(holding.cost) ? Number(holding.cost) : null;
+  const officialNavForHolding = Number.isFinite(Number(fund.dwjz)) && Number(fund.dwjz) > 0 ? Number(fund.dwjz) : null;
+  const hasHolding = holdingShare != null && holdingShare > 0;
   const isInList = Boolean(fundFromState);
-  const metrics = getHoldingMetrics(fund, holding);
+  const holdingAmount = hasHolding && officialNavForHolding != null ? holdingShare * officialNavForHolding : null;
+  const holdingProfit = hasHolding && officialNavForHolding != null && holdingCost != null
+    ? (officialNavForHolding - holdingCost) * holdingShare
+    : null;
   const chartPoints = officialNavSeries.map((point) => ({
     date: point.date,
     label: point.date.slice(5).replace("-", "/"),
@@ -393,12 +397,12 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-h-[70px] flex-col justify-center">
                 <p className="mb-0.5 typo-label text-[#24467c]/70">持仓金额</p>
-                <p className="m-0 text-[30px] font-normal leading-none tracking-tight tabular-nums">{formatCurrency(metrics?.amount)}</p>
+                <p className="m-0 text-[30px] font-normal leading-none tracking-tight tabular-nums">{formatCurrency(holdingAmount)}</p>
               </div>
               <div className="flex min-h-[70px] flex-col items-end justify-center text-right">
                 <p className="mb-0.5 typo-label text-[#24467c]/70">累计收益</p>
-                <p className={`m-0 text-[20px] font-normal leading-none tabular-nums ${(metrics?.profitTotal || 0) >= 0 ? "text-[#24467c]" : "text-[#ba1a1a]"}`}>
-                  {formatSignedCurrency(metrics?.profitTotal)}
+                <p className={`m-0 text-[20px] font-normal leading-none tabular-nums ${(holdingProfit || 0) >= 0 ? "text-[#24467c]" : "text-[#ba1a1a]"}`}>
+                  {formatSignedCurrency(holdingProfit)}
                 </p>
               </div>
             </div>
@@ -589,7 +593,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
                 <button
                   type="button"
                   onClick={handleClearHolding}
-                className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[#ba1a1a] px-3 text-sm font-normal text-white"
+                className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[#ba1a1a] px-3 text-sm font-normal !text-white"
                 >
                   确认清空
                 </button>
