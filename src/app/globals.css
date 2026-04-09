@@ -121,8 +121,10 @@
   }
 
   .typo-fund-header-title {
-    @apply font-extrabold leading-tight text-[#131b2e];
+    @apply block font-extrabold leading-tight text-[#131b2e];
     font-size: 1rem;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .typo-fund-header-code {

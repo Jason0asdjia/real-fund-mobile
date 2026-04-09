@@ -107,10 +107,10 @@ export function FundBuyView({ code }: FundBuyViewProps) {
             <ChevronLeft size={16} />
             返回
           </button>
-          <div className="mx-auto max-w-[72%] text-center">
-            <h1 className="whitespace-normal break-words typo-fund-header-title font-normal">{fund.name}</h1>
-            <p className="typo-fund-header-code font-normal">{fund.code}</p>
-          </div>
+            <div className="mx-auto max-w-[calc(100%-7.5rem)] px-8 text-center">
+              <h1 className="typo-fund-header-title font-normal">{fund.name}</h1>
+              <p className="typo-fund-header-code font-normal">{fund.code}</p>
+            </div>
         </div>
       </header>
 
