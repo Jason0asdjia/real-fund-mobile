@@ -2,12 +2,15 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
+import { useAuth } from "@/components/auth-provider";
+import { buildCloudPayloadFromState, createCloudPayload, fetchCloudUserData, hasMeaningfulCloudData, hydrateAppStateFromCloudPayload, mergeCloudPayloads, upsertCloudUserData } from "@/lib/cloud-user-data";
 import { fetchFundBaseData, fetchFundData, searchFunds } from "@/lib/fund-api";
 import { applyConfirmedTransactionsToHolding, isTransactionConfirmedInMarket } from "@/lib/portfolio";
-import { defaultAppState, loadAppState, normalizeAppState, saveAppState } from "@/lib/storage";
+import { APP_STATE_KEY, defaultAppState, loadAppState, normalizeAppState, saveAppState } from "@/lib/storage";
 import { isEstimateTimestampUsable, nowInMarket } from "@/lib/time";
 import type { AppState, FundHolding, FundSnapshot, FundTransaction, SearchFundResult, ValuationPoint } from "@/lib/types";
-import { clearValuationSeries, getAllValuationSeries, normalizeValuationSeries, recordValuation, setAllValuationSeries } from "@/lib/valuation-timeseries";
+import { IMPORTANT_UI_PREFERENCE_KEYS, applyImportantPreferences, readImportantPreferences } from "@/lib/user-preferences";
+import { clearValuationSeries, getAllValuationSeries, normalizeValuationSeries, recordValuation, setAllValuationSeries, VALUATION_TIMESERIES_KEY } from "@/lib/valuation-timeseries";
 import { buildDemoSeed } from "@/lib/demo-data";
 
 type AppContextValue = {
@@ -31,11 +34,51 @@ type AppContextValue = {
   setRefreshMs: (value: number) => void;
   clearSearchHistory: () => void;
   clearAll: () => void;
+  clearLocalOnly: () => void;
   seedDemoData: () => Promise<void>;
   importBackupData: (payload: { appState: unknown; valuationSeries?: unknown }) => { ok: boolean; message: string };
+  pushCloudConfig: () => Promise<{ ok: boolean; message: string }>;
+  pullCloudConfig: () => Promise<{ ok: boolean; message: string }>;
+  conflictResolution: {
+    open: boolean;
+    localSummary: { funds: number; holdings: number; transactions: number; searchHistory: number };
+    cloudSummary: { funds: number; holdings: number; transactions: number; searchHistory: number };
+    resolving: boolean;
+  };
+  resolveDataConflict: (strategy: "keep_local" | "keep_cloud" | "merge") => Promise<void>;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
+const LOCAL_OWNER_USER_ID_KEY = "real-fund-mobile:owner-user-id";
+const OFFICIAL_NAV_HISTORY_CACHE_KEY = "real-fund-mobile:official-nav-history";
+
+const setLocalOwnerUser = (value: string | null) => {
+  if (typeof window === "undefined") return;
+  if (value) {
+    window.localStorage.setItem(LOCAL_OWNER_USER_ID_KEY, value);
+    return;
+  }
+  window.localStorage.removeItem(LOCAL_OWNER_USER_ID_KEY);
+};
+
+const clearAppManagedLocalStorage = () => {
+  if (typeof window === "undefined") return;
+  const keys = [
+    APP_STATE_KEY,
+    VALUATION_TIMESERIES_KEY,
+    OFFICIAL_NAV_HISTORY_CACHE_KEY,
+    LOCAL_OWNER_USER_ID_KEY,
+    ...IMPORTANT_UI_PREFERENCE_KEYS,
+  ];
+  keys.forEach((key) => window.localStorage.removeItem(key));
+};
+
+const getStateSummary = (state: AppState) => ({
+  funds: state.funds.length,
+  holdings: Object.keys(state.holdings || {}).length,
+  transactions: Object.values(state.transactions || {}).reduce((acc, items) => acc + (Array.isArray(items) ? items.length : 0), 0),
+  searchHistory: state.searchHistory.length,
+});
 
 const needsArchiveBackfill = (fund: FundSnapshot) => {
   if (fund.archiveStatus === "ready" || fund.archiveStatus === "empty") return false;
@@ -92,6 +135,8 @@ const mergeQuoteWithIntradayFallback = (previous: FundSnapshot, next: FundSnapsh
 };
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const { user, authLoading } = useAuth();
+  const userId = user?.id ?? null;
   const [state, setState] = useState<AppState>(defaultAppState);
   const [hydrated, setHydrated] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -107,14 +152,154 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const lastForegroundRefreshRef = useRef(0);
   const archiveBackfillCodeRef = useRef<string | null>(null);
   const archiveBackfillAttemptRef = useRef<Record<string, number>>({});
+  const lastCloudPayloadRef = useRef("");
+  const skipNextCloudSyncRef = useRef(false);
+  const suppressEmptyCloudSyncRef = useRef(false);
+  const [preferenceSignature, setPreferenceSignature] = useState("{}");
+  const [conflictResolution, setConflictResolution] = useState<AppContextValue["conflictResolution"]>({
+    open: false,
+    localSummary: { funds: 0, holdings: 0, transactions: 0, searchHistory: 0 },
+    cloudSummary: { funds: 0, holdings: 0, transactions: 0, searchHistory: 0 },
+    resolving: false,
+  });
+  const pendingConflictRef = useRef<
+    | {
+        localState: AppState;
+        cloudState: AppState;
+        localPayload: ReturnType<typeof createCloudPayload>;
+        cloudPayload: ReturnType<typeof createCloudPayload>;
+      }
+    | null
+  >(null);
+
+  const applyPayloadAsRuntime = (payload: ReturnType<typeof createCloudPayload>) => {
+    const nextState = hydrateAppStateFromCloudPayload(payload);
+    applyImportantPreferences(payload.preferences);
+    setPreferenceSignature(JSON.stringify(readImportantPreferences()));
+    setState(nextState);
+    fundsRef.current = nextState.funds;
+    lastCloudPayloadRef.current = JSON.stringify(payload);
+  };
+
+  const hydrateCloudFundsForView = useCallback(async (funds: FundSnapshot[]) => {
+    if (funds.length === 0) return funds;
+
+    const hydratedResults = await Promise.allSettled(
+      funds.map((fund) => fetchFundBaseData(fund.code, { code: fund.code, name: fund.name || fund.code }, "interactive")),
+    );
+
+    return hydratedResults.map((result, index) => {
+      if (result.status !== "fulfilled") {
+        return funds[index];
+      }
+
+      const nextFund = result.value;
+      recordValuation(nextFund.code, { gsz: nextFund.gsz, gztime: nextFund.gztime });
+      return nextFund;
+    });
+  }, []);
 
   useEffect(() => {
-    const nextState = loadAppState();
-    setState(nextState);
-    setValuationSeries(getAllValuationSeries());
-    fundsRef.current = nextState.funds;
-    setHydrated(true);
-  }, []);
+    if (authLoading) return;
+
+    let active = true;
+
+    const bootstrap = async () => {
+      if (!userId) {
+        if (!active) return;
+        pendingConflictRef.current = null;
+        setConflictResolution({
+          open: false,
+          localSummary: { funds: 0, holdings: 0, transactions: 0, searchHistory: 0 },
+          cloudSummary: { funds: 0, holdings: 0, transactions: 0, searchHistory: 0 },
+          resolving: false,
+        });
+        setState(defaultAppState);
+        setValuationSeries({});
+        fundsRef.current = [];
+        setHydrated(true);
+        return;
+      }
+
+      const localState = loadAppState();
+      const localSeries = getAllValuationSeries();
+
+      try {
+        const cloud = await fetchCloudUserData(userId);
+        if (!active) return;
+
+        const localPreferences = readImportantPreferences();
+        const localPayload = createCloudPayload(localState, localPreferences);
+
+        if (cloud) {
+          const cloudState = hydrateAppStateFromCloudPayload(cloud);
+          const cloudFunds = await hydrateCloudFundsForView(cloudState.funds);
+          const cloudStateForRuntime = {
+            ...cloudState,
+            funds: cloudFunds,
+          };
+          const cloudPayload = createCloudPayload(cloudState, cloud.preferences);
+          const localOwnerUserId = typeof window !== "undefined" ? window.localStorage.getItem(LOCAL_OWNER_USER_ID_KEY) : null;
+          const shouldAskConflict = hasMeaningfulCloudData(localPayload) && hasMeaningfulCloudData(cloudPayload)
+            && localOwnerUserId !== userId
+            && JSON.stringify(localPayload) !== JSON.stringify(cloudPayload);
+
+          if (shouldAskConflict) {
+            pendingConflictRef.current = {
+              localState,
+              cloudState: cloudStateForRuntime,
+              localPayload,
+              cloudPayload: createCloudPayload(cloudStateForRuntime, cloud.preferences),
+            };
+            setConflictResolution({
+              open: true,
+              localSummary: getStateSummary(localState),
+              cloudSummary: getStateSummary(cloudStateForRuntime),
+              resolving: false,
+            });
+            setState(localState);
+            setPreferenceSignature(JSON.stringify(localPreferences));
+          } else {
+            applyPayloadAsRuntime(createCloudPayload(cloudStateForRuntime, cloud.preferences));
+            setLocalOwnerUser(userId);
+          }
+
+          setValuationSeries(getAllValuationSeries());
+          setHydrated(true);
+          return;
+        }
+
+        const localOwnerUserId = typeof window !== "undefined" ? window.localStorage.getItem(LOCAL_OWNER_USER_ID_KEY) : null;
+        const shouldUseLocalForBootstrap = !localOwnerUserId || localOwnerUserId === userId;
+        const bootState = shouldUseLocalForBootstrap ? localState : defaultAppState;
+        const bootPayload = buildCloudPayloadFromState(bootState);
+        await upsertCloudUserData(userId, bootPayload);
+        if (!active) return;
+
+        lastCloudPayloadRef.current = JSON.stringify(bootPayload);
+        setPreferenceSignature(JSON.stringify(readImportantPreferences()));
+        setState(bootState);
+        setValuationSeries(localSeries);
+        fundsRef.current = bootState.funds;
+        setLocalOwnerUser(userId);
+      } catch {
+        if (!active) return;
+        setState(localState);
+        setValuationSeries(localSeries);
+        fundsRef.current = localState.funds;
+      } finally {
+        if (active) {
+          setHydrated(true);
+        }
+      }
+    };
+
+    void bootstrap();
+
+    return () => {
+      active = false;
+    };
+  }, [authLoading, hydrateCloudFundsForView, userId]);
 
   useEffect(() => {
     fundsRef.current = state.funds;
@@ -138,9 +323,152 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [seeding]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || !userId) return;
     saveAppState(state);
-  }, [hydrated, state]);
+  }, [hydrated, state, userId]);
+
+  useEffect(() => {
+    if (!hydrated || !userId || typeof window === "undefined") return;
+
+    const capture = () => JSON.stringify(readImportantPreferences());
+    setPreferenceSignature(capture());
+
+    const timer = window.setInterval(() => {
+      const next = capture();
+      setPreferenceSignature((current) => (current === next ? current : next));
+    }, 1500);
+
+    return () => window.clearInterval(timer);
+  }, [hydrated, userId]);
+
+  useEffect(() => {
+    if (!hydrated || !userId || conflictResolution.open) return;
+
+    if (skipNextCloudSyncRef.current) {
+      skipNextCloudSyncRef.current = false;
+      return;
+    }
+
+    const payload = buildCloudPayloadFromState(state);
+    const isMeaningfulPayload = hasMeaningfulCloudData(payload);
+    if (suppressEmptyCloudSyncRef.current && !isMeaningfulPayload) {
+      return;
+    }
+    if (isMeaningfulPayload) {
+      suppressEmptyCloudSyncRef.current = false;
+    }
+
+    const signature = JSON.stringify(payload);
+    if (signature === lastCloudPayloadRef.current) return;
+
+    const timer = window.setTimeout(() => {
+      void upsertCloudUserData(userId, payload)
+        .then(() => {
+          lastCloudPayloadRef.current = signature;
+          setLocalOwnerUser(userId);
+        })
+        .catch(() => {
+          // keep local runtime state; sync can retry on next state/preference change
+        });
+    }, 420);
+
+    return () => window.clearTimeout(timer);
+  }, [conflictResolution.open, hydrated, preferenceSignature, state, userId]);
+
+  const resolveDataConflict = useCallback(async (strategy: "keep_local" | "keep_cloud" | "merge") => {
+    if (!userId || !pendingConflictRef.current) return;
+
+    setConflictResolution((current) => ({
+      ...current,
+      resolving: true,
+    }));
+
+    const { localPayload, cloudPayload } = pendingConflictRef.current;
+    const resolvedPayload = strategy === "keep_local"
+      ? localPayload
+      : strategy === "keep_cloud"
+        ? cloudPayload
+        : mergeCloudPayloads(localPayload, cloudPayload);
+
+    try {
+      applyPayloadAsRuntime(resolvedPayload);
+      await upsertCloudUserData(userId, resolvedPayload);
+      setLocalOwnerUser(userId);
+      pendingConflictRef.current = null;
+      setConflictResolution({
+        open: false,
+        localSummary: { funds: 0, holdings: 0, transactions: 0, searchHistory: 0 },
+        cloudSummary: { funds: 0, holdings: 0, transactions: 0, searchHistory: 0 },
+        resolving: false,
+      });
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "冲突处理失败，请重试");
+      setConflictResolution((current) => ({
+        ...current,
+        resolving: false,
+      }));
+    }
+  }, [userId]);
+
+  const pushCloudConfig = useCallback(async () => {
+    if (!userId) {
+      return { ok: false, message: "请先登录后再上传" };
+    }
+
+    try {
+      suppressEmptyCloudSyncRef.current = false;
+      const payload = buildCloudPayloadFromState(state);
+      await upsertCloudUserData(userId, payload);
+      lastCloudPayloadRef.current = JSON.stringify(payload);
+      setLocalOwnerUser(userId);
+      return { ok: true, message: "已上传当前配置到云端" };
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "上传云端失败";
+      setError(message);
+      return { ok: false, message };
+    }
+  }, [state, userId]);
+
+  const pullCloudConfig = useCallback(async () => {
+    if (!userId) {
+      return { ok: false, message: "请先登录后再拉取" };
+    }
+
+    try {
+      const cloud = await fetchCloudUserData(userId);
+      if (!cloud) {
+        return { ok: false, message: "云端暂无可用配置" };
+      }
+
+      const cloudState = hydrateAppStateFromCloudPayload(cloud);
+      const initialPayload = createCloudPayload(cloudState, cloud.preferences);
+      applyPayloadAsRuntime(initialPayload);
+      setValuationSeries(getAllValuationSeries());
+
+      const cloudFunds = await hydrateCloudFundsForView(cloudState.funds);
+      setState((current) => {
+        const merged = {
+          ...current,
+          funds: cloudFunds,
+        };
+        return merged;
+      });
+      setValuationSeries(getAllValuationSeries());
+      pendingConflictRef.current = null;
+      setConflictResolution({
+        open: false,
+        localSummary: { funds: 0, holdings: 0, transactions: 0, searchHistory: 0 },
+        cloudSummary: { funds: 0, holdings: 0, transactions: 0, searchHistory: 0 },
+        resolving: false,
+      });
+      setLocalOwnerUser(userId);
+      return { ok: true, message: "已从云端拉取配置" };
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "拉取云端配置失败";
+      setError(message);
+      return { ok: false, message };
+    }
+  }, [hydrateCloudFundsForView, userId]);
 
   const refreshFunds = useCallback(async () => {
     if (refreshingRef.current || fundsRef.current.length === 0) return;
@@ -577,10 +905,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState(defaultAppState);
     setValuationSeries({});
     fundsRef.current = [];
-    if (typeof window !== "undefined") {
-      window.localStorage.clear();
-    }
+    pendingConflictRef.current = null;
+    setConflictResolution({
+      open: false,
+      localSummary: { funds: 0, holdings: 0, transactions: 0, searchHistory: 0 },
+      cloudSummary: { funds: 0, holdings: 0, transactions: 0, searchHistory: 0 },
+      resolving: false,
+    });
+    clearAppManagedLocalStorage();
+    lastCloudPayloadRef.current = "";
   }, []);
+
+  const clearLocalOnly = useCallback(() => {
+    suppressEmptyCloudSyncRef.current = true;
+    skipNextCloudSyncRef.current = true;
+    clearAll();
+  }, [clearAll]);
 
   const seedDemoData = useCallback(async () => {
     if (seedingRef.current) return;
@@ -600,12 +940,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setValuationSeries(seed.valuationSeries);
     fundsRef.current = seed.state.funds;
     if (typeof window !== "undefined") {
-      window.localStorage.setItem("real-fund-mobile:state", JSON.stringify(seed.state));
-      window.localStorage.setItem("real-fund-mobile:valuation-timeseries", JSON.stringify(seed.valuationSeries));
+      window.localStorage.setItem(APP_STATE_KEY, JSON.stringify(seed.state));
+      window.localStorage.setItem(VALUATION_TIMESERIES_KEY, JSON.stringify(seed.valuationSeries));
+      if (userId) {
+        setLocalOwnerUser(userId);
+      }
     }
     seedingRef.current = false;
     setSeeding(false);
-  }, []);
+  }, [userId]);
 
   const importBackupData = useCallback((payload: { appState: unknown; valuationSeries?: unknown }) => {
     try {
@@ -657,25 +1000,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setRefreshMs,
       clearSearchHistory,
       clearAll,
+      clearLocalOnly,
       seedDemoData,
       importBackupData,
+      pushCloudConfig,
+      pullCloudConfig,
+      conflictResolution,
+      resolveDataConflict,
     }),
     [
       addFund,
       addTransaction,
       clearAll,
       clearHolding,
+      clearLocalOnly,
       clearSearchHistory,
+      conflictResolution,
       error,
       hydrated,
       importBackupData,
       passiveRefreshAt,
+      pullCloudConfig,
+      pushCloudConfig,
       refreshFunds,
       refreshing,
       removeFund,
       removeTransaction,
       search,
       recordSearchHistory,
+      resolveDataConflict,
       seeding,
       seedDemoData,
       setRefreshMs,

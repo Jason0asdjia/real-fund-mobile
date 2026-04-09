@@ -464,12 +464,14 @@ const fetchOfficialQuoteWithFallback = async (code: string, mode: RequestMode = 
     // fallback to next provider
   }
 
-  if (typeof window !== "undefined") {
-    return { historyList, official: historyQuote };
+  try {
+    const danjuanQuote = await requestDanjuanFundQuote(code, mode === "interactive" ? "interactive" : "normal");
+    return { historyList, official: danjuanQuote };
+  } catch {
+    // keep history fallback when secondary source is unavailable
   }
 
-  const danjuanQuote = await requestDanjuanFundQuote(code, mode === "interactive" ? "interactive" : "normal");
-  return { historyList, official: danjuanQuote };
+  return { historyList, official: historyQuote };
 };
 
 const fetchFundArchivesContent = async (code: string, type: "jjcc" | "jbgk") => {

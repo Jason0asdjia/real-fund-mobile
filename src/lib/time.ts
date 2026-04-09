@@ -51,6 +51,14 @@ export const formatClock = (value?: string | null) => {
   return toMarketDay(value).format("HH:mm");
 };
 
+export const formatLocalTimestamp = (value?: string | number | Date | null) => {
+  const date = value == null ? new Date() : value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const pad = (input: number) => String(input).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+};
+
 export const shiftMarketDay = (value?: ConfigType | null, amount = 0, unit: dayjs.ManipulateType = "day"): Dayjs => {
   if (value == null) return nowInMarket().add(amount, unit);
   if (typeof value === "string") return toMarketDay(value).add(amount, unit);
