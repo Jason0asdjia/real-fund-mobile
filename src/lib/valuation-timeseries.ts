@@ -1,14 +1,45 @@
 import type { ValuationPoint } from "@/lib/types";
 
-const STORAGE_KEY = "real-fund-mobile:valuation-timeseries";
+export const VALUATION_TIMESERIES_KEY = "real-fund-mobile:valuation-timeseries";
 const MAX_POINTS = 240;
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> => value != null && typeof value === "object" && !Array.isArray(value);
+
+const normalizeValuationPoint = (value: unknown): ValuationPoint | null => {
+  if (!isPlainObject(value)) return null;
+  const date = typeof value.date === "string" ? value.date : "";
+  const time = typeof value.time === "string" ? value.time : "";
+  const numeric = Number(value.value);
+  if (!date || !time || !Number.isFinite(numeric)) return null;
+  return { date, time, value: numeric };
+};
+
+export const normalizeValuationSeries = (value: unknown): Record<string, ValuationPoint[]> => {
+  if (!isPlainObject(value)) return {};
+  const normalized: Record<string, ValuationPoint[]> = {};
+
+  Object.entries(value).forEach(([code, points]) => {
+    if (!Array.isArray(points)) return;
+    const sanitized = points
+      .map((item) => normalizeValuationPoint(item))
+      .filter((item): item is ValuationPoint => item != null)
+      .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))
+      .slice(-MAX_POINTS);
+
+    if (sanitized.length > 0) {
+      normalized[code] = sanitized;
+    }
+  });
+
+  return normalized;
+};
 
 const readStore = (): Record<string, ValuationPoint[]> => {
   if (typeof window === "undefined") return {};
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(VALUATION_TIMESERIES_KEY);
     const parsed = raw ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === "object" ? parsed : {};
+    return normalizeValuationSeries(parsed);
   } catch {
     return {};
   }
@@ -16,10 +47,16 @@ const readStore = (): Record<string, ValuationPoint[]> => {
 
 const writeStore = (data: Record<string, ValuationPoint[]>) => {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  window.localStorage.setItem(VALUATION_TIMESERIES_KEY, JSON.stringify(data));
 };
 
 export const getAllValuationSeries = () => readStore();
+
+export const setAllValuationSeries = (value: unknown) => {
+  const normalized = normalizeValuationSeries(value);
+  writeStore(normalized);
+  return normalized;
+};
 
 export const clearValuationSeries = (code: string) => {
   const current = readStore();

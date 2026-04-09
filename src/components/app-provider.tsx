@@ -4,10 +4,10 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { fetchFundBaseData, fetchFundData, searchFunds } from "@/lib/fund-api";
 import { applyConfirmedTransactionsToHolding, isTransactionConfirmedInMarket } from "@/lib/portfolio";
-import { defaultAppState, loadAppState, saveAppState } from "@/lib/storage";
+import { defaultAppState, loadAppState, normalizeAppState, saveAppState } from "@/lib/storage";
 import { isEstimateTimestampUsable, nowInMarket } from "@/lib/time";
 import type { AppState, FundHolding, FundSnapshot, FundTransaction, SearchFundResult, ValuationPoint } from "@/lib/types";
-import { clearValuationSeries, getAllValuationSeries, recordValuation } from "@/lib/valuation-timeseries";
+import { clearValuationSeries, getAllValuationSeries, normalizeValuationSeries, recordValuation, setAllValuationSeries } from "@/lib/valuation-timeseries";
 import { buildDemoSeed } from "@/lib/demo-data";
 
 type AppContextValue = {
@@ -32,6 +32,7 @@ type AppContextValue = {
   clearSearchHistory: () => void;
   clearAll: () => void;
   seedDemoData: () => Promise<void>;
+  importBackupData: (payload: { appState: unknown; valuationSeries?: unknown }) => { ok: boolean; message: string };
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -606,6 +607,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSeeding(false);
   }, []);
 
+  const importBackupData = useCallback((payload: { appState: unknown; valuationSeries?: unknown }) => {
+    try {
+      const nextState = normalizeAppState(payload.appState);
+      const nextSeries = payload.valuationSeries === undefined
+        ? getAllValuationSeries()
+        : setAllValuationSeries(normalizeValuationSeries(payload.valuationSeries));
+
+      refreshTokenRef.current += 1;
+      refreshingRef.current = false;
+      seedingRef.current = false;
+      setRefreshing(false);
+      setSeeding(false);
+      setError("");
+      didInitialRefreshRef.current = nextState.funds.length > 0;
+      setPassiveRefreshAt(null);
+      setState(nextState);
+      setValuationSeries(nextSeries);
+      fundsRef.current = nextState.funds;
+
+      return { ok: true, message: "导入成功，数据已更新" };
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "导入失败，请检查文件格式";
+      return { ok: false, message };
+    }
+  }, []);
+
   const search = useCallback(async (keyword: string) => searchFunds(keyword, "interactive"), []);
 
   const value = useMemo<AppContextValue>(
@@ -631,6 +658,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearSearchHistory,
       clearAll,
       seedDemoData,
+      importBackupData,
     }),
     [
       addFund,
@@ -640,6 +668,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearSearchHistory,
       error,
       hydrated,
+      importBackupData,
       passiveRefreshAt,
       refreshFunds,
       refreshing,

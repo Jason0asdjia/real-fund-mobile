@@ -1,13 +1,58 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { Bell, ChevronRight, Database, HelpCircle, History, Loader2, ShieldCheck, Sparkles, Wallet } from "lucide-react";
+import { useMemo, useRef, useState, type ChangeEventHandler } from "react";
+import { Bell, ChevronRight, Database, Download, HelpCircle, History, Loader2, ShieldCheck, Sparkles, Upload, Wallet } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 import { TwSelect } from "@/components/ui/tw-select";
 import { getHoldingMetrics } from "@/lib/portfolio";
+import { APP_STATE_KEY } from "@/lib/storage";
 import { toMarketTime } from "@/lib/time";
+import { VALUATION_TIMESERIES_KEY } from "@/lib/valuation-timeseries";
+
+const APP_STORAGE_PREFIX = "real-fund-mobile:";
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> => value != null && typeof value === "object" && !Array.isArray(value);
+
+const readAppLocalStorageSnapshot = () => {
+  const snapshot: Record<string, string> = {};
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index);
+    if (!key || !key.startsWith(APP_STORAGE_PREFIX)) continue;
+    const value = window.localStorage.getItem(key);
+    if (value == null) continue;
+    snapshot[key] = value;
+  }
+  return snapshot;
+};
+
+const applyAppLocalStorageSnapshot = (snapshot: Record<string, string>) => {
+  const existingKeys: string[] = [];
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index);
+    if (!key || !key.startsWith(APP_STORAGE_PREFIX)) continue;
+    existingKeys.push(key);
+  }
+
+  existingKeys.forEach((key) => {
+    if (!(key in snapshot)) {
+      window.localStorage.removeItem(key);
+    }
+  });
+
+  Object.entries(snapshot).forEach(([key, value]) => {
+    window.localStorage.setItem(key, value);
+  });
+};
+
+const tryParseJson = (raw: string) => {
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return undefined;
+  }
+};
 
 const refreshOptions = [
   { label: "15 秒", value: 15000 },
@@ -22,9 +67,12 @@ const refreshSelectOptions = refreshOptions.map((item) => ({
 }));
 
 export default function SettingsPage() {
-  const { state, seeding, setRefreshMs, clearAll, seedDemoData } = useAppState();
+  const { state, seeding, setRefreshMs, clearAll, seedDemoData, valuationSeries, importBackupData } = useAppState();
   const [seededAt, setSeededAt] = useState<string | null>(null);
   const [clearingDemo, setClearingDemo] = useState(false);
+  const [backupMessage, setBackupMessage] = useState<string | null>(null);
+  const [importingBackup, setImportingBackup] = useState(false);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const totals = useMemo(
     () =>
       state.funds.reduce(
@@ -50,6 +98,78 @@ export default function SettingsPage() {
     clearAll();
     setSeededAt(null);
     setClearingDemo(false);
+  };
+
+  const handleExportData = () => {
+    const exportedAt = toMarketTime(undefined, "YYYY-MM-DD HH:mm:ss");
+    const localStorageSnapshot = readAppLocalStorageSnapshot();
+    const payload = {
+      version: 1,
+      exportedAt,
+      appState: state,
+      valuationSeries,
+      localStorageSnapshot,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `real-fund-mobile-backup-${toMarketTime(undefined, "YYYYMMDD-HHmmss")}.json`;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
+    setBackupMessage(`已导出备份文件（${toMarketTime(undefined, "HH:mm")}）`);
+  };
+
+  const handlePickImportFile = () => {
+    if (importingBackup) return;
+    importInputRef.current?.click();
+  };
+
+  const handleImportFile: ChangeEventHandler<HTMLInputElement> = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || importingBackup) return;
+
+    setImportingBackup(true);
+    setBackupMessage(null);
+
+    try {
+      const raw = await file.text();
+      const parsed = JSON.parse(raw) as unknown;
+
+      const localStorageSnapshot = isPlainObject(parsed) && isPlainObject(parsed.localStorageSnapshot)
+        ? Object.entries(parsed.localStorageSnapshot).reduce<Record<string, string>>((acc, [key, value]) => {
+          if (key.startsWith(APP_STORAGE_PREFIX) && typeof value === "string") {
+            acc[key] = value;
+          }
+          return acc;
+        }, {})
+        : null;
+
+      if (localStorageSnapshot) {
+        applyAppLocalStorageSnapshot(localStorageSnapshot);
+      }
+
+      const appStateFromSnapshot = localStorageSnapshot?.[APP_STATE_KEY] ? tryParseJson(localStorageSnapshot[APP_STATE_KEY]) : undefined;
+      const valuationFromSnapshot = localStorageSnapshot?.[VALUATION_TIMESERIES_KEY]
+        ? tryParseJson(localStorageSnapshot[VALUATION_TIMESERIES_KEY])
+        : undefined;
+
+      const appStatePayload = isPlainObject(parsed) && "appState" in parsed
+        ? parsed.appState
+        : appStateFromSnapshot ?? parsed;
+      const valuationPayload = isPlainObject(parsed) && "valuationSeries" in parsed
+        ? parsed.valuationSeries
+        : valuationFromSnapshot;
+
+      const result = importBackupData({ appState: appStatePayload, valuationSeries: valuationPayload });
+      setBackupMessage(result.message);
+    } catch {
+      setBackupMessage("导入失败：文件内容不是有效 JSON 备份");
+    } finally {
+      setImportingBackup(false);
+    }
   };
 
   return (
@@ -130,8 +250,44 @@ export default function SettingsPage() {
             </div>
             <ChevronRight size={18} className="text-[#747781]" />
           </button>
+          <button
+            type="button"
+            className="flex w-full items-center justify-between border-t border-[#e2e7ff] px-4 py-3.5 text-left disabled:opacity-70"
+            onClick={handleExportData}
+            disabled={seeding || clearingDemo || importingBackup}
+          >
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#e2e7ff] bg-white text-[#24467c]">
+                <Download size={18} />
+              </span>
+              <span className="text-sm font-semibold text-[#131b2e]">导出数据</span>
+            </div>
+            <ChevronRight size={18} className="text-[#747781]" />
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center justify-between border-t border-[#e2e7ff] px-4 py-3.5 text-left disabled:opacity-70"
+            onClick={handlePickImportFile}
+            disabled={seeding || clearingDemo || importingBackup}
+          >
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#e2e7ff] bg-white text-[#24467c]">
+                {importingBackup ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+              </span>
+              <span className="text-sm font-semibold text-[#131b2e]">{importingBackup ? "导入中..." : "导入数据"}</span>
+            </div>
+            <ChevronRight size={18} className="text-[#747781]" />
+          </button>
         </div>
-        {seededAt ? <p className="px-1 text-[11px] text-[#57657a]">演示数据已写入（{seededAt}）</p> : null}
+        {seededAt ? <p className="mt-2 px-1 text-[11px] leading-relaxed text-[#57657a]">演示数据已写入（{seededAt}）</p> : null}
+        {backupMessage ? <p className="mt-2 px-1 text-[11px] leading-relaxed text-[#57657a]">{backupMessage}</p> : null}
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".json,application/json"
+          className="hidden"
+          onChange={handleImportFile}
+        />
       </section>
 
       <section className="mb-5">
