@@ -224,8 +224,8 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
           ) : (
             <span />
           )}
-          <div className="mx-auto max-w-[72%] text-center">
-            <h1 className="typo-fund-header-title whitespace-normal break-words">{fund.name}</h1>
+          <div className="mx-auto max-w-[calc(100%-7.5rem)] px-8 text-center">
+            <h1 className="typo-fund-header-title">{fund.name}</h1>
             <p className="typo-fund-header-code">{fund.code}</p>
           </div>
         </div>
@@ -234,9 +234,9 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
       <main className="flex-1 overflow-y-auto pb-24">
         <section className="border-b border-[#e2e7ff] px-3 py-4">
             <div className="mb-2 flex items-center justify-between">
-              <span className="block text-[10px] font-semibold tracking-[0.12em] text-[#747781]">{mode === "amount" ? "当前持仓" : "当前份额"}</span>
+              <span className="block text-[length:var(--type-body-size)] font-medium tracking-[0.12em] text-[#747781]">{mode === "amount" ? "当前持仓" : "当前份额"}</span>
               <div className="flex items-center gap-2 rounded-lg border border-[#e2e7ff] bg-[#f8f9ff] p-1">
-                <span className="block text-[10px] font-medium text-[#747781]">{mode === "amount" ? "CNY" : "SHARE"}</span>
+                <span className="block text-[length:var(--type-body-size)] font-medium text-[#747781]">{mode === "amount" ? "CNY" : "SHARE"}</span>
                 <button
                   type="button"
                   className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[#d5dbea] bg-white text-[#24467c]"
@@ -254,7 +254,8 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
                 value={mode === "amount" ? amountInput : shareInput}
                 onChange={(event) => (mode === "amount" ? setAmountInput(event.target.value) : setShareInput(event.target.value))}
                 placeholder="0.00"
-                className="typo-value-hero w-full border-0 bg-transparent py-2 pl-6 pr-3 outline-none placeholder:text-[#9aa5bb] focus:ring-0"
+                className="typo-value-emphasis w-full border-0 bg-transparent py-2 pl-6 pr-3 outline-none placeholder:text-[#9aa5bb] focus:ring-0"
+                style={{ fontSize: "var(--type-metric-strong)", fontWeight: 700 }}
               />
             </div>
         </section>
@@ -263,19 +264,20 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
           <div className="grid grid-cols-2 gap-3">
             <label className="col-span-2 border-b border-[#d5dbea] px-3 py-4">
               <div className="flex items-center justify-between">
-                <span className="block text-[10px] font-semibold tracking-[0.12em] text-[#747781]">持有收益</span>
+                <span className="block text-[length:var(--type-body-size)] font-medium tracking-[0.12em] text-[#747781]">持有收益</span>
                 <input
                   inputMode="decimal"
                   value={profitInput}
                   onChange={(event) => setProfitInput(event.target.value)}
                   placeholder="0.00"
                   className={`typo-value-emphasis w-28 border-0 bg-transparent p-0 text-right outline-none placeholder:text-[#9aa5bb] focus:ring-0 ${profitToneClass}`}
+                  style={{ fontSize: "var(--type-metric-strong)", fontWeight: 700 }}
                 />
               </div>
-              <span className={`mt-1 block text-[10px] font-medium ${inputProfit == null ? "text-[#747781]" : inputProfit >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>{profitHint}</span>
+              <span className={`mt-1 block text-[11px] font-medium ${inputProfit == null ? "text-[#747781]" : inputProfit >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>{profitHint}</span>
             </label>
             <label className="col-span-2 flex items-center justify-between border-b border-[#d5dbea] px-3 py-4">
-                <span className="block text-[10px] font-semibold tracking-[0.12em] text-[#747781]">首次买入日期</span>
+                <span className="block text-[length:var(--type-body-size)] font-medium tracking-[0.12em] text-[#747781]">首次买入日期</span>
                   <DatePicker
                   value={dateInput ? dayjs(dateInput, "YYYY-MM-DD") : null}
                   format="YYYY-MM-DD"
@@ -291,19 +293,19 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
         <section className="divide-y divide-[#e2e7ff]">
           <div className="flex items-center justify-between px-3 py-4">
             <div>
-              <span className="block text-[10px] font-semibold tracking-[0.12em] text-[#747781]">最新净值</span>
-              <span className="mt-1 block text-[10px] font-medium text-[#747781]">数据时间 {fund?.jzrq || "—"}</span>
+              <span className="block text-[length:var(--type-body-size)] font-medium tracking-[0.12em] text-[#747781]">最新净值</span>
+              <span className="mt-1 block text-[11px] font-medium text-[#747781]">数据时间 {fund?.jzrq || "—"}</span>
             </div>
             <span className="block typo-value-emphasis tabular-nums">{officialNav != null ? officialNav.toFixed(4) : "—"}</span>
           </div>
           <div className="flex items-center justify-between px-3 py-4">
-            <span className="block text-[10px] font-semibold tracking-[0.12em] text-[#747781]">持仓成本</span>
+            <span className="block text-[length:var(--type-body-size)] font-medium tracking-[0.12em] text-[#747781]">持仓成本</span>
             <span className={`block typo-value-emphasis tabular-nums ${(derivedCostPerShare || 0) >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>
               {derivedCostPerShare != null ? derivedCostPerShare.toFixed(4) : "—"}
             </span>
           </div>
           <div className="flex items-center justify-between px-3 py-4">
-            <span className="block text-[10px] font-semibold tracking-[0.12em] text-[#747781]">持有天数</span>
+            <span className="block text-[length:var(--type-body-size)] font-medium tracking-[0.12em] text-[#747781]">持有天数</span>
             <span className="block typo-body-strong tabular-nums">{holdingDays == null ? "—" : `${holdingDays} 天`}</span>
           </div>
         </section>

@@ -384,8 +384,8 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
           ) : (
             <span />
           )}
-          <div className="mx-auto max-w-[72%] text-center">
-            <h1 className="m-0 whitespace-normal break-words typo-fund-header-title font-normal">{fund.name}</h1>
+          <div className="mx-auto max-w-[calc(100%-7.5rem)] px-8 text-center">
+            <h1 className="m-0 typo-fund-header-title font-normal">{fund.name}</h1>
             <p className="m-0 typo-fund-header-code font-normal">{fund.code}</p>
           </div>
         </div>
