@@ -266,6 +266,11 @@ export default function MarketPage() {
     .sort((a, b) => (b.change || 0) - (a.change || 0))
     .slice(0, 6);
 
+  const latestQuickNewsMinute = quickNews.reduce((max, item) => {
+    const weight = newsTimeWeight(item.time);
+    return weight > max ? weight : max;
+  }, -1);
+
   const toggleIndexSelection = (id: string) => {
     setSelectedIndexIds((prev) => {
       if (prev.includes(id)) {
@@ -362,7 +367,7 @@ export default function MarketPage() {
               </div>
             ) : quickNews.length > 0 ? quickNews.map((item) => (
               <article key={item.time + item.text} className="flex gap-3 px-3 py-3">
-                <span className={`pt-0.5 text-sm font-semibold ${item.time === "14:35" ? "text-[#005bc0]" : "text-[#747781]"}`}>{item.time}</span>
+                <span className={`pt-0.5 text-sm font-semibold ${newsTimeWeight(item.time) === latestQuickNewsMinute ? "text-[#005bc0]" : "text-[#747781]"}`}>{item.time}</span>
                 <p className="m-0 text-sm leading-5">{item.text}</p>
               </article>
             )) : <p className="px-3 py-4 text-sm text-[#747781]">{marketLoaded ? "暂无快讯" : "加载快讯中..."}</p>}

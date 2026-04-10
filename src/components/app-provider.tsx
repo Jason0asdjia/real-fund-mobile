@@ -51,6 +51,7 @@ type AppContextValue = {
 const AppContext = createContext<AppContextValue | null>(null);
 const LOCAL_OWNER_USER_ID_KEY = "real-fund-mobile:owner-user-id";
 const OFFICIAL_NAV_HISTORY_CACHE_KEY = "real-fund-mobile:official-nav-history";
+const MAX_ARCHIVE_PREFETCH_CONCURRENCY = 3;
 
 const setLocalOwnerUser = (value: string | null) => {
   if (typeof window === "undefined") return;
@@ -151,7 +152,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const didInitialRefreshRef = useRef(false);
   const refreshTokenRef = useRef(0);
   const lastForegroundRefreshRef = useRef(0);
-  const archiveBackfillCodeRef = useRef<string | null>(null);
+  const archiveBackfillInFlightRef = useRef(new Set<string>());
   const archiveBackfillAttemptRef = useRef<Record<string, number>>({});
   const lastCloudPayloadRef = useRef("");
   const skipNextCloudSyncRef = useRef(false);
@@ -589,10 +590,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [hydrated, refreshFunds, state.funds.length]);
 
   const backfillFundArchives = useCallback(async (fund: FundSnapshot) => {
-    if (archiveBackfillCodeRef.current || refreshingRef.current || document.hidden) return;
+    if (refreshingRef.current || document.hidden) return;
     if (typeof window !== "undefined" && window.location.pathname.startsWith("/discover")) return;
+    if (archiveBackfillInFlightRef.current.has(fund.code)) return;
 
-    archiveBackfillCodeRef.current = fund.code;
+    archiveBackfillInFlightRef.current.add(fund.code);
     archiveBackfillAttemptRef.current[fund.code] = Date.now();
 
     try {
@@ -624,25 +626,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         funds: current.funds.map((item) => (item.code === fund.code ? { ...item, archiveStatus: item.archiveStatus || "pending" } : item)),
       }));
     } finally {
-      archiveBackfillCodeRef.current = null;
+      archiveBackfillInFlightRef.current.delete(fund.code);
     }
   }, []);
 
   useEffect(() => {
     if (!hydrated || document.hidden || refreshingRef.current || state.funds.length === 0) return;
+    if (typeof window !== "undefined" && window.location.pathname.startsWith("/discover")) return;
 
     const now = Date.now();
-    const candidate = state.funds.find((fund) => {
+    const candidates = state.funds.filter((fund) => {
       if (!needsArchiveBackfill(fund)) return false;
+      if (archiveBackfillInFlightRef.current.has(fund.code)) return false;
       const lastAttemptAt = archiveBackfillAttemptRef.current[fund.code] || 0;
-      return now - lastAttemptAt >= 60_000;
+      return now - lastAttemptAt >= 10_000;
     });
 
-    if (!candidate) return;
+    if (candidates.length === 0) return;
+
+    const queue = candidates.slice(0, MAX_ARCHIVE_PREFETCH_CONCURRENCY);
 
     const timer = window.setTimeout(() => {
-      void backfillFundArchives(candidate);
-    }, 1200);
+      void Promise.allSettled(queue.map((item) => backfillFundArchives(item)));
+    }, 220);
 
     return () => window.clearTimeout(timer);
   }, [backfillFundArchives, hydrated, state.funds]);
