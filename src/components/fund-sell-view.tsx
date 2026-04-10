@@ -119,7 +119,7 @@ export function FundSellView({ code }: FundSellViewProps) {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-24">
+      <main className="flex-1 overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+6.6rem)]">
         <section className="border-b border-[#e2e7ff] px-3 py-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -239,7 +239,7 @@ export function FundSellView({ code }: FundSellViewProps) {
         </section>
       </main>
 
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-[#e2e7ff] bg-white/95 p-3 backdrop-blur">
+      <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+0.5rem)] left-3 right-3 z-30 rounded-[1.45rem] border border-slate-200 bg-white p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom)*0.22)] shadow-[0_3px_10px_rgba(15,23,42,0.12)] md:left-1/2 md:right-auto md:w-[560px] md:-translate-x-1/2">
         <button
           type="button"
           onClick={handleConfirm}

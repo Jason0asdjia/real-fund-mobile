@@ -10,25 +10,21 @@ import { formatPercent } from "@/lib/portfolio";
 import { todayInMarket } from "@/lib/time";
 
 const MARKET_INDEX_STORAGE_KEY = "real-fund-mobile:market-indices";
+const MARKET_CACHE_STORAGE_KEY = "real-fund-mobile:market-cache";
+const MARKET_CACHE_TTL_MS = 45_000;
 const DEFAULT_MARKET_INDEX_IDS = ["sh000001", "hkHSI", "usIXIC"];
 
-const defaultMarketSnapshot = [
-  { id: "sh000001", market: "a" as const, label: "上证指数", value: "3,058.22", change: 0.42 },
-  { id: "hkHSI", market: "hk" as const, label: "恒生指数", value: "16,725.10", change: -1.15 },
-  { id: "usIXIC", market: "us" as const, label: "纳斯达克", value: "16,085.11", change: 0.82 },
-];
+type MarketSnapshotList = Awaited<ReturnType<typeof fetchMarketSnapshot>>;
+type HotSectorList = Awaited<ReturnType<typeof fetchHotSectors>>;
+type FastNewsList = Awaited<ReturnType<typeof fetchFastNews>>;
 
-const defaultHotSectors = [
-  { name: "半导体设备", change: 3.82, points: [7, 8, 7, 10, 9, 12, 11, 13, 14, 16, 18] },
-  { name: "人工智能AI", change: 2.45, points: [9, 8, 10, 9, 12, 11, 13, 14, 13, 15, 17] },
-];
-
-const defaultQuickNews = [
-  { time: "14:35", text: "中国央行：维持一年期及五年期LPR利率不变。" },
-  { time: "14:12", text: "光伏组件出海超预期，机构调高行业评级。" },
-  { time: "13:45", text: "港股午后走低，恒生科技指数跌幅扩大至2%。" },
-  { time: "11:30", text: "上交所：本周对股价异常波动股票进行从严监管。" },
-];
+type MarketCachePayload = {
+  at: number;
+  idsKey: string;
+  marketSnapshot: MarketSnapshotList;
+  hotSectors: HotSectorList;
+  quickNews: FastNewsList;
+};
 
 const toNumber = (value: string | number | null | undefined) => {
   const next = Number(value);
@@ -43,10 +39,11 @@ const getRankedFundChange = (fund: { jzrq?: string | null; zzl?: number | string
 };
 
 export default function MarketPage() {
-  const { state, refreshFunds } = useAppState();
-  const [marketSnapshot, setMarketSnapshot] = useState(defaultMarketSnapshot);
-  const [hotSectors, setHotSectors] = useState(defaultHotSectors);
-  const [quickNews, setQuickNews] = useState(defaultQuickNews);
+  const { state } = useAppState();
+  const [marketSnapshot, setMarketSnapshot] = useState<MarketSnapshotList>([]);
+  const [hotSectors, setHotSectors] = useState<HotSectorList>([]);
+  const [quickNews, setQuickNews] = useState<FastNewsList>([]);
+  const [marketLoaded, setMarketLoaded] = useState(false);
   const [indexModalOpen, setIndexModalOpen] = useState(false);
   const [selectedIndexIds, setSelectedIndexIds] = useState<string[]>(DEFAULT_MARKET_INDEX_IDS);
   const [indicesHydrated, setIndicesHydrated] = useState(false);
@@ -85,11 +82,6 @@ export default function MarketPage() {
   }, [indicesHydrated, selectedIndexIds]);
 
   useEffect(() => {
-    if (state.funds.length === 0) return;
-    void refreshFunds();
-  }, [refreshFunds, state.funds.length]);
-
-  useEffect(() => {
     if (typeof document === "undefined") return;
     document.body.classList.toggle("app-modal-open", indexModalOpen);
     return () => {
@@ -100,6 +92,45 @@ export default function MarketPage() {
   useEffect(() => {
     if (!indicesHydrated) return;
     let active = true;
+    let delayedFetchTimer: number | null = null;
+    const idsKey = selectedIndexIds.join(",");
+
+    const persistMarketCache = (payload: MarketCachePayload) => {
+      if (typeof window === "undefined") return;
+      try {
+        window.localStorage.setItem(MARKET_CACHE_STORAGE_KEY, JSON.stringify(payload));
+      } catch {
+        // noop
+      }
+    };
+
+    const readFreshMarketCache = () => {
+      if (typeof window === "undefined") return null;
+      try {
+        const raw = window.localStorage.getItem(MARKET_CACHE_STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as Partial<MarketCachePayload>;
+        const at = Number(parsed.at);
+        const cachedIdsKey = typeof parsed.idsKey === "string" ? parsed.idsKey : "";
+        const age = Date.now() - at;
+        if (!Number.isFinite(at) || at <= 0) return null;
+        if (cachedIdsKey !== idsKey) return null;
+        if (age >= MARKET_CACHE_TTL_MS) return null;
+        if (!Array.isArray(parsed.marketSnapshot) || !Array.isArray(parsed.hotSectors) || !Array.isArray(parsed.quickNews)) return null;
+        return {
+          age,
+          payload: {
+            at,
+            idsKey: cachedIdsKey,
+            marketSnapshot: parsed.marketSnapshot as MarketSnapshotList,
+            hotSectors: parsed.hotSectors as HotSectorList,
+            quickNews: parsed.quickNews as FastNewsList,
+          },
+        };
+      } catch {
+        return null;
+      }
+    };
 
     const loadMarketData = async () => {
       try {
@@ -114,14 +145,38 @@ export default function MarketPage() {
         if (nextQuickNews.length > 0) {
           setQuickNews(nextQuickNews);
         }
+        persistMarketCache({
+          at: Date.now(),
+          idsKey,
+          marketSnapshot: nextSnapshot,
+          hotSectors: nextSectors,
+          quickNews: nextQuickNews,
+        });
       } catch (error) {
         if (process.env.NODE_ENV !== "production") {
           console.warn("Market API request failed", error);
         }
+      } finally {
+        if (active) {
+          setMarketLoaded(true);
+        }
       }
     };
 
-    void loadMarketData();
+    const freshCache = readFreshMarketCache();
+    if (freshCache) {
+      setMarketSnapshot(freshCache.payload.marketSnapshot);
+      setHotSectors(freshCache.payload.hotSectors);
+      setQuickNews(freshCache.payload.quickNews);
+      setMarketLoaded(true);
+      delayedFetchTimer = window.setTimeout(() => {
+        void loadMarketData();
+      }, Math.max(600, MARKET_CACHE_TTL_MS - freshCache.age));
+    } else {
+      setMarketLoaded(false);
+      void loadMarketData();
+    }
+
     const refreshEvery = state.refreshMs;
     const timer = window.setInterval(() => {
       void loadMarketData();
@@ -129,6 +184,9 @@ export default function MarketPage() {
 
     return () => {
       active = false;
+      if (delayedFetchTimer != null) {
+        window.clearTimeout(delayedFetchTimer);
+      }
       window.clearInterval(timer);
     };
   }, [indicesHydrated, selectedIndexIds, state.refreshMs]);
@@ -171,13 +229,15 @@ export default function MarketPage() {
 
         <section className="flex items-stretch border-b border-[#e2e7ff] bg-white">
           <div className="flex flex-1 items-center gap-5 overflow-x-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {marketSnapshot.map((item) => (
+            {marketSnapshot.length > 0 ? marketSnapshot.map((item) => (
               <article key={item.id} className="min-w-fit shrink-0 pr-3">
                 <p className="mb-1 text-base font-extrabold text-[#4e5666]">{item.label}</p>
                 <p className="text-sm font-bold tabular-nums">{item.value}</p>
                 <p className={`text-sm font-semibold ${item.change >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>{formatPercent(item.change)}</p>
               </article>
-            ))}
+            )) : (
+              <p className="text-sm font-medium text-[#747781]">{marketLoaded ? "暂无指数数据" : "加载指数中..."}</p>
+            )}
           </div>
           <button type="button" className="flex items-center border-l border-[#e2e7ff] px-3 text-[#747781]" onClick={() => setIndexModalOpen(true)} aria-label="编辑指数显示">
             <SlidersHorizontal size={16} />
@@ -192,7 +252,7 @@ export default function MarketPage() {
             <span className="text-sm font-semibold text-[#005bc0]">更多行情</span>
           </div>
           <div className="grid grid-cols-2 border-y border-[#f2f3ff]">
-            {hotSectors.map((sector, index) => (
+            {hotSectors.length > 0 ? hotSectors.map((sector, index) => (
               <article key={sector.name} className={`p-3 ${index === 0 ? "border-r border-[#f2f3ff]" : ""}`}>
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <span className="text-sm font-semibold">{sector.name}</span>
@@ -209,7 +269,7 @@ export default function MarketPage() {
                   </svg>
                 </div>
               </article>
-            ))}
+            )) : <p className="col-span-2 px-3 py-4 text-sm text-[#747781]">{marketLoaded ? "暂无板块数据" : "加载板块中..."}</p>}
           </div>
         </section>
 
@@ -237,12 +297,12 @@ export default function MarketPage() {
         <section className="py-3">
           <h2 className="mb-2 px-3 text-sm font-bold text-[#131b2e]">7x24快讯</h2>
           <div className="divide-y divide-[#f2f3ff]">
-            {quickNews.map((item) => (
+            {quickNews.length > 0 ? quickNews.map((item) => (
               <article key={item.time + item.text} className="flex gap-3 px-3 py-3">
                 <span className={`pt-0.5 text-sm font-semibold ${item.time === "14:35" ? "text-[#005bc0]" : "text-[#747781]"}`}>{item.time}</span>
                 <p className="m-0 text-sm leading-5">{item.text}</p>
               </article>
-            ))}
+            )) : <p className="px-3 py-4 text-sm text-[#747781]">{marketLoaded ? "暂无快讯" : "加载快讯中..."}</p>}
           </div>
         </section>
       </main>

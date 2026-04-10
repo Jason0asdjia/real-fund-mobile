@@ -391,7 +391,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-16">
+      <main className="flex-1 overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+6.6rem)]">
         {holding ? (
           <section className="border-b border-[#e2e7ff] bg-[#d7e2ff] px-3 py-1.5 text-[#001b3f]">
             <div className="flex items-center justify-between gap-2">
@@ -509,7 +509,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
 
       </main>
 
-      <nav className="fixed bottom-2 left-3 right-3 z-30 grid grid-cols-4 gap-1.5 rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_3px_10px_rgba(15,23,42,0.12)] md:left-1/2 md:right-auto md:w-[560px] md:-translate-x-1/2">
+      <nav className="fixed bottom-[calc(env(safe-area-inset-bottom)+0.5rem)] left-3 right-3 z-30 grid grid-cols-4 gap-1.5 rounded-[1.45rem] border border-slate-200 bg-white p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom)*0.22)] shadow-[0_3px_10px_rgba(15,23,42,0.12)] md:left-1/2 md:right-auto md:w-[560px] md:-translate-x-1/2">
         <Link
           href={`/portfolio/${fund.code}/buy?from=detail`}
           onClick={(event) => {

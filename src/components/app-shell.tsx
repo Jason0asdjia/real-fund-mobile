@@ -23,7 +23,7 @@ const getRouteIndex = (pathname: string) => {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { hydrated, conflictResolution, resolveDataConflict } = useAppState();
+  const { conflictResolution, resolveDataConflict } = useAppState();
   const { user, authLoading, authError, isConfigured, signInWithGitHub } = useAuth();
   const sectionPath = getSectionPath(pathname);
   const previousIndexRef = useRef(getRouteIndex(pathname));
@@ -90,21 +90,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Github size={16} />
               使用 GitHub 登录
             </button>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  if (!hydrated) {
-    return (
-      <div className="app-frame">
-        <div className="ambient ambient--one" />
-        <div className="ambient ambient--two" />
-        <main className="app-main flex items-center justify-center p-4">
-          <div className="flex items-center gap-2 rounded-lg border border-[#e2e7ff] bg-white px-4 py-3 text-sm font-medium text-[#57657a]">
-            <Loader2 size={16} className="animate-spin" />
-            正在同步用户数据...
           </div>
         </main>
       </div>

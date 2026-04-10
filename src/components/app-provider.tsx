@@ -223,12 +223,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       const localState = loadAppState();
       const localSeries = getAllValuationSeries();
+      const localPreferences = readImportantPreferences();
+      const localOwnerUserId = typeof window !== "undefined" ? window.localStorage.getItem(LOCAL_OWNER_USER_ID_KEY) : null;
+      const shouldUseLocalForBootstrap = !localOwnerUserId || localOwnerUserId === userId;
+      const bootstrapState = shouldUseLocalForBootstrap ? localState : defaultAppState;
+
+      // Local-first bootstrap: keep route switches responsive on mobile,
+      // then reconcile cloud payload in background.
+      setState(bootstrapState);
+      setValuationSeries(shouldUseLocalForBootstrap ? localSeries : {});
+      fundsRef.current = bootstrapState.funds;
+      setPreferenceSignature(JSON.stringify(localPreferences));
+      setHydrated(true);
 
       try {
         const cloud = await fetchCloudUserData(userId);
         if (!active) return;
 
-        const localPreferences = readImportantPreferences();
         const localPayload = createCloudPayload(localState, localPreferences);
 
         if (cloud) {
@@ -239,7 +250,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             funds: cloudFunds,
           };
           const cloudPayload = createCloudPayload(cloudState, cloud.preferences);
-          const localOwnerUserId = typeof window !== "undefined" ? window.localStorage.getItem(LOCAL_OWNER_USER_ID_KEY) : null;
           const shouldAskConflict = hasMeaningfulCloudData(localPayload) && hasMeaningfulCloudData(cloudPayload)
             && localOwnerUserId !== userId
             && JSON.stringify(localPayload) !== JSON.stringify(cloudPayload);
@@ -257,7 +267,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               cloudSummary: getStateSummary(cloudStateForRuntime),
               resolving: false,
             });
-            setState(localState);
+            setState(bootstrapState);
             setPreferenceSignature(JSON.stringify(localPreferences));
           } else {
             applyPayloadAsRuntime(createCloudPayload(cloudStateForRuntime, cloud.preferences));
@@ -265,12 +275,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
 
           setValuationSeries(getAllValuationSeries());
-          setHydrated(true);
           return;
         }
 
-        const localOwnerUserId = typeof window !== "undefined" ? window.localStorage.getItem(LOCAL_OWNER_USER_ID_KEY) : null;
-        const shouldUseLocalForBootstrap = !localOwnerUserId || localOwnerUserId === userId;
         const bootState = shouldUseLocalForBootstrap ? localState : defaultAppState;
         const bootPayload = buildCloudPayloadFromState(bootState);
         await upsertCloudUserData(userId, bootPayload);
@@ -279,18 +286,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         lastCloudPayloadRef.current = JSON.stringify(bootPayload);
         setPreferenceSignature(JSON.stringify(readImportantPreferences()));
         setState(bootState);
-        setValuationSeries(localSeries);
+        setValuationSeries(shouldUseLocalForBootstrap ? localSeries : {});
         fundsRef.current = bootState.funds;
         setLocalOwnerUser(userId);
       } catch {
         if (!active) return;
-        setState(localState);
-        setValuationSeries(localSeries);
-        fundsRef.current = localState.funds;
-      } finally {
-        if (active) {
-          setHydrated(true);
-        }
+        setState(bootstrapState);
+        setValuationSeries(shouldUseLocalForBootstrap ? localSeries : {});
+        fundsRef.current = bootstrapState.funds;
       }
     };
 

@@ -489,7 +489,7 @@
     overflow: hidden;
     position: fixed;
     isolation: isolate;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.85rem);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
     border-radius: 1.45rem;
     padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px) * 0.22);
     --bottom-nav-progress: 0;
