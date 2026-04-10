@@ -280,8 +280,8 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="-mx-3 -mt-4 flex h-[calc(100dvh-5.5rem)] flex-col overflow-hidden bg-white px-4 pt-4 [overscroll-behavior-y:none] md:-mx-4">
-      <div className="-mx-4 shrink-0 border-b border-[#e2e7ff] bg-white px-4 pb-3 pt-4">
+    <div className="-mx-3 -mt-4 bg-white px-4 pt-4 md:-mx-4">
+      <div className="-mx-4 border-b border-[#e2e7ff] bg-white px-4 pb-3 pt-4">
         <section className="mb-4 border-b border-[#e2e7ff] pb-4">
           <div className="flex items-center gap-4">
             <div className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border border-[#e2e7ff] bg-white text-[#24467c]">
@@ -327,7 +327,7 @@ export default function SettingsPage() {
         </section>
       </div>
 
-      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-0 pb-20 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <main className="px-0 pb-20 pt-3">
 
       <section className="mb-5">
         <h2 className="px-1 text-[11px] font-bold tracking-[0.15em] text-[#747781]">资产与交易</h2>
