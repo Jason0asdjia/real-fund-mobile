@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Check, SlidersHorizontal, X } from "lucide-react";
 
@@ -26,6 +26,33 @@ type MarketCachePayload = {
   quickNews: FastNewsList;
 };
 
+const newsTimeWeight = (time: string) => {
+  const matched = time.match(/^(\d{2}):(\d{2})$/);
+  if (!matched) return -1;
+  return Number(matched[1]) * 60 + Number(matched[2]);
+};
+
+const sortFastNews = (items: FastNewsList) =>
+  [...items].sort((a, b) => {
+    const diff = newsTimeWeight(b.time) - newsTimeWeight(a.time);
+    if (diff !== 0) return diff;
+    return b.text.localeCompare(a.text);
+  });
+
+const mergeFastNews = (previous: FastNewsList, incoming: FastNewsList, limit = 4): FastNewsList => {
+  if (!incoming.length) return sortFastNews(previous).slice(0, limit);
+
+  const mergedMap = new Map<string, FastNewsList[number]>();
+  [...incoming, ...previous].forEach((item) => {
+    const key = `${item.time}|${item.text}`;
+    if (!mergedMap.has(key)) {
+      mergedMap.set(key, item);
+    }
+  });
+
+  return sortFastNews(Array.from(mergedMap.values())).slice(0, limit);
+};
+
 const toNumber = (value: string | number | null | undefined) => {
   const next = Number(value);
   return Number.isFinite(next) ? next : null;
@@ -44,9 +71,13 @@ export default function MarketPage() {
   const [hotSectors, setHotSectors] = useState<HotSectorList>([]);
   const [quickNews, setQuickNews] = useState<FastNewsList>([]);
   const [marketLoaded, setMarketLoaded] = useState(false);
+  const [newsTransitionDone, setNewsTransitionDone] = useState(false);
   const [indexModalOpen, setIndexModalOpen] = useState(false);
   const [selectedIndexIds, setSelectedIndexIds] = useState<string[]>(DEFAULT_MARKET_INDEX_IDS);
   const [indicesHydrated, setIndicesHydrated] = useState(false);
+  const marketSnapshotRef = useRef<MarketSnapshotList>([]);
+  const hotSectorsRef = useRef<HotSectorList>([]);
+  const quickNewsRef = useRef<FastNewsList>([]);
 
   const groupedIndexTargets = useMemo(
     () => [
@@ -88,6 +119,27 @@ export default function MarketPage() {
       document.body.classList.remove("app-modal-open");
     };
   }, [indexModalOpen]);
+
+  useEffect(() => {
+    marketSnapshotRef.current = marketSnapshot;
+  }, [marketSnapshot]);
+
+  useEffect(() => {
+    hotSectorsRef.current = hotSectors;
+  }, [hotSectors]);
+
+  useEffect(() => {
+    quickNewsRef.current = quickNews;
+  }, [quickNews]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setNewsTransitionDone(true);
+    }, 220);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, []);
 
   useEffect(() => {
     if (!indicesHydrated) return;
@@ -136,21 +188,28 @@ export default function MarketPage() {
       try {
         const [nextSnapshot, nextSectors, nextQuickNews] = await Promise.all([fetchMarketSnapshot(selectedIndexIds), fetchHotSectors(2), fetchFastNews(4)]);
         if (!active) return;
+        let resolvedSnapshot = marketSnapshotRef.current;
+        let resolvedSectors = hotSectorsRef.current;
+        let resolvedQuickNews = quickNewsRef.current;
+
         if (nextSnapshot.length > 0) {
+          resolvedSnapshot = nextSnapshot;
           setMarketSnapshot(nextSnapshot);
         }
         if (nextSectors.length > 0) {
+          resolvedSectors = nextSectors;
           setHotSectors(nextSectors);
         }
         if (nextQuickNews.length > 0) {
-          setQuickNews(nextQuickNews);
+          resolvedQuickNews = mergeFastNews(quickNewsRef.current, nextQuickNews, 4);
+          setQuickNews(resolvedQuickNews);
         }
         persistMarketCache({
           at: Date.now(),
           idsKey,
-          marketSnapshot: nextSnapshot,
-          hotSectors: nextSectors,
-          quickNews: nextQuickNews,
+          marketSnapshot: resolvedSnapshot,
+          hotSectors: resolvedSectors,
+          quickNews: resolvedQuickNews,
         });
       } catch (error) {
         if (process.env.NODE_ENV !== "production") {
@@ -167,7 +226,7 @@ export default function MarketPage() {
     if (freshCache) {
       setMarketSnapshot(freshCache.payload.marketSnapshot);
       setHotSectors(freshCache.payload.hotSectors);
-      setQuickNews(freshCache.payload.quickNews);
+      setQuickNews(sortFastNews(freshCache.payload.quickNews).slice(0, 4));
       setMarketLoaded(true);
       delayedFetchTimer = window.setTimeout(() => {
         void loadMarketData();
@@ -218,35 +277,33 @@ export default function MarketPage() {
   };
 
   return (
-    <div className="-mx-3 -mt-4 flex h-[calc(100dvh-5.5rem)] flex-col overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mt-4">
-      <div className="sticky top-0 z-20 shrink-0 bg-white">
-        <header className="border-b border-[#e2e7ff] bg-white">
-          <div className="flex h-12 items-center justify-between px-3">
-            <h1 className="typo-page-title">行情中心</h1>
-            <span />
-          </div>
-        </header>
+    <div className="-mx-3 -mt-4 bg-white text-[#131b2e] md:-mx-4 md:-mt-4">
+      <header className="border-b border-[#e2e7ff] bg-white">
+        <div className="flex h-12 items-center justify-between px-3">
+          <h1 className="typo-page-title">行情中心</h1>
+          <span />
+        </div>
+      </header>
 
-        <section className="flex items-stretch border-b border-[#e2e7ff] bg-white">
-          <div className="flex flex-1 items-center gap-5 overflow-x-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {marketSnapshot.length > 0 ? marketSnapshot.map((item) => (
-              <article key={item.id} className="min-w-fit shrink-0 pr-3">
-                <p className="mb-1 text-base font-extrabold text-[#4e5666]">{item.label}</p>
-                <p className="text-sm font-bold tabular-nums">{item.value}</p>
-                <p className={`text-sm font-semibold ${item.change >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>{formatPercent(item.change)}</p>
-              </article>
-            )) : (
-              <p className="text-sm font-medium text-[#747781]">{marketLoaded ? "暂无指数数据" : "加载指数中..."}</p>
-            )}
-          </div>
-          <button type="button" className="flex items-center border-l border-[#e2e7ff] px-3 text-[#747781]" onClick={() => setIndexModalOpen(true)} aria-label="编辑指数显示">
-            <SlidersHorizontal size={16} />
-          </button>
-        </section>
-      </div>
+      <section className="flex items-stretch border-b border-[#e2e7ff] bg-white">
+        <div className="flex flex-1 items-center gap-5 overflow-x-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {marketSnapshot.length > 0 ? marketSnapshot.map((item) => (
+            <article key={item.id} className="min-w-fit shrink-0 pr-3">
+              <p className="mb-1 text-base font-extrabold text-[#4e5666]">{item.label}</p>
+              <p className="text-sm font-bold tabular-nums">{item.value}</p>
+              <p className={`text-sm font-semibold ${item.change >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>{formatPercent(item.change)}</p>
+            </article>
+          )) : (
+            <p className="text-sm font-medium text-[#747781]">{marketLoaded ? "暂无指数数据" : "加载指数中..."}</p>
+          )}
+        </div>
+        <button type="button" className="flex items-center border-l border-[#e2e7ff] px-3 text-[#747781]" onClick={() => setIndexModalOpen(true)} aria-label="编辑指数显示">
+          <SlidersHorizontal size={16} />
+        </button>
+      </section>
 
-      <main className="min-h-0 flex-1 overflow-hidden">
-        <section className="shrink-0 border-b border-[#e2e7ff] py-3">
+      <main>
+        <section className="border-b border-[#e2e7ff] py-3">
           <div className="mb-2 flex items-center justify-between px-3">
             <h2 className="text-sm font-bold text-[#131b2e]">热门板块</h2>
             <span className="text-sm font-semibold text-[#005bc0]">更多行情</span>
@@ -273,40 +330,44 @@ export default function MarketPage() {
           </div>
         </section>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <section className="border-b border-[#e2e7ff] py-3">
-            <div className="mb-2 flex items-center justify-between px-3">
-              <h2 className="text-sm font-bold text-[#131b2e]">基金领涨排行</h2>
-            </div>
-            <div className="divide-y divide-[#f2f3ff]">
-              {topFunds.map((item) => (
-                <Link key={item.code} href={`/portfolio/${item.code}`} className="flex items-center justify-between px-3 py-1.5">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold">{item.name}</p>
-                    <p className="text-sm font-medium tabular-nums text-[#747781]">{item.code}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-[#005bc0]">{formatPercent(item.change)}</p>
-                    <p className="text-sm text-[#747781]">{item.nav == null ? "净值: —" : `净值: ${item.nav.toFixed(4)}`}</p>
-                  </div>
-                </Link>
-              ))}
-              {!topFunds.length ? <p className="px-3 py-4 text-sm text-[#747781]">暂无基金数据，先去发现页添加基金。</p> : null}
-            </div>
-          </section>
+        <section className="border-b border-[#e2e7ff] py-3">
+          <div className="mb-2 flex items-center justify-between px-3">
+            <h2 className="text-sm font-bold text-[#131b2e]">基金领涨排行</h2>
+          </div>
+          <div className="divide-y divide-[#f2f3ff]">
+            {topFunds.map((item) => (
+              <Link key={item.code} href={`/portfolio/${item.code}`} className="flex items-center justify-between px-3 py-1.5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold">{item.name}</p>
+                  <p className="text-sm font-medium tabular-nums text-[#747781]">{item.code}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-[#005bc0]">{formatPercent(item.change)}</p>
+                  <p className="text-sm text-[#747781]">{item.nav == null ? "净值: —" : `净值: ${item.nav.toFixed(4)}`}</p>
+                </div>
+              </Link>
+            ))}
+            {!topFunds.length ? <p className="px-3 py-4 text-sm text-[#747781]">暂无基金数据，先去发现页添加基金。</p> : null}
+          </div>
+        </section>
 
-          <section className="py-3">
-            <h2 className="mb-2 px-3 text-sm font-bold text-[#131b2e]">7x24快讯</h2>
-            <div className="divide-y divide-[#f2f3ff]">
-              {quickNews.length > 0 ? quickNews.map((item) => (
-                <article key={item.time + item.text} className="flex gap-3 px-3 py-3">
-                  <span className={`pt-0.5 text-sm font-semibold ${item.time === "14:35" ? "text-[#005bc0]" : "text-[#747781]"}`}>{item.time}</span>
-                  <p className="m-0 text-sm leading-5">{item.text}</p>
-                </article>
-              )) : <p className="px-3 py-4 text-sm text-[#747781]">{marketLoaded ? "暂无快讯" : "加载快讯中..."}</p>}
-            </div>
-          </section>
-        </div>
+        <section className="py-3">
+          <h2 className="mb-2 px-3 text-sm font-bold text-[#131b2e]">7x24快讯</h2>
+          <div className="divide-y divide-[#f2f3ff]">
+            {!newsTransitionDone && quickNews.length === 0 ? (
+              <div className="space-y-2 px-3 py-2">
+                <div className="h-10 animate-pulse rounded-lg bg-[#f3f6fb]" />
+                <div className="h-10 animate-pulse rounded-lg bg-[#f3f6fb]" />
+                <div className="h-10 animate-pulse rounded-lg bg-[#f3f6fb]" />
+              </div>
+            ) : quickNews.length > 0 ? quickNews.map((item) => (
+              <article key={item.time + item.text} className="flex gap-3 px-3 py-3">
+                <span className={`pt-0.5 text-sm font-semibold ${item.time === "14:35" ? "text-[#005bc0]" : "text-[#747781]"}`}>{item.time}</span>
+                <p className="m-0 text-sm leading-5">{item.text}</p>
+              </article>
+            )) : <p className="px-3 py-4 text-sm text-[#747781]">{marketLoaded ? "暂无快讯" : "加载快讯中..."}</p>}
+          </div>
+        </section>
       </main>
 
       {indexModalOpen ? (

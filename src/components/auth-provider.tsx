@@ -18,12 +18,21 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const isDevNoAuth = process.env.NODE_ENV !== "production";
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (isDevNoAuth) {
+      setAuthLoading(false);
+      setAuthError(null);
+      setSession(null);
+      setUser(null);
+      return;
+    }
+
     if (!isSupabaseConfigured || !supabase) {
       setAuthLoading(false);
       setAuthError(null);
@@ -84,7 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.clearTimeout(loadingTimeout);
       subscription.unsubscribe();
     };
-  }, []);
+  }, [isDevNoAuth]);
 
   const signInWithGitHub = useCallback(async () => {
     if (!isSupabaseConfigured || !supabase) {

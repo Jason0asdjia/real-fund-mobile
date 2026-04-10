@@ -35,8 +35,7 @@
   body {
     font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Source Han Sans SC", "Inter", system-ui, -apple-system, sans-serif;
     font-size: var(--type-body-size);
-    background-image: radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 28%),
-      radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.08), transparent 25%);
+    background-color: #fff;
   }
 
   a {
@@ -60,11 +59,11 @@
 
 @layer components {
   .app-frame {
-    @apply relative min-h-[100dvh] overflow-hidden bg-white;
+    @apply relative min-h-[100dvh] overflow-x-hidden bg-white;
   }
 
   .ambient {
-    @apply pointer-events-none fixed rounded-full blur-3xl opacity-40;
+    @apply hidden;
   }
 
   .ambient--one {
@@ -76,7 +75,7 @@
   }
 
   .app-main {
-    @apply relative z-10 min-h-[100dvh] overflow-hidden bg-white px-3 pt-4 md:px-4;
+    @apply relative z-10 min-h-[100dvh] bg-white px-3 pt-4 md:px-4;
     padding-bottom: calc(env(safe-area-inset-bottom) + 5.6rem);
   }
 

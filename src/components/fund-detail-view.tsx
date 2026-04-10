@@ -367,7 +367,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
       className={
         asModal
           ? "detail-page flex h-[100dvh] flex-col overflow-hidden bg-white text-[#131b2e]"
-          : "-mx-3 -mb-24 -mt-4 flex h-[calc(100dvh-5.5rem)] flex-col overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mb-24 md:-mt-4"
+          : "-mx-3 -mb-24 -mt-4 flex h-[calc(100dvh-5.5rem)] flex-col overflow-y-auto overscroll-contain bg-white text-[#131b2e] md:-mx-4 md:-mb-24 md:-mt-4"
       }
     >
       <header className="z-20 shrink-0 border-b border-[#e2e7ff] bg-white">
@@ -391,7 +391,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+6.6rem)]">
+      <main className="pb-[calc(env(safe-area-inset-bottom)+6.6rem)]">
         {holding ? (
           <section className="border-b border-[#e2e7ff] bg-[#d7e2ff] px-3 py-1.5 text-[#001b3f]">
             <div className="flex items-center justify-between gap-2">

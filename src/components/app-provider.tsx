@@ -135,6 +135,7 @@ const mergeQuoteWithIntradayFallback = (previous: FundSnapshot, next: FundSnapsh
 };
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const isDevNoAuth = process.env.NODE_ENV !== "production";
   const { user, authLoading } = useAuth();
   const userId = user?.id ?? null;
   const [state, setState] = useState<AppState>(defaultAppState);
@@ -207,6 +208,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const bootstrap = async () => {
       if (!userId) {
         if (!active) return;
+        if (isDevNoAuth) {
+          const localState = loadAppState();
+          const localSeries = getAllValuationSeries();
+          setState(localState);
+          setValuationSeries(localSeries);
+          fundsRef.current = localState.funds;
+          setPreferenceSignature(JSON.stringify(readImportantPreferences()));
+          setHydrated(true);
+          return;
+        }
         pendingConflictRef.current = null;
         setConflictResolution({
           open: false,
@@ -302,7 +313,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
-  }, [authLoading, hydrateCloudFundsForView, userId]);
+  }, [authLoading, hydrateCloudFundsForView, isDevNoAuth, userId]);
 
   useEffect(() => {
     fundsRef.current = state.funds;
@@ -326,9 +337,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [seeding]);
 
   useEffect(() => {
-    if (!hydrated || !userId) return;
+    if (!hydrated || (!userId && !isDevNoAuth)) return;
     saveAppState(state);
-  }, [hydrated, state, userId]);
+  }, [hydrated, isDevNoAuth, state, userId]);
 
   useEffect(() => {
     if (!hydrated || !userId || typeof window === "undefined") return;

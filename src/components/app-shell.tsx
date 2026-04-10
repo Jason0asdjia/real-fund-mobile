@@ -22,6 +22,7 @@ const getRouteIndex = (pathname: string) => {
 };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const isDevNoAuth = process.env.NODE_ENV !== "production";
   const pathname = usePathname();
   const { conflictResolution, resolveDataConflict } = useAppState();
   const { user, authLoading, authError, isConfigured, signInWithGitHub } = useAuth();
@@ -43,7 +44,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, [conflictResolution.open]);
 
-  if (authLoading) {
+  if (authLoading && !isDevNoAuth) {
     return (
       <div className="app-frame">
         <div className="ambient ambient--one" />
@@ -58,7 +59,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!isConfigured) {
+  if (!isConfigured && !isDevNoAuth) {
     return (
       <div className="app-frame">
         <div className="ambient ambient--one" />
@@ -78,7 +79,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user) {
+  if (!user && !isDevNoAuth) {
     return (
       <div className="app-frame">
         <div className="ambient ambient--one" />

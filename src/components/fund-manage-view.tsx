@@ -148,7 +148,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
   if (!fund) {
     return (
       <div className={asModal ? "detail-page bg-white text-[#131b2e]" : "-mx-3 -mt-4 min-h-[calc(100dvh-5.5rem)] bg-white text-[#131b2e] md:-mx-4 md:-mt-4"}>
-        <header className="sticky top-0 z-20 border-b border-[#e2e7ff] bg-white">
+        <header className="border-b border-[#e2e7ff] bg-white">
           <div className="flex h-12 items-center justify-between px-3">
             {onBack ? (
               <button type="button" className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm font-normal text-[#24467c]" onClick={onBack}>
@@ -207,7 +207,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
       className={
         asModal
           ? "detail-page flex h-[100dvh] flex-col overflow-hidden bg-white text-[#131b2e]"
-          : "-mx-3 -mb-24 -mt-4 flex h-[calc(100dvh-5.5rem)] flex-col overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mb-24 md:-mt-4"
+          : "-mx-3 -mb-24 -mt-4 flex h-[calc(100dvh-5.5rem)] flex-col overflow-y-auto overscroll-contain bg-white text-[#131b2e] md:-mx-4 md:-mb-24 md:-mt-4"
       }
     >
       <header className="z-20 shrink-0 border-b border-[#e2e7ff] bg-white">
@@ -231,7 +231,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+6.6rem)]">
+      <main className="pb-[calc(env(safe-area-inset-bottom)+6.6rem)]">
         <section className="border-b border-[#e2e7ff] px-3 py-4">
             <div className="mb-2 flex items-center justify-between">
               <span className="block text-[length:var(--type-body-size)] font-medium tracking-[0.12em] text-[#747781]">{mode === "amount" ? "当前持仓" : "当前份额"}</span>

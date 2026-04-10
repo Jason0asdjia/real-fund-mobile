@@ -163,8 +163,8 @@ export default function DiscoverPage() {
   }, [results, state.funds]);
 
   return (
-    <div className="-mx-3 -mt-4 flex h-[calc(100dvh-5.5rem)] flex-col overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mt-4">
-      <header className="sticky top-0 z-20 border-b border-[#f0f2f7] bg-white px-4 py-3">
+    <div className="-mx-3 -mt-4 bg-white text-[#131b2e] md:-mx-4 md:-mt-4">
+      <header className="border-b border-[#f0f2f7] bg-white px-4 py-3">
         <div className="flex items-center gap-2">
           <label className="flex min-h-9 flex-1 items-center gap-2 rounded-md border border-[#e5e8f0] bg-[#f5f7fb] px-2.5">
             <Search size={14} className="shrink-0 text-[#8a93a4]" />
@@ -190,7 +190,7 @@ export default function DiscoverPage() {
         </div>
       </header>
 
-      <main className="flex min-h-0 flex-1 flex-col overflow-hidden pb-2">
+      <main className="pb-2">
         <section className="shrink-0 px-4 py-4">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-[10px] font-bold tracking-[0.14em] text-[#747781]">历史搜索</h2>
@@ -222,7 +222,7 @@ export default function DiscoverPage() {
         </section>
 
         {showResultLayer ? (
-          <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+          <section className="bg-white">
             <div className="flex items-center justify-between border-y border-[#f0f2f7] bg-[#f9fafc] px-4 py-2">
               <span className="text-[10px] font-bold tracking-[0.14em] text-[#747781]">{loading ? "搜索中" : `搜索结果 (${results.length})`}</span>
               <Filter size={14} className="text-[#9aa5bb]" />
@@ -235,8 +235,7 @@ export default function DiscoverPage() {
               </div>
             ) : null}
 
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <div className="divide-y divide-[#f1f3f8]">
+            <div className="divide-y divide-[#f1f3f8]">
                 {results.map((item) => {
                   const targetCode = item.resolvedCode || item.code;
                   const fundInState = state.funds.find((fund) => fund.code === targetCode);
@@ -303,7 +302,6 @@ export default function DiscoverPage() {
                     </article>
                   );
                 })}
-              </div>
             </div>
           </section>
         ) : (

@@ -101,7 +101,7 @@ export function FundSellView({ code }: FundSellViewProps) {
   };
 
   return (
-    <div className="-mx-3 -mb-24 -mt-4 flex h-[calc(100dvh-5.5rem)] flex-col overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mb-24 md:-mt-4">
+    <div className="-mx-3 -mb-24 -mt-4 flex h-[calc(100dvh-5.5rem)] flex-col overflow-y-auto overscroll-contain bg-white text-[#131b2e] md:-mx-4 md:-mb-24 md:-mt-4">
       <header className="z-20 shrink-0 border-b border-[#e2e7ff] bg-white">
         <div className="relative min-h-12 px-3 py-1">
           <button
@@ -119,7 +119,7 @@ export function FundSellView({ code }: FundSellViewProps) {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+6.6rem)]">
+      <main className="pb-[calc(env(safe-area-inset-bottom)+6.6rem)]">
         <section className="border-b border-[#e2e7ff] px-3 py-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
