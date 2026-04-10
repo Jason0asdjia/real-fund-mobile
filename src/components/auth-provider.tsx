@@ -70,8 +70,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (error) {
           setAuthLoading(false);
           setAuthError(error.message || "无法获取 Supabase 会话");
-          setSession(null);
-          setUser(null);
           return;
         }
         setSession(data.session ?? null);
@@ -84,8 +82,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         window.clearTimeout(loadingTimeout);
         setAuthLoading(false);
         setAuthError(error instanceof Error ? error.message : "无法获取 Supabase 会话");
-        setSession(null);
-        setUser(null);
       });
 
     return () => {

@@ -138,7 +138,7 @@ const mergeQuoteWithIntradayFallback = (previous: FundSnapshot, next: FundSnapsh
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const isDevNoAuth = process.env.NODE_ENV !== "production";
-  const { user, authLoading } = useAuth();
+  const { user, authLoading, authError } = useAuth();
   const userId = user?.id ?? null;
   const [state, setState] = useState<AppState>(defaultAppState);
   const [hydrated, setHydrated] = useState(false);
@@ -223,6 +223,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setHydrated(true);
           return;
         }
+
+        if (hydrated && authError) {
+          return;
+        }
+
         pendingConflictRef.current = null;
         setConflictResolution({
           open: false,
@@ -318,7 +323,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
-  }, [authLoading, hydrateCloudFundsForView, isDevNoAuth, userId]);
+  }, [authError, authLoading, hydrateCloudFundsForView, hydrated, isDevNoAuth, userId]);
 
   useEffect(() => {
     fundsRef.current = state.funds;

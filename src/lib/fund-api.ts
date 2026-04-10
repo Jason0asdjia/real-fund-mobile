@@ -568,7 +568,16 @@ const mapEstimateSource = (
 };
 
 const resolveExpectedOfficialDate = () => {
-  let cursor = nowInMarket().startOf("day").subtract(1, "day");
+  const now = nowInMarket();
+  const isWeekend = now.day() === 0 || now.day() === 6;
+  const nowMinutes = now.hour() * 60 + now.minute();
+  const shouldExpectTodayOfficial = !isWeekend && nowMinutes >= 15 * 60;
+
+  if (shouldExpectTodayOfficial) {
+    return now.startOf("day").format("YYYY-MM-DD");
+  }
+
+  let cursor = now.startOf("day").subtract(1, "day");
   while (cursor.day() === 0 || cursor.day() === 6) {
     cursor = cursor.subtract(1, "day");
   }
