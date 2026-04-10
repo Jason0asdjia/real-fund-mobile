@@ -142,19 +142,10 @@ const mergeQuoteWithIntradayFallback = (previous: FundSnapshot, next: FundSnapsh
 };
 
 const getInitialRuntimeSnapshot = () => {
-  if (typeof window === "undefined") {
-    return {
-      state: defaultAppState,
-      valuationSeries: {} as Record<string, ValuationPoint[]>,
-      hydrated: false,
-    };
-  }
-
-  const state = loadAppState();
   return {
-    state,
-    valuationSeries: getAllValuationSeries(),
-    hydrated: true,
+    state: defaultAppState,
+    valuationSeries: {} as Record<string, ValuationPoint[]>,
+    hydrated: false,
   };
 };
 
@@ -221,9 +212,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   >(null);
 
   useEffect(() => {
-    if (!initialRuntime.hydrated) return;
+    if (typeof window === "undefined") return;
+    if (hydratedRef.current) return;
+
+    const localState = loadAppState();
+    const localSeries = getAllValuationSeries();
+    setState(localState);
+    setValuationSeries(localSeries);
+    fundsRef.current = localState.funds;
+    stateRef.current = localState;
+    valuationSeriesRef.current = localSeries;
+    hydratedRef.current = true;
+    setHydrated(true);
     setPreferenceSignature(JSON.stringify(readImportantPreferences()));
-  }, [initialRuntime.hydrated]);
+  }, []);
 
   const applyUserDataMutation = useCallback((updater: (current: AppState) => AppState) => {
     setState((current) => bumpAppStateVersion(updater(current)));

@@ -121,7 +121,17 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
   const derivedCostAmount = derivedAmount != null && inputProfit != null ? derivedAmount - inputProfit : null;
   const derivedCostPerShare = derivedShare && derivedShare > 0 && derivedCostAmount != null ? derivedCostAmount / derivedShare : null;
   const profitToneClass = inputProfit == null ? "text-[#131b2e]" : inputProfit >= 0 ? "text-[#005bc0]" : "text-red-600";
-  const profitHint = inputProfit == null ? "正数表示盈利，负数表示亏损" : inputProfit >= 0 ? "当前为盈利输入" : "当前为亏损输入";
+
+  const applyProfitSign = (sign: "positive" | "negative") => {
+    const trimmed = profitInput.trim();
+    if (!trimmed) {
+      setProfitInput(sign === "negative" ? "-" : "");
+      return;
+    }
+
+    const unsigned = trimmed.replace(/^[+-]+/, "");
+    setProfitInput(sign === "negative" ? `-${unsigned}` : unsigned);
+  };
 
   const handleToggleMode = () => {
     if (!officialNav || officialNav <= 0) {
@@ -274,7 +284,22 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
                   style={{ fontSize: "var(--type-metric-strong)", fontWeight: 700 }}
                 />
               </div>
-              <span className={`mt-1 block text-[11px] font-medium ${inputProfit == null ? "text-[#747781]" : inputProfit >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>{profitHint}</span>
+              <div className="mt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  className={`inline-flex items-center rounded-md border px-2.5 py-1 text-[11px] font-medium ${inputProfit != null && inputProfit >= 0 ? "border-[#bfd4ff] bg-[#edf4ff] text-[#005bc0]" : "border-[#d5dbea] bg-white text-[#24467c]"}`}
+                  onClick={() => applyProfitSign("positive")}
+                >
+                  盈利 +
+                </button>
+                <button
+                  type="button"
+                  className={`inline-flex items-center rounded-md border px-2.5 py-1 text-[11px] font-medium ${inputProfit != null && inputProfit < 0 ? "border-[#ffc9c9] bg-[#fff1f1] text-red-600" : "border-[#d5dbea] bg-white text-[#24467c]"}`}
+                  onClick={() => applyProfitSign("negative")}
+                >
+                  亏损 -
+                </button>
+              </div>
             </label>
             <label className="col-span-2 flex items-center justify-between border-b border-[#d5dbea] px-3 py-4">
                 <span className="block text-[length:var(--type-body-size)] font-medium tracking-[0.12em] text-[#747781]">首次买入日期</span>
