@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, Info, Repeat2 } from "lucide-react";
 import { DatePicker } from "antd";
 import dayjs from "dayjs";
 
 import { useAppState } from "@/components/app-provider";
-import { formatCurrency, formatSignedCurrency, getHoldingMetrics } from "@/lib/portfolio";
+import { formatCurrency, formatSignedCurrency } from "@/lib/portfolio";
 import { holdingDaysInMarket, isBeforeTradeCutoffInMarket, todayInMarket } from "@/lib/time";
 
 type FundBuyViewProps = {
@@ -29,7 +29,6 @@ export function FundBuyView({ code }: FundBuyViewProps) {
   const { addTransaction, state } = useAppState();
   const fund = state.funds.find((item) => item.code === code);
   const holding = fund ? state.holdings[fund.code] : undefined;
-  const metrics = useMemo(() => (fund ? getHoldingMetrics(fund, holding) : null), [fund, holding]);
 
   const [mode, setMode] = useState<"amount" | "share">("amount");
   const [amountInput, setAmountInput] = useState("");
@@ -75,7 +74,12 @@ export function FundBuyView({ code }: FundBuyViewProps) {
     );
   }
 
-  const latestNav = Number(fund.dwjz ?? 0) || 0;
+  const latestNavRaw = Number(fund.dwjz ?? 0);
+  const latestNav = Number.isFinite(latestNavRaw) && latestNavRaw > 0 ? latestNavRaw : 0;
+  const holdingShare = holding?.share != null && Number.isFinite(Number(holding.share)) ? Number(holding.share) : null;
+  const holdingCost = holding?.cost != null && Number.isFinite(Number(holding.cost)) ? Number(holding.cost) : null;
+  const holdingAmount = holdingShare != null && latestNav > 0 ? holdingShare * latestNav : null;
+  const holdingProfit = holdingShare != null && holdingCost != null && latestNav > 0 ? (latestNav - holdingCost) * holdingShare : null;
   const amountRaw = mode === "amount" ? toNumber(amountInput) || 0 : (toNumber(shareInput) || 0) * latestNav;
   const shareRaw = mode === "share" ? toNumber(shareInput) || 0 : latestNav > 0 ? (toNumber(amountInput) || 0) / latestNav : 0;
   const amount = Math.max(amountRaw, 0);
@@ -119,12 +123,12 @@ export function FundBuyView({ code }: FundBuyViewProps) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <p className="typo-label">持仓金额/份额</p>
-              <p className="mt-1 text-xl font-normal tabular-nums text-[#131b2e]">{formatCurrency(metrics?.amount)}</p>
+              <p className="mt-1 text-xl font-normal tabular-nums text-[#131b2e]">{formatCurrency(holdingAmount)}</p>
             </div>
             <div className="text-right">
               <p className="typo-label">持有收益</p>
-              <p className={`mt-1 text-xl font-normal tabular-nums ${(metrics?.profitTotal || 0) >= 0 ? "text-[#005bc0]" : "text-[#ba1a1a]"}`}>
-                {formatSignedCurrency(metrics?.profitTotal)}
+              <p className={`mt-1 text-xl font-normal tabular-nums ${(holdingProfit || 0) >= 0 ? "text-[#005bc0]" : "text-[#ba1a1a]"}`}>
+                {formatSignedCurrency(holdingProfit)}
               </p>
             </div>
             <div className="border-t border-[#e2e7ff] pt-2">
@@ -177,13 +181,13 @@ export function FundBuyView({ code }: FundBuyViewProps) {
                 {value.toLocaleString("zh-CN")}
               </button>
             ))}
-            <button
-              type="button"
-              className="min-h-8 rounded border border-[#d5dbea] bg-white text-xs font-normal text-[#131b2e]"
-              onClick={() =>
-                mode === "amount" ? setAmountInput(String(Math.max(Number(metrics?.amount || 0), 0))) : setShareInput(String(Math.max(Number(holding?.share || 0), 0)))
-              }
-            >
+              <button
+                type="button"
+                className="min-h-8 rounded border border-[#d5dbea] bg-white text-xs font-normal text-[#131b2e]"
+                onClick={() =>
+                  mode === "amount" ? setAmountInput(String(Math.max(Number(holdingAmount || 0), 0))) : setShareInput(String(Math.max(Number(holding?.share || 0), 0)))
+                }
+              >
               MAX
             </button>
           </div>
