@@ -11,6 +11,7 @@ type AuthContextValue = {
   authLoading: boolean;
   authError: string | null;
   isConfigured: boolean;
+  isSigningOut: boolean;
   signInWithGitHub: () => Promise<{ ok: boolean; message?: string }>;
   signOut: () => Promise<void>;
 };
@@ -23,6 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   useEffect(() => {
     if (isDevNoAuth) {
@@ -30,6 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAuthError(null);
       setSession(null);
       setUser(null);
+      setIsSigningOut(false);
       return;
     }
 
@@ -38,6 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAuthError(null);
       setSession(null);
       setUser(null);
+      setIsSigningOut(false);
       return;
     }
 
@@ -58,6 +62,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.clearTimeout(loadingTimeout);
       setSession(nextSession ?? null);
       setUser(nextSession?.user ?? null);
+      if (_event === "SIGNED_OUT") {
+        setIsSigningOut(false);
+      }
       setAuthLoading(false);
       setAuthError(null);
     });
@@ -74,6 +81,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         setSession(data.session ?? null);
         setUser(data.session?.user ?? null);
+        if (data.session) {
+          setIsSigningOut(false);
+        }
         setAuthLoading(false);
         setAuthError(null);
       })
@@ -112,7 +122,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     if (!isSupabaseConfigured || !supabase) return;
-    await supabase.auth.signOut();
+    setIsSigningOut(true);
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      window.setTimeout(() => {
+        setIsSigningOut(false);
+      }, 2000);
+    }
   }, []);
 
   const value = useMemo<AuthContextValue>(
@@ -122,10 +139,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authLoading,
       authError,
       isConfigured: isSupabaseConfigured,
+      isSigningOut,
       signInWithGitHub,
       signOut,
     }),
-    [authError, authLoading, session, signInWithGitHub, signOut, user],
+    [authError, authLoading, isSigningOut, session, signInWithGitHub, signOut, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

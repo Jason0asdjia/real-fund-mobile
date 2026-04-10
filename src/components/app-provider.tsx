@@ -138,7 +138,7 @@ const mergeQuoteWithIntradayFallback = (previous: FundSnapshot, next: FundSnapsh
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const isDevNoAuth = process.env.NODE_ENV !== "production";
-  const { user, authLoading } = useAuth();
+  const { user, authLoading, isSigningOut } = useAuth();
   const userId = user?.id ?? null;
   const [state, setState] = useState<AppState>(defaultAppState);
   const [hydrated, setHydrated] = useState(false);
@@ -147,13 +147,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState("");
   const [passiveRefreshAt, setPassiveRefreshAt] = useState<number | null>(null);
   const [valuationSeries, setValuationSeries] = useState<Record<string, ValuationPoint[]>>({});
+  const hydratedRef = useRef(false);
   const fundsRef = useRef<FundSnapshot[]>([]);
   const refreshingRef = useRef(false);
   const seedingRef = useRef(false);
   const didInitialRefreshRef = useRef(false);
   const refreshTokenRef = useRef(0);
   const skipNextInitialRefreshRef = useRef(false);
-  const unauthenticatedClearTimerRef = useRef<number | null>(null);
   const lastForegroundRefreshRef = useRef(0);
   const archiveBackfillInFlightRef = useRef(new Set<string>());
   const archiveBackfillAttemptRef = useRef<Record<string, number>>({});
@@ -213,51 +213,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    hydratedRef.current = hydrated;
+  }, [hydrated]);
+
+  useEffect(() => {
     if (authLoading) return;
 
     let active = true;
 
-    const clearUnauthenticatedTimer = () => {
-      if (unauthenticatedClearTimerRef.current == null) return;
-      window.clearTimeout(unauthenticatedClearTimerRef.current);
-      unauthenticatedClearTimerRef.current = null;
-    };
-
     const bootstrap = async () => {
       if (!userId) {
         if (!active) return;
-        if (isDevNoAuth) {
-          clearUnauthenticatedTimer();
-          const localState = loadAppState();
-          const localSeries = getAllValuationSeries();
-          setState(localState);
-          setValuationSeries(localSeries);
-          fundsRef.current = localState.funds;
-          setPreferenceSignature(JSON.stringify(readImportantPreferences()));
-          setHydrated(true);
+
+        if (isDevNoAuth || !isSigningOut) {
+          if (!hydratedRef.current) {
+            const localState = loadAppState();
+            const localSeries = getAllValuationSeries();
+            setState(localState);
+            setValuationSeries(localSeries);
+            fundsRef.current = localState.funds;
+            setPreferenceSignature(JSON.stringify(readImportantPreferences()));
+            setHydrated(true);
+          }
           return;
         }
 
-        if (unauthenticatedClearTimerRef.current != null) return;
-        unauthenticatedClearTimerRef.current = window.setTimeout(() => {
-          if (!active) return;
-          pendingConflictRef.current = null;
-          setConflictResolution({
-            open: false,
-            localSummary: { funds: 0, holdings: 0, transactions: 0, searchHistory: 0 },
-            cloudSummary: { funds: 0, holdings: 0, transactions: 0, searchHistory: 0 },
-            resolving: false,
-          });
-          setState(defaultAppState);
-          setValuationSeries({});
-          fundsRef.current = [];
-          setHydrated(true);
-          unauthenticatedClearTimerRef.current = null;
-        }, 1200);
+        pendingConflictRef.current = null;
+        setConflictResolution({
+          open: false,
+          localSummary: { funds: 0, holdings: 0, transactions: 0, searchHistory: 0 },
+          cloudSummary: { funds: 0, holdings: 0, transactions: 0, searchHistory: 0 },
+          resolving: false,
+        });
+        setState(defaultAppState);
+        setValuationSeries({});
+        fundsRef.current = [];
+        setHydrated(true);
         return;
       }
-
-      clearUnauthenticatedTimer();
 
       const localState = loadAppState();
       const localSeries = getAllValuationSeries();
@@ -341,9 +334,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       active = false;
-      clearUnauthenticatedTimer();
     };
-  }, [authLoading, hydrateCloudFundsForView, isDevNoAuth, userId]);
+  }, [authLoading, hydrateCloudFundsForView, isDevNoAuth, isSigningOut, userId]);
 
   useEffect(() => {
     fundsRef.current = state.funds;
