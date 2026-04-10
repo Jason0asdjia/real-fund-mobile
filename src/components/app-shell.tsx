@@ -24,7 +24,7 @@ const getRouteIndex = (pathname: string) => {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const isDevNoAuth = process.env.NODE_ENV !== "production";
   const pathname = usePathname();
-  const { conflictResolution, resolveDataConflict, hydrated, state } = useAppState();
+  const { conflictResolution, resolveDataConflict, hydrated, state, cloudSyncStatus } = useAppState();
   const { user, authLoading, authError, isConfigured, signInWithGitHub } = useAuth();
   const sectionPath = getSectionPath(pathname);
   const previousIndexRef = useRef(getRouteIndex(pathname));
@@ -43,11 +43,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (typeof document === "undefined") return;
-    document.body.classList.toggle("app-modal-open", conflictResolution.open);
+    document.body.classList.toggle("app-modal-open", conflictResolution.open || cloudSyncStatus.open);
     return () => {
       document.body.classList.remove("app-modal-open");
     };
-  }, [conflictResolution.open]);
+  }, [cloudSyncStatus.open, conflictResolution.open]);
 
   if (authLoading && !isDevNoAuth && !hasLocalRuntimeData) {
     return (
@@ -188,6 +188,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 >
                   合并（推荐）
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {!conflictResolution.open && cloudSyncStatus.open ? (
+        <div className="app-modal-backdrop">
+          <div className="app-modal-sheet" onClick={(event) => event.stopPropagation()}>
+            <div className="app-modal-sheet__grabber" />
+            <div className="app-modal-sheet__header">
+              <h2 className="m-0 text-base font-bold text-[#131b2e]">{cloudSyncStatus.title}</h2>
+            </div>
+            <div className="app-modal-sheet__content pb-5">
+              <div className="flex items-center gap-3 rounded-xl border border-[#e2e7ff] bg-[#f8f9ff] px-4 py-4 text-sm text-[#57657a]">
+                <Loader2 size={18} className="animate-spin text-[#24467c]" />
+                <span>{cloudSyncStatus.message}</span>
               </div>
             </div>
           </div>

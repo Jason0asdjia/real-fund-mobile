@@ -6,7 +6,7 @@ import { useAuth } from "@/components/auth-provider";
 import { buildCloudPayloadFromState, createCloudPayload, fetchCloudUserData, fetchCloudUserMeta, hasMeaningfulCloudData, hydrateAppStateFromCloudPayload, mergeCloudPayloads, upsertCloudUserData } from "@/lib/cloud-user-data";
 import { fetchFundArchiveData, fetchFundBaseData, fetchFundHistoricalNavSeries, searchFunds } from "@/lib/fund-api";
 import { applyConfirmedTransactionsToHolding, isTransactionConfirmedInMarket } from "@/lib/portfolio";
-import { APP_STATE_KEY, bumpAppStateVersion, defaultAppState, loadAppState, markAppStateSynced, normalizeAppState, saveAppState } from "@/lib/storage";
+import { APP_STATE_KEY, bumpAppStateVersion, defaultAppState, loadAppState, markAppStateSynced, normalizeAppState, saveAppState, syncDataVersionFloor } from "@/lib/storage";
 import { isEstimateTimestampUsable, nowInMarket } from "@/lib/time";
 import type { AppState, FundHolding, FundSnapshot, FundTransaction, SearchFundResult, ValuationPoint } from "@/lib/types";
 import { IMPORTANT_UI_PREFERENCE_KEYS, applyImportantPreferences, readImportantPreferences } from "@/lib/user-preferences";
@@ -44,6 +44,11 @@ type AppContextValue = {
     localSummary: { funds: number; holdings: number; transactions: number; searchHistory: number };
     cloudSummary: { funds: number; holdings: number; transactions: number; searchHistory: number };
     resolving: boolean;
+  };
+  cloudSyncStatus: {
+    open: boolean;
+    title: string;
+    message: string;
   };
   resolveDataConflict: (strategy: "keep_local" | "keep_cloud" | "merge") => Promise<void>;
 };
@@ -200,6 +205,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     cloudSummary: { funds: 0, holdings: 0, transactions: 0, searchHistory: 0 },
     resolving: false,
   });
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<AppContextValue["cloudSyncStatus"]>({
+    open: false,
+    title: "云端同步中",
+    message: "正在同步云端数据...",
+  });
   const pendingConflictRef = useRef<
     | {
         localState: AppState;
@@ -218,6 +228,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const applyUserDataMutation = useCallback((updater: (current: AppState) => AppState) => {
     setState((current) => bumpAppStateVersion(updater(current)));
   }, []);
+
+  const showCloudSyncStatus = useCallback((title: string, message: string) => {
+    setCloudSyncStatus({ open: true, title, message });
+  }, []);
+
+  const withCloudSyncOverlay = useCallback(async <T,>(title: string, message: string, task: () => Promise<T>) => {
+    showCloudSyncStatus(title, message);
+    try {
+      const result = await task();
+      setCloudSyncStatus({
+        open: true,
+        title: "同步完成",
+        message: "本地与云端数据已对齐",
+      });
+      return result;
+    } finally {
+      window.setTimeout(() => {
+        setCloudSyncStatus((current) => (
+          current.title === "同步完成"
+            ? { ...current, open: false }
+            : current
+        ));
+      }, 420);
+    }
+  }, [showCloudSyncStatus]);
 
   const applySyncedState = useCallback((nextState: AppState, syncedVersion: number, syncedAt?: string | null) => {
     const syncedState = markAppStateSynced(nextState, syncedVersion, syncedAt ?? undefined);
@@ -337,12 +372,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       try {
         const localPayload = createCloudPayload(bootstrapState, localPreferences);
+        showCloudSyncStatus("检查云端版本", "正在比对本地与云端数据版本...");
         const cloudMeta = await fetchCloudUserMeta(userId);
         if (!active) return;
+        if (cloudMeta) {
+          syncDataVersionFloor(cloudMeta.dataVersion);
+        }
 
         if (!cloudMeta) {
           if (hasMeaningfulCloudData(localPayload)) {
-            await upsertCloudUserData(userId, localPayload);
+            await withCloudSyncOverlay("上传本地数据", "云端暂无数据，正在上传当前设备内容...", () => upsertCloudUserData(userId, localPayload));
             if (!active) return;
             lastCloudPayloadRef.current = JSON.stringify(localPayload);
             applySyncedState(stateRef.current, localPayload.sync.dataVersion, localPayload.sync.updatedAt);
@@ -362,7 +401,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (localPayload.sync.dataVersion > cloudMeta.dataVersion || (sameVersion && !sameHash && cloudMeta.deviceId === localPayload.sync.deviceId)) {
-          await upsertCloudUserData(userId, localPayload);
+          await withCloudSyncOverlay("上传本地数据", "本地数据版本更新，正在同步到云端...", () => upsertCloudUserData(userId, localPayload));
           if (!active) return;
           lastCloudPayloadRef.current = JSON.stringify(localPayload);
           applySyncedState(stateRef.current, localPayload.sync.dataVersion, localPayload.sync.updatedAt);
@@ -370,7 +409,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        const cloud = await fetchCloudUserData(userId);
+        const cloud = await withCloudSyncOverlay("拉取云端数据", "云端数据较新，正在获取最新配置...", () => fetchCloudUserData(userId));
         if (!active) return;
         if (cloud) {
           const cloudState = hydrateAppStateFromCloudPayload(cloud);
@@ -407,7 +446,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             skipNextInitialRefreshRef.current = refreshedCount > 0;
             applyPayloadAsRuntime(mergedPayload);
             if (mergedPayload.sync.dataVersion > cloudPayload.sync.dataVersion || mergedPayload.sync.contentHash !== cloudPayload.sync.contentHash) {
-              await upsertCloudUserData(userId, mergedPayload);
+              await withCloudSyncOverlay("写回合并结果", "已合并本地与云端差异，正在保存...", () => upsertCloudUserData(userId, mergedPayload));
               if (!active) return;
             }
             lastCloudPayloadRef.current = JSON.stringify(mergedPayload);
@@ -424,7 +463,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ? stateRef.current
             : defaultAppState;
         const bootPayload = buildCloudPayloadFromState(bootState);
-        await upsertCloudUserData(userId, bootPayload);
+        await withCloudSyncOverlay("上传本地数据", "正在将当前本地配置写入云端...", () => upsertCloudUserData(userId, bootPayload));
         if (!active) return;
 
         lastCloudPayloadRef.current = JSON.stringify(bootPayload);
@@ -445,7 +484,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
-  }, [applySyncedState, authLoading, hydrateCloudFundsForView, isDevNoAuth, isSigningOut, userId]);
+  }, [applySyncedState, authLoading, hydrateCloudFundsForView, isDevNoAuth, isSigningOut, showCloudSyncStatus, userId, withCloudSyncOverlay]);
 
   useEffect(() => {
     fundsRef.current = state.funds;
@@ -510,8 +549,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const timer = window.setTimeout(() => {
       void fetchCloudUserMeta(userId)
         .then(async (cloudMeta) => {
+          if (cloudMeta) {
+            syncDataVersionFloor(cloudMeta.dataVersion);
+          }
           if (!cloudMeta || cloudMeta.dataVersion < payload.sync.dataVersion) {
-            await upsertCloudUserData(userId, payload);
+            await withCloudSyncOverlay("上传本地数据", "检测到本地改动，正在同步到云端...", () => upsertCloudUserData(userId, payload));
             lastCloudPayloadRef.current = signature;
             setLocalOwnerUser(userId);
             setState((current) => (
@@ -535,7 +577,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
           const cloud = await fetchCloudUserData(userId);
           if (!cloud) {
-            await upsertCloudUserData(userId, payload);
+            await withCloudSyncOverlay("上传本地数据", "云端记录缺失，正在补写当前数据...", () => upsertCloudUserData(userId, payload));
             lastCloudPayloadRef.current = signature;
             setLocalOwnerUser(userId);
             setState((current) => (
@@ -548,7 +590,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
           const mergedPayload = mergeCloudPayloads(payload, cloud);
           applyPayloadAsRuntime(mergedPayload);
-          await upsertCloudUserData(userId, mergedPayload);
+          await withCloudSyncOverlay("写回合并结果", "发现云端差异，正在合并并保存...", () => upsertCloudUserData(userId, mergedPayload));
           lastCloudPayloadRef.current = JSON.stringify(mergedPayload);
           setLocalOwnerUser(userId);
         })
@@ -558,7 +600,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }, 420);
 
     return () => window.clearTimeout(timer);
-  }, [conflictResolution.open, hydrated, preferenceSignature, state, userId]);
+  }, [conflictResolution.open, hydrated, preferenceSignature, state, userId, withCloudSyncOverlay]);
 
   const resolveDataConflict = useCallback(async (strategy: "keep_local" | "keep_cloud" | "merge") => {
     if (!userId || !pendingConflictRef.current) return;
@@ -577,7 +619,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     try {
       applyPayloadAsRuntime(resolvedPayload);
-      await upsertCloudUserData(userId, resolvedPayload);
+      await withCloudSyncOverlay("写回云端数据", "正在按你的选择更新云端内容...", () => upsertCloudUserData(userId, resolvedPayload));
       setState((current) => markAppStateSynced(current, resolvedPayload.sync.dataVersion, resolvedPayload.sync.updatedAt ?? undefined));
       setLocalOwnerUser(userId);
       pendingConflictRef.current = null;
@@ -594,7 +636,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         resolving: false,
       }));
     }
-  }, [userId]);
+  }, [userId, withCloudSyncOverlay]);
 
   const pushCloudConfig = useCallback(async () => {
     if (!userId) {
@@ -603,18 +645,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     try {
       suppressEmptyCloudSyncRef.current = false;
-      const payload = buildCloudPayloadFromState(state);
-      await upsertCloudUserData(userId, payload);
-      lastCloudPayloadRef.current = JSON.stringify(payload);
-      setState((current) => markAppStateSynced(current, payload.sync.dataVersion, payload.sync.updatedAt ?? undefined));
+      const localPayload = buildCloudPayloadFromState(state);
+      const cloudMeta = await fetchCloudUserMeta(userId);
+      if (cloudMeta) {
+        syncDataVersionFloor(cloudMeta.dataVersion);
+      }
+
+      if (!cloudMeta || cloudMeta.dataVersion < localPayload.sync.dataVersion) {
+        await withCloudSyncOverlay("上传当前配置", "正在把当前设备配置上传到云端...", () => upsertCloudUserData(userId, localPayload));
+        lastCloudPayloadRef.current = JSON.stringify(localPayload);
+        setState((current) => markAppStateSynced(current, localPayload.sync.dataVersion, localPayload.sync.updatedAt ?? undefined));
+        setLocalOwnerUser(userId);
+        return { ok: true, message: "已上传当前配置到云端" };
+      }
+
+      if (cloudMeta.dataVersion === localPayload.sync.dataVersion && cloudMeta.contentHash === localPayload.sync.contentHash) {
+        lastCloudPayloadRef.current = JSON.stringify(localPayload);
+        setState((current) => markAppStateSynced(current, localPayload.sync.dataVersion, cloudMeta.updatedAt ?? undefined));
+        setLocalOwnerUser(userId);
+        return { ok: true, message: "云端已是当前最新配置" };
+      }
+
+      const cloud = await withCloudSyncOverlay("检查并合并版本", "云端版本较新，正在拉取并合并后上传...", () => fetchCloudUserData(userId));
+      if (!cloud) {
+        await withCloudSyncOverlay("上传当前配置", "云端记录缺失，正在补写当前设备配置...", () => upsertCloudUserData(userId, localPayload));
+        lastCloudPayloadRef.current = JSON.stringify(localPayload);
+        setState((current) => markAppStateSynced(current, localPayload.sync.dataVersion, localPayload.sync.updatedAt ?? undefined));
+        setLocalOwnerUser(userId);
+        return { ok: true, message: "已上传当前配置到云端" };
+      }
+
+      const mergedPayload = mergeCloudPayloads(localPayload, cloud);
+      applyPayloadAsRuntime(mergedPayload);
+      await withCloudSyncOverlay("写回合并结果", "已合并手动上传与云端差异，正在保存...", () => upsertCloudUserData(userId, mergedPayload));
+      lastCloudPayloadRef.current = JSON.stringify(mergedPayload);
+      setState((current) => markAppStateSynced(current, mergedPayload.sync.dataVersion, mergedPayload.sync.updatedAt ?? undefined));
       setLocalOwnerUser(userId);
-      return { ok: true, message: "已上传当前配置到云端" };
+      return { ok: true, message: "云端版本较新，已自动合并后上传" };
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : "上传云端失败";
       setError(message);
       return { ok: false, message };
     }
-  }, [state, userId]);
+  }, [state, userId, withCloudSyncOverlay]);
 
   const pullCloudConfig = useCallback(async () => {
     if (!userId) {
@@ -622,10 +695,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const cloud = await fetchCloudUserData(userId);
+      const cloud = await withCloudSyncOverlay("拉取云端配置", "正在从云端获取最新配置并写入本地...", () => fetchCloudUserData(userId));
       if (!cloud) {
         return { ok: false, message: "云端暂无可用配置" };
       }
+      syncDataVersionFloor(cloud.sync.dataVersion);
 
       const cloudState = hydrateAppStateFromCloudPayload(cloud);
       const initialPayload = createCloudPayload(cloudState, cloud.preferences);
@@ -652,7 +726,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setError(message);
       return { ok: false, message };
     }
-  }, [hydrateCloudFundsForView, userId]);
+  }, [hydrateCloudFundsForView, userId, withCloudSyncOverlay]);
 
   const refreshFunds = useCallback(async () => {
     if (refreshingRef.current || fundsRef.current.length === 0) return;
@@ -1187,6 +1261,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const importBackupData = useCallback((payload: { appState: unknown; valuationSeries?: unknown }) => {
     try {
       const nextState = bumpAppStateVersion(normalizeAppState(payload.appState));
+      syncDataVersionFloor(nextState.sync.dataVersion);
       const nextSeries = payload.valuationSeries === undefined
         ? getAllValuationSeries()
         : setAllValuationSeries(normalizeValuationSeries(payload.valuationSeries));
@@ -1241,6 +1316,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       pushCloudConfig,
       pullCloudConfig,
       conflictResolution,
+      cloudSyncStatus,
       resolveDataConflict,
     }),
     [
@@ -1251,6 +1327,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearLocalOnly,
       clearSearchHistory,
       conflictResolution,
+      cloudSyncStatus,
       error,
       hydrated,
       importBackupData,

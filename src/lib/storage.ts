@@ -3,6 +3,7 @@ import type { AppState, AppSyncState, FundHolding, FundSnapshot, FundTransaction
 
 export const APP_STATE_KEY = "real-fund-mobile:state";
 export const APP_DEVICE_ID_KEY = "real-fund-mobile:device-id";
+export const APP_DATA_VERSION_FLOOR_KEY = "real-fund-mobile:data-version-floor";
 
 export const createDefaultSyncState = (deviceId = ""): AppSyncState => ({
   dataVersion: 1,
@@ -70,6 +71,31 @@ export const ensureDeviceId = () => {
   }
 };
 
+export const readDataVersionFloor = () => {
+  if (typeof window === "undefined") return 1;
+  try {
+    const raw = Number(window.localStorage.getItem(APP_DATA_VERSION_FLOOR_KEY));
+    return Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 1;
+  } catch {
+    return 1;
+  }
+};
+
+export const syncDataVersionFloor = (version: number) => {
+  const normalizedVersion = Number.isFinite(version) && version >= 1 ? Math.floor(version) : 1;
+  if (typeof window !== "undefined") {
+    try {
+      const current = readDataVersionFloor();
+      if (normalizedVersion > current) {
+        window.localStorage.setItem(APP_DATA_VERSION_FLOOR_KEY, String(normalizedVersion));
+      }
+    } catch {
+      // ignore storage failures
+    }
+  }
+  return normalizedVersion;
+};
+
 const buildStateContentForHash = (state: AppState) => ({
   funds: state.funds.map((fund) => ({ code: fund.code, name: fund.name || fund.code })),
   holdings: state.holdings,
@@ -83,16 +109,26 @@ export const computeAppStateContentHash = (state: AppState) => JSON.stringify(bu
 
 export const finalizeAppStateSync = (state: AppState, deviceId = ensureDeviceId()): AppState => ({
   ...state,
-  sync: normalizeSyncState(state.sync, deviceId),
+  sync: (() => {
+    const normalized = normalizeSyncState(state.sync, deviceId);
+    const floor = readDataVersionFloor();
+    return {
+      ...normalized,
+      dataVersion: Math.max(normalized.dataVersion, floor),
+      lastSyncedVersion: Math.min(Math.max(normalized.lastSyncedVersion, 0), Math.max(normalized.dataVersion, floor)),
+    };
+  })(),
 });
 
 export const bumpAppStateVersion = (state: AppState, deviceId = ensureDeviceId()): AppState => {
   const normalized = finalizeAppStateSync(state, deviceId);
+  const nextVersion = Math.max(normalized.sync.dataVersion, normalized.sync.lastSyncedVersion, readDataVersionFloor()) + 1;
+  syncDataVersionFloor(nextVersion);
   return {
     ...normalized,
     sync: {
       ...normalized.sync,
-      dataVersion: Math.max(normalized.sync.dataVersion, normalized.sync.lastSyncedVersion, 0) + 1,
+      dataVersion: nextVersion,
       updatedAt: nowInMarket().format("YYYY-MM-DD HH:mm:ss"),
       deviceId,
     },
@@ -101,12 +137,14 @@ export const bumpAppStateVersion = (state: AppState, deviceId = ensureDeviceId()
 
 export const markAppStateSynced = (state: AppState, syncedVersion: number, syncedAt = nowInMarket().format("YYYY-MM-DD HH:mm:ss"), deviceId = ensureDeviceId()): AppState => {
   const normalized = finalizeAppStateSync(state, deviceId);
+  const effectiveVersion = Math.max(normalized.sync.dataVersion, syncedVersion, readDataVersionFloor());
+  syncDataVersionFloor(effectiveVersion);
   return {
     ...normalized,
     sync: {
       ...normalized.sync,
-      dataVersion: Math.max(normalized.sync.dataVersion, syncedVersion),
-      lastSyncedVersion: Math.max(normalized.sync.lastSyncedVersion, syncedVersion),
+      dataVersion: effectiveVersion,
+      lastSyncedVersion: Math.max(normalized.sync.lastSyncedVersion, effectiveVersion),
       lastSyncedAt: syncedAt,
       updatedAt: normalized.sync.updatedAt ?? syncedAt,
       deviceId,
