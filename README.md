@@ -35,6 +35,30 @@ npm run dev
 
 默认地址：`http://localhost:3000`
 
+## Supabase 使用与设置（简要）
+
+本项目的云端用户数据与 GitHub 登录基于 Supabase，可选开启；未配置时应用仍可本地使用。
+
+1. 在 Supabase 创建项目。
+2. 到 `Project Settings -> API` 获取：
+   - `Project URL`
+   - `anon public key`
+3. 在本地 `.env.local` 添加：
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=你的项目URL
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=你的anon公钥
+```
+
+4. 执行初始化 SQL：`supabase/sql/001_init_user_app_data.sql`。
+5. 在 Supabase Auth 开启 GitHub Provider，并配置回调域名：
+   - 本地：`http://localhost:3000`
+   - 线上（如 Vercel）：`https://你的域名`
+
+说明：
+- 仅 `NEXT_PUBLIC_*` 变量会注入前端，切勿放置私密服务端密钥。
+- 部署到 Vercel 时，请在 Vercel 项目 `Environment Variables` 中同步配置上述变量。
+
 ## 常用命令
 
 ```bash
@@ -62,6 +86,17 @@ supabase/sql/   # Supabase 初始化 SQL
 - 基金搜索（东方财富 JSONP）
 - 实时估值（fundgz）
 - 历史净值回退（F10DataApi）
+
+## 参考来源
+
+- 原项目参考：`https://github.com/hzm0321/real-time-fund`
+
+## 免责声明
+
+- 本项目仅用于技术学习、功能演示与个人研究，不构成任何投资建议。
+- 页面展示的基金净值、估值、涨跌幅等数据来自第三方公开接口，存在延迟、缺失或误差风险，请以基金公司与官方渠道披露信息为准。
+- 因使用本项目信息进行交易产生的任何收益或损失，项目维护者不承担责任。
+- 使用者应自行评估数据与策略风险，并遵守所在地区的法律法规与平台条款。
 
 ## 文档分工
 
