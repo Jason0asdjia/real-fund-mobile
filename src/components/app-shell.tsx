@@ -35,6 +35,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     previousIndexRef.current = currentIndex;
   }, [currentIndex]);
 
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.body.classList.toggle("app-modal-open", conflictResolution.open);
+    return () => {
+      document.body.classList.remove("app-modal-open");
+    };
+  }, [conflictResolution.open]);
+
   if (authLoading) {
     return (
       <div className="app-frame">
@@ -117,59 +125,64 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <BottomNav />
 
       {conflictResolution.open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#00193c]/45 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-[#d5dbea] bg-white p-5 text-[#131b2e] shadow-[0_24px_48px_rgba(0,25,60,0.18)]">
-            <h2 className="m-0 typo-page-title">检测到数据冲突</h2>
-            <p className="mt-2 text-sm leading-relaxed text-[#57657a]">
-              该账号在云端已有数据，同时当前设备也有本地数据。请选择处理方式。
-            </p>
-
-            <div className="mt-3 grid grid-cols-2 gap-3 rounded-xl border border-[#e2e7ff] bg-[#f8f9ff] p-3 text-xs text-[#57657a]">
-              <div>
-                <p className="m-0 font-semibold text-[#131b2e]">本地</p>
-                <p className="m-0 mt-1">基金 {conflictResolution.localSummary.funds}</p>
-                <p className="m-0">持仓 {conflictResolution.localSummary.holdings}</p>
-                <p className="m-0">交易 {conflictResolution.localSummary.transactions}</p>
-              </div>
-              <div>
-                <p className="m-0 font-semibold text-[#131b2e]">云端</p>
-                <p className="m-0 mt-1">基金 {conflictResolution.cloudSummary.funds}</p>
-                <p className="m-0">持仓 {conflictResolution.cloudSummary.holdings}</p>
-                <p className="m-0">交易 {conflictResolution.cloudSummary.transactions}</p>
-              </div>
+        <div className="app-modal-backdrop">
+          <div className="app-modal-sheet" onClick={(event) => event.stopPropagation()}>
+            <div className="app-modal-sheet__grabber" />
+            <div className="app-modal-sheet__header">
+              <h2 className="m-0 text-base font-bold text-[#131b2e]">检测到数据冲突</h2>
             </div>
+            <div className="app-modal-sheet__content">
+              <p className="text-sm leading-relaxed text-[#57657a]">
+                该账号在云端已有数据，同时当前设备也有本地数据。请选择处理方式。
+              </p>
 
-            <div className="mt-4 space-y-2">
-              <button
-                type="button"
-                className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[#d5dbea] bg-white px-3 text-sm font-semibold text-[#131b2e] disabled:opacity-60"
-                disabled={conflictResolution.resolving}
-                onClick={() => {
-                  void resolveDataConflict("keep_local");
-                }}
-              >
-                保留本地（覆盖云端）
-              </button>
-              <button
-                type="button"
-                className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[#d5dbea] bg-white px-3 text-sm font-semibold text-[#131b2e] disabled:opacity-60"
-                disabled={conflictResolution.resolving}
-                onClick={() => {
-                  void resolveDataConflict("keep_cloud");
-                }}
-              >
-                保留云端
-              </button>
-              <button
-                type="button"
-                className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[#d5dbea] bg-[#00193c] px-3 text-sm font-semibold text-white disabled:opacity-60"
-                disabled={conflictResolution.resolving}
-                onClick={() => {
-                  void resolveDataConflict("merge");
-                }}
-              >
-                合并（推荐）
-              </button>
+              <div className="mt-3 grid grid-cols-2 gap-3 rounded-xl border border-[#e2e7ff] bg-[#f8f9ff] p-3 text-xs text-[#57657a]">
+                <div>
+                  <p className="m-0 font-semibold text-[#131b2e]">本地</p>
+                  <p className="m-0 mt-1">基金 {conflictResolution.localSummary.funds}</p>
+                  <p className="m-0">持仓 {conflictResolution.localSummary.holdings}</p>
+                  <p className="m-0">交易 {conflictResolution.localSummary.transactions}</p>
+                </div>
+                <div>
+                  <p className="m-0 font-semibold text-[#131b2e]">云端</p>
+                  <p className="m-0 mt-1">基金 {conflictResolution.cloudSummary.funds}</p>
+                  <p className="m-0">持仓 {conflictResolution.cloudSummary.holdings}</p>
+                  <p className="m-0">交易 {conflictResolution.cloudSummary.transactions}</p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 gap-2">
+                <button
+                  type="button"
+                  className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#d5dbea] bg-white px-3 text-sm font-semibold text-[#131b2e] disabled:opacity-60"
+                  disabled={conflictResolution.resolving}
+                  onClick={() => {
+                    void resolveDataConflict("keep_local");
+                  }}
+                >
+                  保留本地（覆盖云端）
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#d5dbea] bg-white px-3 text-sm font-semibold text-[#131b2e] disabled:opacity-60"
+                  disabled={conflictResolution.resolving}
+                  onClick={() => {
+                    void resolveDataConflict("keep_cloud");
+                  }}
+                >
+                  保留云端
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[#00193c] px-3 text-sm font-semibold text-white disabled:opacity-60"
+                  disabled={conflictResolution.resolving}
+                  onClick={() => {
+                    void resolveDataConflict("merge");
+                  }}
+                >
+                  合并（推荐）
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -60,7 +60,7 @@
 
 @layer components {
   .app-frame {
-    @apply relative min-h-[100dvh] overflow-x-hidden bg-white;
+    @apply relative min-h-[100dvh] overflow-hidden bg-white;
   }
 
   .ambient {
