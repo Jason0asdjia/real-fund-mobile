@@ -15,7 +15,9 @@ export type FundSnapshot = {
   zzl?: number | null;
   lastNav?: string | null;
   noValuation?: boolean;
-  source?: "eastmoney" | "tencent" | "danjuan" | "fallback";
+  source?: "eastmoney" | "tencent" | "sina" | "danjuan" | "fallback";
+  officialSource?: "eastmoney" | "tencent" | "sina" | "fallback";
+  estimateSource?: "eastmoney" | "tencent" | "sina" | "fallback";
   quoteStatus?: "estimated" | "official";
   officialConfirmedAt?: string | null;
   officialConfirmedForDate?: string | null;

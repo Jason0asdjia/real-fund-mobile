@@ -89,9 +89,11 @@ const defaultColumnOrder = COLUMN_OPTIONS.map((item) => item.id);
 const isDevMode = process.env.NODE_ENV !== "production";
 
 const getSourceLabel = (source?: FundSnapshot["source"]) => {
+  if (!source) return "--";
   if (source === "eastmoney") return "东方财富";
   if (source === "tencent") return "腾讯";
-  if (source === "danjuan") return "蛋卷";
+  if (source === "sina") return "新浪";
+  if (source === "danjuan") return "蛋卷(历史)";
   if (source === "fallback") return "备用源";
   return "未知";
 };
@@ -197,7 +199,12 @@ const buildRows = (
     const holdingAmountUpdatedAt = officialConfirmedUpdatedAt;
     const currentValueUpdatedAt = useOfficialForTodayProfit ? officialConfirmedUpdatedAt : canUseEstimate ? estimateUpdatedAt : officialUpdatedAt;
     const estimatedProfitUpdatedAt = estimateNav != null ? estimateUpdatedAt : "—";
-    const debugSourceTag = `来源：${getSourceLabel(fund.source)}`;
+    const officialSourceLabel = getSourceLabel(fund.officialSource ?? (fund.quoteStatus === "official" ? fund.source : undefined));
+    const estimateSourceLabel = fund.noValuation
+      ? "无"
+      : getSourceLabel(fund.estimateSource ?? (fund.quoteStatus === "estimated" ? fund.source : undefined));
+    const activeSourceLabel = useOfficialForTodayProfit ? officialSourceLabel : canUseEstimate ? estimateSourceLabel : officialSourceLabel;
+    const debugSourceTag = `来源：${activeSourceLabel}`;
 
     return {
       code: fund.code,

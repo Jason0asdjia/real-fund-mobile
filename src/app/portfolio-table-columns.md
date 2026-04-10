@@ -8,7 +8,9 @@
 
 - 官方链路：`dwjz / jzrq / zzl / officialConfirmedAt`
 - 估值链路：`gsz / gztime / gszzl`
+- 来源字段：`officialSource / estimateSource / source`
 - 交易确认链路：`applyConfirmedTransactionsToHolding`（仅已确认加减仓影响持仓）
+- 官方刷新锁：命中“当前应有最新官方净值日”后，后续刷新跳过官方请求，复用已确认官方快照
 
 > 备注：交易确认日规则当前按“工作日近似（跳过周末）”，未接入交易所法定节假日 API。
 
@@ -51,9 +53,11 @@
 
 - `effectiveLatestNav / effectiveLatestDate`：本轮最终采用的官方净值与净值日期。
 - `useEstimateOfficial`：是否采用估值接口携带的官方快照（用于修复“历史源滞后”场景）。
+- `skipOfficialRefresh`：本轮是否跳过官方链路抓取（官方锁生效）。
 - `computedOfficialGrowth`：本轮计算得到的官方涨跌幅候选值。
-- `effectiveOfficialGrowth`：最终写入 `zzl` 的值（候选无效时沿用上一笔）。
+- `effectiveOfficialGrowth`：最终写入 `zzl` 的值（仅在同官方日期允许沿用上一笔，跨日期不沿用）。
 - `officialConfirmedAt / officialConfirmedForDate`：首次拿到某一净值日官方确认值的时间与对应日期。
+- `officialSource / estimateSource / source`：官方来源、估值来源、当前活跃来源（供开发模式来源显示）。
 
 ### 2.4 持仓确认变量（`lib/portfolio.ts`）
 
@@ -76,6 +80,7 @@
      - 仅在 09:15~15:00 之间生效。
 4. 估值展示结转判定：`hasEstimateForDisplay = isEstimateTimestampUsable(gztime, { allowPreviousCloseCarry: true })`。
    - 收盘后到次日开盘前，估值列允许沿用上一交易日收盘估值（例如 14:50/15:00 样本）。
+5. 官方刷新锁判定：若本地 `jzrq + dwjz` 已达到“当前应有最新官方净值日”，本轮跳过官方抓取并复用本地官方快照。
 
 ---
 
@@ -87,7 +92,7 @@
 - 行为：收盘后若当日官方未发布，持续保留上一交易日官方日期（例如 `04-08`）；发布后切到当日官方日期（例如 `04-09`）。
 
 ### 2) 估算净值（`estimateNav`）
-- 值：`fund.noValuation ? "—" : formatNav(fund.gsz)`
+- 值：`hasEstimateForDisplay && gsz 有效 ? formatNav(gsz) : "—"`
 - 时间：`estimateUpdatedAt`（`gztime -> MM-DD HH:mm`）
 
 ### 3) 昨日涨幅（`yesterdayChangePercent`）
@@ -103,10 +108,10 @@
 ### 5) 估算收益（`totalChangePercent`，金额）
 - 值：
   - 有估值：`(estimateNav - cost) * share`
-  - 无估值：回退 `metrics?.profitTotal`
+  - 无估值：回退 `holdingProfit`
 - 时间：`estimatedProfitUpdatedAt`
   - 有估值时：`estimateUpdatedAt`
-  - 无估值时：`officialUpdatedAt`
+  - 无估值时：`—`
 
 ### 6) 持仓金额（`holdingAmount`）
 - 值：官方口径，`share * latestNav(dwjz)`；`latestNav` 无效则为 `0`
@@ -125,6 +130,13 @@
 - 时间：
   - `official`：`officialConfirmedUpdatedAt`
   - `estimated`：`currentValueUpdatedAt`
+
+### 10) 开发模式来源（debug）
+- 值：`来源：{activeSourceLabel}`
+- 选择规则：
+  - 当日收益走官方时：显示 `officialSource`
+  - 当日收益走估值时：显示 `estimateSource`
+  - 均不可用时：回退 `officialSource`
 
 ### 9) 持有收益（`holdingProfit`）
 - 值：官方口径，`(dwjz - cost) * share`
@@ -149,6 +161,7 @@
 - 最新净值、昨日涨幅、持仓金额、持有收益：切换到今天官方值。
 - 对应时间：最新净值/昨日涨幅/持有收益使用官方净值日期（`jzrq -> MM-DD`）；当日收益官方态继续使用官方确认时间。
 - 当日收益：状态从 estimated 切到 official（勾选图标）。
+- 官方刷新：触发官方锁，后续轮询不再请求官方链路，直到下一交易日再解锁。
 
 ### 场景 D：跨日到次日盘中（次日官方未出）
 - 最新净值等官方列：保持昨日官方值与时间。

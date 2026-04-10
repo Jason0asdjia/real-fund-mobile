@@ -11,7 +11,7 @@ const SOURCE_MIN_INTERVAL_MS = {
   eastmoneyEstimate: 1200,
   eastmoneyHistory: 1000,
   tencentQuote: 1500,
-  danjuanQuote: 2000,
+  sinaQuote: 1500,
   eastmoneySearch: 800,
 } as const;
 
@@ -36,7 +36,51 @@ type OfficialQuoteSnapshot = {
   latestGrowth: number | null;
   previousNav: number | null;
   name?: string | null;
-  source: "history" | "tencent" | "danjuan";
+  source: "history" | "tencent" | "sina";
+};
+
+const parseSinaDate = (value: string) => {
+  const normalized = normalizeDate(value);
+  if (normalized) return normalized;
+  const matched = value.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (!matched) return null;
+  return `${matched[1]}-${matched[2]}-${matched[3]}`;
+};
+
+const parseSinaQuoteNumber = (value?: string | null) => {
+  if (!value) return null;
+  const cleaned = value.replace(/[%\s]/g, "").trim();
+  return toFiniteNumber(cleaned);
+};
+
+const parseSinaFundQuoteRaw = (raw: string): OfficialQuoteSnapshot | null => {
+  if (!raw) return null;
+
+  const fields = raw.split(",").map((item) => item.trim());
+  if (!fields.length) return null;
+
+  const name = fields[0] || null;
+  const latestNav = parseSinaQuoteNumber(fields[1]) ?? parseSinaQuoteNumber(fields[2]);
+  const previousNavFromField = parseSinaQuoteNumber(fields[2]);
+  const latestGrowth = parseSinaQuoteNumber(fields[3]);
+  const date = fields.find((item) => /^\d{4}-\d{2}-\d{2}$/.test(item)) || "";
+  const latestDate = parseSinaDate(date);
+  const previousNav = previousNavFromField != null && previousNavFromField > 0
+    ? previousNavFromField
+    : latestNav != null && latestGrowth != null && latestGrowth > -100
+      ? latestNav / (1 + latestGrowth / 100)
+      : null;
+
+  if (!latestNav || !latestDate) return null;
+
+  return {
+    latestNav,
+    latestDate,
+    latestGrowth,
+    previousNav,
+    name,
+    source: "sina",
+  };
 };
 
 const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
@@ -286,10 +330,9 @@ const parseHoldingsFromHtml = (content: string): FundHoldingStock[] => {
 
 const fetchHistoricalNetValues = async (code: string) => {
   const url = `https://fundf10.eastmoney.com/F10DataApi.aspx?type=lsjz&code=${code}&page=1&per=2&sdate=&edate=`;
-  const apidata = await withTimeout(
-    runWithSourceInterval("eastmoneyHistory", () => loadScript(url)),
-    OFFICIAL_SOURCE_TIMEOUT_MS,
-    "Eastmoney history timeout",
+  const apidata = await runWithSourceInterval(
+    "eastmoneyHistory",
+    () => withTimeout(loadScript(url), OFFICIAL_SOURCE_TIMEOUT_MS, "Eastmoney history timeout"),
   );
   return parseNetValuesFromHtml(apidata?.content || "");
 };
@@ -297,10 +340,9 @@ const fetchHistoricalNetValues = async (code: string) => {
 const fetchHistoricalNetValuesPage = async (code: string, page: number, per: number, sdate = "") => {
   const startDate = sdate ? encodeURIComponent(sdate) : "";
   const url = `https://fundf10.eastmoney.com/F10DataApi.aspx?type=lsjz&code=${code}&page=${page}&per=${per}&sdate=${startDate}&edate=`;
-  return withTimeout(
-    runWithSourceInterval("eastmoneyHistory", () => loadScript(url)),
-    OFFICIAL_SOURCE_TIMEOUT_MS,
-    "Eastmoney history page timeout",
+  return runWithSourceInterval(
+    "eastmoneyHistory",
+    () => withTimeout(loadScript(url), OFFICIAL_SOURCE_TIMEOUT_MS, "Eastmoney history page timeout"),
   );
 };
 
@@ -402,37 +444,53 @@ const requestTencentFundQuote = (code: string, priority: "high" | "normal" | "in
     priority,
   );
 
-const requestDanjuanFundQuote = (code: string, priority: "high" | "normal" | "interactive" = "normal") =>
-  runWithSourcePriority("danjuanQuote", () =>
+const requestSinaFundQuote = (code: string, priority: "high" | "normal" | "interactive" = "normal") =>
+  runWithSourcePriority("sinaQuote", () =>
     withTimeout(
-      (async (): Promise<OfficialQuoteSnapshot> => {
-        const response = await fetch(`https://danjuanfunds.com/djapi/fund/${encodeURIComponent(code)}`, {
-          cache: "no-store",
-        });
-        if (!response.ok) throw new Error(`Danjuan quote request failed: ${response.status}`);
+      new Promise<OfficialQuoteSnapshot>((resolve, reject) => {
+        if (typeof document === "undefined" || !document.body) {
+          reject(new Error("No browser environment"));
+          return;
+        }
 
-        const payload = await response.json() as Record<string, any>;
-        const data = payload?.fund_derived || payload?.data?.fund_derived || payload?.data || payload;
-        const latestNav = toFiniteNumber(data?.unit_nav);
-        const latestDate = normalizeDate(data?.end_date);
-        const latestGrowth = toFiniteNumber(data?.nav_growth ?? data?.nav_grtd);
-        const previousNav = latestNav != null && latestGrowth != null && latestGrowth > -100
-          ? latestNav / (1 + latestGrowth / 100)
-          : null;
+        const key = `hq_str_f_${code}`;
+        const altKey = `hq_str_fu_${code}`;
+        const script = document.createElement("script");
+        script.src = `https://hq.sinajs.cn/list=f_${code},fu_${code}&_=${Date.now()}`;
+        script.async = true;
 
-        if (!latestNav || !latestDate) throw new Error("Danjuan quote missing nav/date");
-
-        return {
-          latestNav,
-          latestDate,
-          latestGrowth,
-          previousNav,
-          name: payload?.fund_name || payload?.name || null,
-          source: "danjuan",
+        const cleanup = () => {
+          if (document.body.contains(script)) document.body.removeChild(script);
         };
-      })(),
+
+        script.onerror = () => {
+          cleanup();
+          reject(new Error("Sina quote load failed"));
+        };
+
+        script.onload = () => {
+          try {
+            const rawPrimary = Reflect.get(window, key);
+            const rawAlt = Reflect.get(window, altKey);
+            cleanup();
+
+            const parsedPrimary = typeof rawPrimary === "string" ? parseSinaFundQuoteRaw(rawPrimary) : null;
+            const parsedAlt = typeof rawAlt === "string" ? parseSinaFundQuoteRaw(rawAlt) : null;
+            const parsed = parsedPrimary || parsedAlt;
+            if (!parsed) {
+              reject(new Error("Sina quote invalid"));
+              return;
+            }
+            resolve(parsed);
+          } catch (error) {
+            reject(error instanceof Error ? error : new Error("Sina quote parse failed"));
+          }
+        };
+
+        document.body.appendChild(script);
+      }),
       OFFICIAL_SOURCE_TIMEOUT_MS,
-      "Danjuan quote timeout",
+      "Sina quote timeout",
     ),
     priority,
   );
@@ -447,6 +505,69 @@ const buildOfficialFromHistory = (historyList: Array<{ date: string; nav: number
     latestGrowth: toFiniteNumber(latest.growth),
     previousNav: previous?.nav ?? null,
     source: "history",
+  };
+};
+
+const mapOfficialSource = (source?: OfficialQuoteSnapshot["source"] | null) => {
+  if (source === "history") return "eastmoney" as const;
+  if (source === "tencent") return "tencent" as const;
+  if (source === "sina") return "sina" as const;
+  return "fallback" as const;
+};
+
+const mapStoredSourceToOfficialSnapshotSource = (
+  source?: FundSnapshot["officialSource"] | FundSnapshot["source"] | null,
+): OfficialQuoteSnapshot["source"] => {
+  if (source === "tencent") return "tencent";
+  if (source === "sina") return "sina";
+  return "history";
+};
+
+const mapEstimateSource = (
+  source?: FundSnapshot["source"] | FundSnapshot["estimateSource"] | null,
+): FundSnapshot["estimateSource"] => {
+  if (source === "eastmoney") return "eastmoney";
+  if (source === "tencent") return "tencent";
+  if (source === "sina") return "sina";
+  return "fallback";
+};
+
+const resolveExpectedOfficialDate = () => {
+  let cursor = nowInMarket().startOf("day").subtract(1, "day");
+  while (cursor.day() === 0 || cursor.day() === 6) {
+    cursor = cursor.subtract(1, "day");
+  }
+  return cursor.format("YYYY-MM-DD");
+};
+
+const shouldSkipOfficialRefresh = (previousFund?: FundSnapshot | null) => {
+  if (!previousFund) return false;
+
+  const officialDate = normalizeDate(previousFund.jzrq ?? null);
+  const officialNav = toFiniteNumber(previousFund.dwjz);
+  if (!officialDate || officialNav == null || officialNav <= 0) return false;
+
+  const expectedOfficialDate = resolveExpectedOfficialDate();
+  return officialDate >= expectedOfficialDate;
+};
+
+const buildOfficialQuoteFromPreviousFund = (previousFund?: FundSnapshot | null) => {
+  if (!previousFund) return null;
+
+  const latestNav = toFiniteNumber(previousFund.dwjz);
+  const latestDate = normalizeDate(previousFund.jzrq ?? null);
+  if (latestNav == null || latestDate == null) return null;
+
+  return {
+    historyList: [] as Array<{ date: string; nav: number; growth: number | null }>,
+    official: {
+      latestNav,
+      latestDate,
+      latestGrowth: toFiniteNumber(previousFund.zzl),
+      previousNav: toFiniteNumber(previousFund.lastNav),
+      name: previousFund.name || null,
+      source: mapStoredSourceToOfficialSnapshotSource(previousFund.officialSource ?? previousFund.source ?? null),
+    } as OfficialQuoteSnapshot,
   };
 };
 
@@ -465,10 +586,10 @@ const fetchOfficialQuoteWithFallback = async (code: string, mode: RequestMode = 
   }
 
   try {
-    const danjuanQuote = await requestDanjuanFundQuote(code, mode === "interactive" ? "interactive" : "normal");
-    return { historyList, official: danjuanQuote };
+    const sinaQuote = await requestSinaFundQuote(code, mode === "interactive" ? "interactive" : "normal");
+    return { historyList, official: sinaQuote };
   } catch {
-    // keep history fallback when secondary source is unavailable
+    // keep history fallback when secondary providers are unavailable
   }
 
   return { historyList, official: historyQuote };
@@ -687,8 +808,11 @@ export const fetchFundBaseData = async (
   previousFund?: FundSnapshot | null,
   mode: RequestMode = "throttled",
 ): Promise<FundSnapshot> => {
+  const skipOfficialRefresh = shouldSkipOfficialRefresh(previousFund);
+  const previousOfficial = skipOfficialRefresh ? buildOfficialQuoteFromPreviousFund(previousFund) : null;
+
   const [officialResult, estimate] = await Promise.allSettled([
-    fetchOfficialQuoteWithFallback(code, mode),
+    previousOfficial ? Promise.resolve(previousOfficial) : fetchOfficialQuoteWithFallback(code, mode),
     requestFundEstimateWithFallback(code, previousFund, mode === "interactive" ? "interactive" : "normal"),
   ]);
 
@@ -706,6 +830,7 @@ export const fetchFundBaseData = async (
     : historyList.length > 1
       ? historyList.at(-2)
       : null;
+  const resolvedOfficialSource = officialQuote ? mapOfficialSource(officialQuote.source) : (previousFund?.officialSource ?? "fallback");
 
   if (estimate.status === "fulfilled") {
     const estimateOfficialDate = estimate.value.jzrq || null;
@@ -730,6 +855,8 @@ export const fetchFundBaseData = async (
         && Math.abs(estimateOfficialNav - latestOfficialNav) > 1e-8,
     );
     const useEstimateOfficial = Boolean(
+      !skipOfficialRefresh
+        &&
       estimateHasOfficialSnapshot
         && (!historyLatestDate || estimateIsNewerOfficialDate || estimateIsSameDateButDifferentNav),
     );
@@ -741,13 +868,28 @@ export const fetchFundBaseData = async (
         ? previousNav?.nav ?? Number(previousFund?.lastNav)
         : latest?.nav ?? Number(previousFund?.lastNav)
       : previousNav?.nav ?? Number(previousFund?.lastNav);
-    const computedOfficialGrowth = useEstimateOfficial
-      ? estimate.value.zzl ?? (effectiveLastNav && effectiveLastNav > 0 && effectiveLatestNav != null
-        ? ((effectiveLatestNav - effectiveLastNav) / effectiveLastNav) * 100
+    const previousOfficialDate = normalizeDate(previousFund?.jzrq ?? null);
+    const previousOfficialNav =
+      (effectiveLastNav && Number.isFinite(effectiveLastNav) && effectiveLastNav > 0
+        ? effectiveLastNav
         : null)
-      : latest?.growth ?? estimate.value.zzl ?? null;
+      ?? toFiniteNumber(previousFund?.dwjz);
+    const computedOfficialGrowth = useEstimateOfficial
+      ? toFiniteNumber(estimate.value.zzl) ?? (previousOfficialNav && previousOfficialNav > 0 && effectiveLatestNav != null
+        ? ((effectiveLatestNav - previousOfficialNav) / previousOfficialNav) * 100
+        : null)
+      : latest?.growth ?? toFiniteNumber(estimate.value.zzl) ?? null;
     const hasFreshOfficialGrowth = computedOfficialGrowth != null && Number.isFinite(Number(computedOfficialGrowth));
-    const effectiveOfficialGrowth = hasFreshOfficialGrowth ? Number(computedOfficialGrowth) : toFiniteNumber(previousFund?.zzl) ?? null;
+    const shouldCarryPreviousOfficialGrowth = Boolean(
+      previousOfficialDate
+        && effectiveLatestDate
+        && previousOfficialDate === effectiveLatestDate,
+    );
+    const effectiveOfficialGrowth = hasFreshOfficialGrowth
+      ? Number(computedOfficialGrowth)
+      : shouldCarryPreviousOfficialGrowth
+        ? toFiniteNumber(previousFund?.zzl) ?? null
+        : null;
     const hasFreshOfficialSnapshot = Boolean(
       effectiveLatestDate
         && effectiveLatestNav != null
@@ -772,7 +914,9 @@ export const fetchFundBaseData = async (
       lastNav: effectiveLastNav && Number.isFinite(effectiveLastNav) ? String(effectiveLastNav) : previousFund?.lastNav ?? null,
       officialConfirmedAt: officialConfirmationMeta.officialConfirmedAt,
       officialConfirmedForDate: officialConfirmationMeta.officialConfirmedForDate,
-      source: "eastmoney",
+      officialSource: resolvedOfficialSource,
+      estimateSource: mapEstimateSource(estimate.value.source ?? previousFund?.estimateSource),
+      source: estimate.value.source ?? resolvedOfficialSource,
       quoteStatus: "estimated",
     };
     return snapshot;
@@ -802,12 +946,9 @@ export const fetchFundBaseData = async (
       noValuation: true,
       officialConfirmedAt: officialConfirmationMeta.officialConfirmedAt,
       officialConfirmedForDate: officialConfirmationMeta.officialConfirmedForDate,
-      source:
-        officialQuote?.source === "history"
-          ? "eastmoney"
-          : officialQuote?.source === "tencent"
-            ? "tencent"
-            : "danjuan",
+      officialSource: resolvedOfficialSource,
+      estimateSource: previousFund?.estimateSource,
+      source: resolvedOfficialSource,
       quoteStatus: "official",
     };
     return snapshot;

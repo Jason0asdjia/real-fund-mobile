@@ -36,21 +36,23 @@
 > 口径约定：
 > - **官方链路**：`dwjz/jzrq/zzl`（日终确定值）
 > - **估值链路**：`gsz/gztime/gszzl`（盘中估算值）
-> - **估值可用性**：`gztime` 需通过 `isEstimateTimestampUsable`（同日、非未来时刻、交易日且 09:15~15:00）
+> - **估值可用性**：`gztime` 需通过 `isEstimateTimestampUsable`
+> - **官方锁定**：当某基金拿到“当前应有的最新官方净值日”后，后续刷新不再请求官方链路，避免刷新失败导致官方值回退
 
 - `最新净值`（`latestNav`）
   - 展示：`dwjz`
   - 时间：`officialUpdatedAt`（由 `jzrq` 显示 `MM-DD`）
-  - 规则：当日官方未发布时保留上一交易日日期；发布后切到当日日期
+  - 规则：官方值一旦确认后按官方锁定策略持有；到下一交易日再重新参与官方抓取
 
 - `估算净值`（`estimateNav`）
-  - 展示：`gsz`
+  - 展示：估值可展示时取 `gsz`，否则 `—`
   - 时间：`estimateUpdatedAt`（由 `gztime` 显示 `MM-DD HH:mm`）
+  - 规则：支持收盘后到次日开盘前沿用上一交易日收盘估值展示
 
 - `昨日涨幅`（`yesterdayChangePercent`）
-  - 展示：`zzl`（百分比）
+  - 展示：`zzl`（百分比，来自官方口径）
   - 时间：`officialUpdatedAt`
-  - 规则：当日官方未发布时保留上一交易日日期；发布后切到当日日期
+  - 规则：若当前轮未拿到新官方涨幅，按“同官方日期可续用、跨日期不误续用”策略回退
 
 - `估值涨幅`（`estimateChangePercent`）
   - 展示：`gszzl`（百分比）
@@ -58,19 +60,22 @@
 
 - `估算收益`（`totalChangePercent`，金额口径）
   - 优先：`(gsz - cost) * share`
-  - 回退：`metrics.profitTotal`
-  - 时间：`estimatedProfitUpdatedAt`（估值可用时显示估值时间，否则显示 `—`）
+  - 回退：`holdingProfit`（官方持有收益）
+  - 时间：`estimatedProfitUpdatedAt`（估值可展示时显示估值时间，否则 `—`）
 
 - `持仓金额`（`holdingAmount`）
-  - 来源：`getHoldingMetrics().amount`
-  - 盘中估值可用时跟随 `gsz`，否则回落官方链路
-  - 时间：`currentValueUpdatedAt`
+  - 来源：官方口径 `share * dwjz`
+  - 时间：`officialConfirmedUpdatedAt`
 
 - `当日收益`（`todayProfit`）
   - 盘中：使用估值涨幅链路
   - 当天官方值已出：切换官方涨幅链路
   - 时间：`currentValueUpdatedAt`
   - 图标：`official`=圈内对号，`estimated`=圆圈
+
+- `开发模式来源`（仅 `NODE_ENV !== production`）
+  - 展示：`来源：{当前使用来源}`
+  - 规则：动态跟随当前实际计算口径（官方态显示官方来源，估值态显示估值来源）
 
 - `持有收益`（`holdingProfit`）
   - 仅官方口径：`(dwjz - cost) * share`

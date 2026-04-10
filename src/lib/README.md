@@ -39,20 +39,24 @@
 ### 2) 官方净值链路（多源回退）
 - 主源：东财历史净值（F10DataApi）
 - 备源1：腾讯基金行情
-- 备源2：蛋卷基金 `danjuanfunds.com/djapi/fund/{code}`
+- 备源2：新浪基金行情 `hq.sinajs.cn`
 - 字段目标：`dwjz / jzrq / zzl / lastNav`
+- 官方锁策略：当某基金已拿到“当前应有最新官方净值日”后，后续刷新跳过官方抓取并复用本地官方快照，避免请求失败导致回退。
 
 ### 3) 来源标记（`FundSnapshot.source`）
 - `eastmoney`：当前记录主要来自东方财富
 - `tencent`：当前记录主要来自腾讯
-- `danjuan`：当前记录主要来自蛋卷
+- `sina`：当前记录主要来自新浪
+- `danjuan`：历史兼容值（当前链路已不再写入）
 - `fallback`：兼容历史状态值（现行链路尽量写具体来源）
+- `officialSource`：官方链路实际来源（`eastmoney | tencent | sina | fallback`）
+- `estimateSource`：估值链路实际来源（当前 `eastmoney | tencent | fallback`）
 
 ### 4) 刷新与防 ban 最小访问间隔
 - `eastmoneyEstimate`: `1200ms`
 - `eastmoneyHistory`: `1000ms`
 - `tencentQuote`: `1500ms`
-- `danjuanQuote`: `2000ms`
+- `sinaQuote`: `1500ms`
 - `eastmoneySearch`: `800ms`
 
 额外策略：
@@ -65,6 +69,8 @@
 - `gsz/gztime/gszzl`：盘中估值口径
 - `quoteStatus`：`estimated | official`
 - `noValuation`：当前是否缺估值链路
+- `officialConfirmedAt/officialConfirmedForDate`：官方值首次确认时间与对应净值日
+- `officialSource/estimateSource/source`：官方来源、估值来源、当前活跃来源
 
 ## 约束
 - 保持纯函数优先，减少 UI 耦合
