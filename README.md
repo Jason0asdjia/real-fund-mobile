@@ -51,7 +51,8 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=你的anon公钥
 ```
 
 4. 执行初始化 SQL：`supabase/sql/001_init_user_app_data.sql`。
-5. 在 Supabase Auth 开启 GitHub Provider，并配置回调域名：
+5. 如果你的表已经创建过，再执行增量迁移：`supabase/sql/002_add_sync_meta_columns.sql`。
+6. 在 Supabase Auth 开启 GitHub Provider，并配置回调域名：
    - 本地：`http://localhost:3000`
    - 线上（如 Vercel）：`https://你的域名`
 

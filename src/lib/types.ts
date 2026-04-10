@@ -69,6 +69,14 @@ export type FundTransaction = {
   note?: string | null;
 };
 
+export type AppSyncState = {
+  dataVersion: number;
+  lastSyncedVersion: number;
+  updatedAt: string | null;
+  lastSyncedAt: string | null;
+  deviceId: string;
+};
+
 export type AppState = {
   funds: FundSnapshot[];
   holdings: Record<string, FundHolding>;
@@ -77,4 +85,5 @@ export type AppState = {
   refreshMs: number;
   searchHistory: string[];
   lastUpdatedAt: string | null;
+  sync: AppSyncState;
 };

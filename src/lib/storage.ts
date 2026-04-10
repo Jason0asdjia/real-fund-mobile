@@ -1,6 +1,16 @@
-import type { AppState, FundHolding, FundSnapshot, FundTransaction } from "@/lib/types";
+import { nowInMarket } from "@/lib/time";
+import type { AppState, AppSyncState, FundHolding, FundSnapshot, FundTransaction } from "@/lib/types";
 
 export const APP_STATE_KEY = "real-fund-mobile:state";
+export const APP_DEVICE_ID_KEY = "real-fund-mobile:device-id";
+
+export const createDefaultSyncState = (deviceId = ""): AppSyncState => ({
+  dataVersion: 1,
+  lastSyncedVersion: 0,
+  updatedAt: null,
+  lastSyncedAt: null,
+  deviceId,
+});
 
 export const defaultAppState: AppState = {
   funds: [],
@@ -10,6 +20,7 @@ export const defaultAppState: AppState = {
   refreshMs: 60000,
   searchHistory: [],
   lastUpdatedAt: null,
+  sync: createDefaultSyncState(),
 };
 
 const dedupeFundsByCode = (funds: AppState["funds"]) => {
@@ -23,6 +34,85 @@ const dedupeFundsByCode = (funds: AppState["funds"]) => {
 };
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => value != null && typeof value === "object" && !Array.isArray(value);
+
+const normalizeSyncState = (value: unknown, fallbackDeviceId: string): AppSyncState => {
+  if (!isPlainObject(value)) return createDefaultSyncState(fallbackDeviceId);
+
+  const dataVersion = Number(value.dataVersion);
+  const lastSyncedVersion = Number(value.lastSyncedVersion);
+  const updatedAt = typeof value.updatedAt === "string" ? value.updatedAt : null;
+  const lastSyncedAt = typeof value.lastSyncedAt === "string" ? value.lastSyncedAt : null;
+  const deviceId = typeof value.deviceId === "string" && value.deviceId.trim() ? value.deviceId : fallbackDeviceId;
+
+  return {
+    dataVersion: Number.isFinite(dataVersion) && dataVersion >= 1 ? Math.floor(dataVersion) : 1,
+    lastSyncedVersion: Number.isFinite(lastSyncedVersion) && lastSyncedVersion >= 0 ? Math.floor(lastSyncedVersion) : 0,
+    updatedAt,
+    lastSyncedAt,
+    deviceId,
+  };
+};
+
+export const ensureDeviceId = () => {
+  if (typeof window === "undefined") return "";
+
+  try {
+    const existing = window.localStorage.getItem(APP_DEVICE_ID_KEY);
+    if (existing && existing.trim()) return existing;
+
+    const created = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    window.localStorage.setItem(APP_DEVICE_ID_KEY, created);
+    return created;
+  } catch {
+    return "";
+  }
+};
+
+const buildStateContentForHash = (state: AppState) => ({
+  funds: state.funds.map((fund) => ({ code: fund.code, name: fund.name || fund.code })),
+  holdings: state.holdings,
+  transactions: state.transactions,
+  favorites: state.favorites,
+  refreshMs: state.refreshMs,
+  searchHistory: state.searchHistory,
+});
+
+export const computeAppStateContentHash = (state: AppState) => JSON.stringify(buildStateContentForHash(state));
+
+export const finalizeAppStateSync = (state: AppState, deviceId = ensureDeviceId()): AppState => ({
+  ...state,
+  sync: normalizeSyncState(state.sync, deviceId),
+});
+
+export const bumpAppStateVersion = (state: AppState, deviceId = ensureDeviceId()): AppState => {
+  const normalized = finalizeAppStateSync(state, deviceId);
+  return {
+    ...normalized,
+    sync: {
+      ...normalized.sync,
+      dataVersion: Math.max(normalized.sync.dataVersion, normalized.sync.lastSyncedVersion, 0) + 1,
+      updatedAt: nowInMarket().format("YYYY-MM-DD HH:mm:ss"),
+      deviceId,
+    },
+  };
+};
+
+export const markAppStateSynced = (state: AppState, syncedVersion: number, syncedAt = nowInMarket().format("YYYY-MM-DD HH:mm:ss"), deviceId = ensureDeviceId()): AppState => {
+  const normalized = finalizeAppStateSync(state, deviceId);
+  return {
+    ...normalized,
+    sync: {
+      ...normalized.sync,
+      dataVersion: Math.max(normalized.sync.dataVersion, syncedVersion),
+      lastSyncedVersion: Math.max(normalized.sync.lastSyncedVersion, syncedVersion),
+      lastSyncedAt: syncedAt,
+      updatedAt: normalized.sync.updatedAt ?? syncedAt,
+      deviceId,
+    },
+  };
+};
 
 const normalizeFund = (value: unknown): FundSnapshot | null => {
   if (!isPlainObject(value)) return null;
@@ -66,7 +156,8 @@ const normalizeTransaction = (value: unknown): FundTransaction | null => {
 };
 
 export const normalizeAppState = (value: unknown): AppState => {
-  if (!isPlainObject(value)) return defaultAppState;
+  const fallbackDeviceId = ensureDeviceId();
+  if (!isPlainObject(value)) return finalizeAppStateSync(defaultAppState, fallbackDeviceId);
 
   const funds = Array.isArray(value.funds)
     ? dedupeFundsByCode(value.funds.map((item) => normalizeFund(item)).filter((item): item is FundSnapshot => item != null))
@@ -104,8 +195,7 @@ export const normalizeAppState = (value: unknown): AppState => {
   const refreshMsCandidate = Number(value.refreshMs);
   const refreshMs = Number.isFinite(refreshMsCandidate) && refreshMsCandidate >= 5000 ? refreshMsCandidate : defaultAppState.refreshMs;
   const lastUpdatedAt = typeof value.lastUpdatedAt === "string" ? value.lastUpdatedAt : null;
-
-  return {
+  const baseState = {
     ...defaultAppState,
     funds,
     holdings,
@@ -114,7 +204,10 @@ export const normalizeAppState = (value: unknown): AppState => {
     refreshMs,
     searchHistory,
     lastUpdatedAt,
-  };
+    sync: normalizeSyncState(value.sync, fallbackDeviceId),
+  } satisfies AppState;
+
+  return finalizeAppStateSync(baseState, fallbackDeviceId);
 };
 
 export const loadAppState = (): AppState => {

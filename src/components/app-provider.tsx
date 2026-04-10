@@ -3,10 +3,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
-import { buildCloudPayloadFromState, createCloudPayload, fetchCloudUserData, hasMeaningfulCloudData, hydrateAppStateFromCloudPayload, mergeCloudPayloads, upsertCloudUserData } from "@/lib/cloud-user-data";
+import { buildCloudPayloadFromState, createCloudPayload, fetchCloudUserData, fetchCloudUserMeta, hasMeaningfulCloudData, hydrateAppStateFromCloudPayload, mergeCloudPayloads, upsertCloudUserData } from "@/lib/cloud-user-data";
 import { fetchFundArchiveData, fetchFundBaseData, fetchFundHistoricalNavSeries, searchFunds } from "@/lib/fund-api";
 import { applyConfirmedTransactionsToHolding, isTransactionConfirmedInMarket } from "@/lib/portfolio";
-import { APP_STATE_KEY, defaultAppState, loadAppState, normalizeAppState, saveAppState } from "@/lib/storage";
+import { APP_STATE_KEY, bumpAppStateVersion, defaultAppState, loadAppState, markAppStateSynced, normalizeAppState, saveAppState } from "@/lib/storage";
 import { isEstimateTimestampUsable, nowInMarket } from "@/lib/time";
 import type { AppState, FundHolding, FundSnapshot, FundTransaction, SearchFundResult, ValuationPoint } from "@/lib/types";
 import { IMPORTANT_UI_PREFERENCE_KEYS, applyImportantPreferences, readImportantPreferences } from "@/lib/user-preferences";
@@ -153,6 +153,12 @@ const getInitialRuntimeSnapshot = () => {
   };
 };
 
+const hasRuntimeStateData = (state: AppState) => (
+  state.funds.length > 0
+  || Object.keys(state.holdings).length > 0
+  || Object.values(state.transactions).some((items) => Array.isArray(items) && items.length > 0)
+);
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const isDevNoAuth = process.env.NODE_ENV !== "production";
   const { user, authLoading, isSigningOut } = useAuth();
@@ -171,6 +177,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [valuationSeries, setValuationSeries] = useState<Record<string, ValuationPoint[]>>(initialRuntime.valuationSeries);
   const hydratedRef = useRef(initialRuntime.hydrated);
   const fundsRef = useRef<FundSnapshot[]>(initialRuntime.state.funds);
+  const stateRef = useRef(initialRuntime.state);
+  const valuationSeriesRef = useRef(initialRuntime.valuationSeries);
   const refreshingRef = useRef(false);
   const seedingRef = useRef(false);
   const didInitialRefreshRef = useRef(false);
@@ -207,12 +215,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPreferenceSignature(JSON.stringify(readImportantPreferences()));
   }, [initialRuntime.hydrated]);
 
+  const applyUserDataMutation = useCallback((updater: (current: AppState) => AppState) => {
+    setState((current) => bumpAppStateVersion(updater(current)));
+  }, []);
+
+  const applySyncedState = useCallback((nextState: AppState, syncedVersion: number, syncedAt?: string | null) => {
+    const syncedState = markAppStateSynced(nextState, syncedVersion, syncedAt ?? undefined);
+    setState(syncedState);
+    fundsRef.current = syncedState.funds;
+    stateRef.current = syncedState;
+    return syncedState;
+  }, []);
+
   const applyPayloadAsRuntime = (payload: ReturnType<typeof createCloudPayload>) => {
-    const nextState = hydrateAppStateFromCloudPayload(payload);
+    const nextState = markAppStateSynced(hydrateAppStateFromCloudPayload(payload), payload.sync.dataVersion, payload.sync.updatedAt ?? undefined);
     applyImportantPreferences(payload.preferences);
     setPreferenceSignature(JSON.stringify(readImportantPreferences()));
     setState(nextState);
     fundsRef.current = nextState.funds;
+    stateRef.current = nextState;
     lastCloudPayloadRef.current = JSON.stringify(payload);
   };
 
@@ -244,6 +265,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [hydrated]);
 
   useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  useEffect(() => {
+    valuationSeriesRef.current = valuationSeries;
+  }, [valuationSeries]);
+
+  useEffect(() => {
     if (authLoading) return;
 
     let active = true;
@@ -272,9 +301,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           cloudSummary: { funds: 0, holdings: 0, transactions: 0, searchHistory: 0 },
           resolving: false,
         });
-        setState(defaultAppState);
+        const signedOutState = markAppStateSynced(defaultAppState, defaultAppState.sync.lastSyncedVersion);
+        setState(signedOutState);
         setValuationSeries({});
         fundsRef.current = [];
+        stateRef.current = signedOutState;
         setHydrated(true);
         return;
       }
@@ -284,22 +315,63 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const localPreferences = readImportantPreferences();
       const localOwnerUserId = typeof window !== "undefined" ? window.localStorage.getItem(LOCAL_OWNER_USER_ID_KEY) : null;
       const shouldUseLocalForBootstrap = !localOwnerUserId || localOwnerUserId === userId;
-      const bootstrapState = shouldUseLocalForBootstrap ? localState : defaultAppState;
+      const shouldKeepRuntimeState = !shouldUseLocalForBootstrap && hasRuntimeStateData(stateRef.current);
+      const bootstrapState = shouldUseLocalForBootstrap
+        ? localState
+        : shouldKeepRuntimeState
+          ? stateRef.current
+          : defaultAppState;
+      const bootstrapSeries = shouldUseLocalForBootstrap
+        ? localSeries
+        : shouldKeepRuntimeState
+          ? valuationSeriesRef.current
+          : {};
 
       // Local-first bootstrap: keep route switches responsive on mobile,
       // then reconcile cloud payload in background.
       setState(bootstrapState);
-      setValuationSeries(shouldUseLocalForBootstrap ? localSeries : {});
+      setValuationSeries(bootstrapSeries);
       fundsRef.current = bootstrapState.funds;
       setPreferenceSignature(JSON.stringify(localPreferences));
       setHydrated(true);
 
       try {
-        const cloud = await fetchCloudUserData(userId);
+        const localPayload = createCloudPayload(bootstrapState, localPreferences);
+        const cloudMeta = await fetchCloudUserMeta(userId);
         if (!active) return;
 
-        const localPayload = createCloudPayload(localState, localPreferences);
+        if (!cloudMeta) {
+          if (hasMeaningfulCloudData(localPayload)) {
+            await upsertCloudUserData(userId, localPayload);
+            if (!active) return;
+            lastCloudPayloadRef.current = JSON.stringify(localPayload);
+            applySyncedState(stateRef.current, localPayload.sync.dataVersion, localPayload.sync.updatedAt);
+          }
+          setLocalOwnerUser(userId);
+          return;
+        }
 
+        const sameVersion = cloudMeta.dataVersion === localPayload.sync.dataVersion;
+        const sameHash = cloudMeta.contentHash === localPayload.sync.contentHash;
+
+        if (sameVersion && sameHash) {
+          lastCloudPayloadRef.current = JSON.stringify(localPayload);
+          applySyncedState(stateRef.current, localPayload.sync.dataVersion, cloudMeta.updatedAt);
+          setLocalOwnerUser(userId);
+          return;
+        }
+
+        if (localPayload.sync.dataVersion > cloudMeta.dataVersion || (sameVersion && !sameHash && cloudMeta.deviceId === localPayload.sync.deviceId)) {
+          await upsertCloudUserData(userId, localPayload);
+          if (!active) return;
+          lastCloudPayloadRef.current = JSON.stringify(localPayload);
+          applySyncedState(stateRef.current, localPayload.sync.dataVersion, localPayload.sync.updatedAt);
+          setLocalOwnerUser(userId);
+          return;
+        }
+
+        const cloud = await fetchCloudUserData(userId);
+        if (!active) return;
         if (cloud) {
           const cloudState = hydrateAppStateFromCloudPayload(cloud);
           const { funds: cloudFunds, refreshedCount } = await hydrateCloudFundsForView(cloudState.funds);
@@ -308,7 +380,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             funds: cloudFunds,
             lastUpdatedAt: refreshedCount > 0 ? nowInMarket().format("YYYY-MM-DD HH:mm:ss") : cloudState.lastUpdatedAt,
           };
-          const cloudPayload = createCloudPayload(cloudState, cloud.preferences);
+          const cloudPayload = createCloudPayload(cloudStateForRuntime, cloud.preferences);
           const shouldAskConflict = hasMeaningfulCloudData(localPayload) && hasMeaningfulCloudData(cloudPayload)
             && localOwnerUserId !== userId
             && JSON.stringify(localPayload) !== JSON.stringify(cloudPayload);
@@ -329,8 +401,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             setState(bootstrapState);
             setPreferenceSignature(JSON.stringify(localPreferences));
           } else {
+            const mergedPayload = sameVersion && !sameHash
+              ? mergeCloudPayloads(localPayload, cloudPayload)
+              : cloudPayload;
             skipNextInitialRefreshRef.current = refreshedCount > 0;
-            applyPayloadAsRuntime(createCloudPayload(cloudStateForRuntime, cloud.preferences));
+            applyPayloadAsRuntime(mergedPayload);
+            if (mergedPayload.sync.dataVersion > cloudPayload.sync.dataVersion || mergedPayload.sync.contentHash !== cloudPayload.sync.contentHash) {
+              await upsertCloudUserData(userId, mergedPayload);
+              if (!active) return;
+            }
+            lastCloudPayloadRef.current = JSON.stringify(mergedPayload);
             setLocalOwnerUser(userId);
           }
 
@@ -338,21 +418,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        const bootState = shouldUseLocalForBootstrap ? localState : defaultAppState;
+        const bootState = shouldUseLocalForBootstrap
+          ? localState
+          : shouldKeepRuntimeState
+            ? stateRef.current
+            : defaultAppState;
         const bootPayload = buildCloudPayloadFromState(bootState);
         await upsertCloudUserData(userId, bootPayload);
         if (!active) return;
 
         lastCloudPayloadRef.current = JSON.stringify(bootPayload);
         setPreferenceSignature(JSON.stringify(readImportantPreferences()));
-        setState(bootState);
-        setValuationSeries(shouldUseLocalForBootstrap ? localSeries : {});
-        fundsRef.current = bootState.funds;
+        applySyncedState(bootState, bootPayload.sync.dataVersion, bootPayload.sync.updatedAt);
+        setValuationSeries(bootstrapSeries);
         setLocalOwnerUser(userId);
       } catch {
         if (!active) return;
         setState(bootstrapState);
-        setValuationSeries(shouldUseLocalForBootstrap ? localSeries : {});
+        setValuationSeries(bootstrapSeries);
         fundsRef.current = bootstrapState.funds;
       }
     };
@@ -362,7 +445,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
-  }, [authLoading, hydrateCloudFundsForView, isDevNoAuth, isSigningOut, userId]);
+  }, [applySyncedState, authLoading, hydrateCloudFundsForView, isDevNoAuth, isSigningOut, userId]);
 
   useEffect(() => {
     fundsRef.current = state.funds;
@@ -422,12 +505,51 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     const signature = JSON.stringify(payload);
-    if (signature === lastCloudPayloadRef.current) return;
+    if (payload.sync.dataVersion <= state.sync.lastSyncedVersion && signature === lastCloudPayloadRef.current) return;
 
     const timer = window.setTimeout(() => {
-      void upsertCloudUserData(userId, payload)
-        .then(() => {
-          lastCloudPayloadRef.current = signature;
+      void fetchCloudUserMeta(userId)
+        .then(async (cloudMeta) => {
+          if (!cloudMeta || cloudMeta.dataVersion < payload.sync.dataVersion) {
+            await upsertCloudUserData(userId, payload);
+            lastCloudPayloadRef.current = signature;
+            setLocalOwnerUser(userId);
+            setState((current) => (
+              current.sync.dataVersion === payload.sync.dataVersion
+                ? markAppStateSynced(current, payload.sync.dataVersion, payload.sync.updatedAt ?? undefined)
+                : current
+            ));
+            return;
+          }
+
+          if (cloudMeta.dataVersion === payload.sync.dataVersion && cloudMeta.contentHash === payload.sync.contentHash) {
+            lastCloudPayloadRef.current = signature;
+            setLocalOwnerUser(userId);
+            setState((current) => (
+              current.sync.dataVersion === payload.sync.dataVersion
+                ? markAppStateSynced(current, payload.sync.dataVersion, cloudMeta.updatedAt ?? undefined)
+                : current
+            ));
+            return;
+          }
+
+          const cloud = await fetchCloudUserData(userId);
+          if (!cloud) {
+            await upsertCloudUserData(userId, payload);
+            lastCloudPayloadRef.current = signature;
+            setLocalOwnerUser(userId);
+            setState((current) => (
+              current.sync.dataVersion === payload.sync.dataVersion
+                ? markAppStateSynced(current, payload.sync.dataVersion, payload.sync.updatedAt ?? undefined)
+                : current
+            ));
+            return;
+          }
+
+          const mergedPayload = mergeCloudPayloads(payload, cloud);
+          applyPayloadAsRuntime(mergedPayload);
+          await upsertCloudUserData(userId, mergedPayload);
+          lastCloudPayloadRef.current = JSON.stringify(mergedPayload);
           setLocalOwnerUser(userId);
         })
         .catch(() => {
@@ -456,6 +578,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       applyPayloadAsRuntime(resolvedPayload);
       await upsertCloudUserData(userId, resolvedPayload);
+      setState((current) => markAppStateSynced(current, resolvedPayload.sync.dataVersion, resolvedPayload.sync.updatedAt ?? undefined));
       setLocalOwnerUser(userId);
       pendingConflictRef.current = null;
       setConflictResolution({
@@ -483,6 +606,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const payload = buildCloudPayloadFromState(state);
       await upsertCloudUserData(userId, payload);
       lastCloudPayloadRef.current = JSON.stringify(payload);
+      setState((current) => markAppStateSynced(current, payload.sync.dataVersion, payload.sync.updatedAt ?? undefined));
       setLocalOwnerUser(userId);
       return { ok: true, message: "已上传当前配置到云端" };
     } catch (nextError) {
@@ -509,13 +633,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setValuationSeries(getAllValuationSeries());
 
       const { funds: cloudFunds } = await hydrateCloudFundsForView(cloudState.funds);
-      setState((current) => {
-        const merged = {
-          ...current,
-          funds: cloudFunds,
-        };
-        return merged;
-      });
+      setState((current) => markAppStateSynced({
+        ...current,
+        funds: cloudFunds,
+      }, initialPayload.sync.dataVersion, initialPayload.sync.updatedAt ?? undefined));
       setValuationSeries(getAllValuationSeries());
       pendingConflictRef.current = null;
       setConflictResolution({
@@ -759,7 +880,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       recordValuation(snapshot.code, { gsz: snapshot.gsz, gztime: snapshot.gztime });
       setValuationSeries(getAllValuationSeries());
 
-      setState((current) => {
+      applyUserDataMutation((current) => {
         const nextFunds = current.funds.some((item) => item.code === snapshot.code)
           ? current.funds
           : [snapshot, ...current.funds];
@@ -780,20 +901,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       refreshingRef.current = false;
       setRefreshing(false);
     }
-  }, []);
+  }, [applyUserDataMutation]);
 
   const recordSearchHistory = useCallback((keyword: string) => {
     const trimmed = keyword.trim();
     if (!trimmed) return;
 
-    setState((current) => ({
+    applyUserDataMutation((current) => ({
       ...current,
       searchHistory: [trimmed, ...current.searchHistory.filter((item) => item !== trimmed)].slice(0, 6),
     }));
-  }, []);
+  }, [applyUserDataMutation]);
 
   const removeFund = useCallback((code: string) => {
-    setState((current) => {
+    applyUserDataMutation((current) => {
       const holdings = { ...current.holdings };
       const transactions = { ...current.transactions };
       delete holdings[code];
@@ -810,20 +931,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     clearValuationSeries(code);
     setValuationSeries(getAllValuationSeries());
-  }, []);
+  }, [applyUserDataMutation]);
 
   const updateHolding = useCallback((code: string, next: FundHolding) => {
-    setState((current) => ({
+    applyUserDataMutation((current) => ({
       ...current,
       holdings: {
         ...current.holdings,
         [code]: next,
       },
     }));
-  }, []);
+  }, [applyUserDataMutation]);
 
   const clearHolding = useCallback((code: string) => {
-    setState((current) => ({
+    applyUserDataMutation((current) => ({
       ...current,
       holdings: {
         ...current.holdings,
@@ -838,10 +959,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         [code]: [],
       },
     }));
-  }, []);
+  }, [applyUserDataMutation]);
 
   const addTransaction = useCallback((code: string, next: Omit<FundTransaction, "id">) => {
-    setState((current) => {
+    applyUserDataMutation((current) => {
       const tx: FundTransaction = {
         ...next,
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -895,10 +1016,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         holdings: nextHoldings,
       };
     });
-  }, []);
+  }, [applyUserDataMutation]);
 
   const removeTransaction = useCallback((code: string, id: string) => {
-    setState((current) => {
+    applyUserDataMutation((current) => {
       const previousTransactions = current.transactions[code] || [];
       const removed = previousTransactions.find((item) => item.id === id);
       const nextTransactions = previousTransactions.filter((item) => item.id !== id);
@@ -977,30 +1098,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         holdings: nextHoldings,
       };
     });
-  }, []);
+  }, [applyUserDataMutation]);
 
   const toggleFavorite = useCallback((code: string) => {
-    setState((current) => ({
+    applyUserDataMutation((current) => ({
       ...current,
       favorites: current.favorites.includes(code)
         ? current.favorites.filter((item) => item !== code)
         : [code, ...current.favorites],
     }));
-  }, []);
+  }, [applyUserDataMutation]);
 
   const setRefreshMs = useCallback((value: number) => {
-    setState((current) => ({
+    applyUserDataMutation((current) => ({
       ...current,
       refreshMs: value,
     }));
-  }, []);
+  }, [applyUserDataMutation]);
 
   const clearSearchHistory = useCallback(() => {
-    setState((current) => ({
+    applyUserDataMutation((current) => ({
       ...current,
       searchHistory: [],
     }));
-  }, []);
+  }, [applyUserDataMutation]);
 
   const clearAll = useCallback(() => {
     refreshTokenRef.current += 1;
@@ -1011,9 +1132,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setError("");
     didInitialRefreshRef.current = false;
     setPassiveRefreshAt(null);
-    setState(defaultAppState);
+    const clearedState = markAppStateSynced(defaultAppState, defaultAppState.sync.lastSyncedVersion);
+    setState(clearedState);
     setValuationSeries({});
     fundsRef.current = [];
+    stateRef.current = clearedState;
     pendingConflictRef.current = null;
     setConflictResolution({
       open: false,
@@ -1044,12 +1167,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setRefreshing(false);
     setError("");
     const seed = buildDemoSeed();
+    const nextSeedState = bumpAppStateVersion(normalizeAppState(seed.state));
     didInitialRefreshRef.current = true;
-    setState(seed.state);
+    setState(nextSeedState);
     setValuationSeries(seed.valuationSeries);
-    fundsRef.current = seed.state.funds;
+    fundsRef.current = nextSeedState.funds;
+    stateRef.current = nextSeedState;
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(APP_STATE_KEY, JSON.stringify(seed.state));
+      window.localStorage.setItem(APP_STATE_KEY, JSON.stringify(nextSeedState));
       window.localStorage.setItem(VALUATION_TIMESERIES_KEY, JSON.stringify(seed.valuationSeries));
       if (userId) {
         setLocalOwnerUser(userId);
@@ -1061,7 +1186,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const importBackupData = useCallback((payload: { appState: unknown; valuationSeries?: unknown }) => {
     try {
-      const nextState = normalizeAppState(payload.appState);
+      const nextState = bumpAppStateVersion(normalizeAppState(payload.appState));
       const nextSeries = payload.valuationSeries === undefined
         ? getAllValuationSeries()
         : setAllValuationSeries(normalizeValuationSeries(payload.valuationSeries));
@@ -1077,6 +1202,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setState(nextState);
       setValuationSeries(nextSeries);
       fundsRef.current = nextState.funds;
+      stateRef.current = nextState;
 
       return { ok: true, message: "导入成功，数据已更新" };
     } catch (nextError) {
