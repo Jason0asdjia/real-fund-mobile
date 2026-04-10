@@ -3,7 +3,7 @@
 该文件保留为历史更新归档。
 
 当前生效的 API、字段、时间、刷新规范请查看：
-- `/agent.md`
+- `/AGENT.md`
 - `/src/lib/README.md`
 - `/src/components/README.md`
 - `/src/app/README.md`

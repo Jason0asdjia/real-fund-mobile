@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "WATCHPACK_POLLING=true NEXT_WEBPACK_USEPOLLING=1 next dev",
+    "dev": "cross-env WATCHPACK_POLLING=true NEXT_WEBPACK_USEPOLLING=1 next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
@@ -28,6 +28,7 @@
     "@types/react-dom": "^18.3.5",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.25",
+    "cross-env": "^7.0.3",
     "postcss": "^8.4.31",
     "tailwindcss": "^4.2.2",
     "typescript": "^5.7.3"
