@@ -201,6 +201,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     title: "云端同步中",
     message: "正在同步云端数据...",
   });
+  const cloudSyncInFlightRef = useRef(false);
   const pendingConflictRef = useRef<
     | {
         localState: AppState;
@@ -527,9 +528,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const capture = () => JSON.stringify(readImportantPreferences());
     setPreferenceSignature(capture());
 
+    let prevSignature = "";
     const timer = window.setInterval(() => {
       const next = capture();
-      setPreferenceSignature((current) => (current === next ? current : next));
+      if (next !== prevSignature) {
+        prevSignature = next;
+        setPreferenceSignature(next);
+      }
     }, 1500);
 
     return () => window.clearInterval(timer);
@@ -542,6 +547,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       skipNextCloudSyncRef.current = false;
       return;
     }
+
+    if (cloudSyncInFlightRef.current) return;
 
     const payload = buildCloudPayloadFromState(state);
     const isMeaningfulPayload = hasMeaningfulCloudData(payload);
@@ -556,6 +563,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (payload.sync.dataVersion <= state.sync.lastSyncedVersion && signature === lastCloudPayloadRef.current) return;
 
     const timer = window.setTimeout(() => {
+      cloudSyncInFlightRef.current = true;
       void fetchCloudUserMeta(userId)
         .then(async (cloudMeta) => {
           if (cloudMeta) {
@@ -605,11 +613,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         })
         .catch(() => {
           // keep local runtime state; sync can retry on next state/preference change
+        })
+        .finally(() => {
+          cloudSyncInFlightRef.current = false;
         });
     }, 420);
 
     return () => window.clearTimeout(timer);
-  }, [conflictResolution.open, hydrated, preferenceSignature, state, userId, withCloudSyncOverlay]);
+  }, [conflictResolution.open, hydrated, state, userId, withCloudSyncOverlay]);
 
   const resolveDataConflict = useCallback(async (strategy: "keep_local" | "keep_cloud" | "merge") => {
     if (!userId || !pendingConflictRef.current) return;
