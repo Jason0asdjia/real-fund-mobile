@@ -116,14 +116,14 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
 
   return (
     <div className="-mx-3 -mb-24 -mt-4 flex h-[calc(100dvh-5.5rem)] flex-col overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mb-24 md:-mt-4">
-      <header className="z-20 shrink-0 border-b border-[#e2e7ff] bg-white">
-        <div className="flex h-12 items-center justify-between px-3">
-          <h1 className="typo-page-title">交易历史</h1>
-        </div>
-      </header>
+      <div className="sticky top-0 z-20 shrink-0 bg-white">
+        <header className="border-b border-[#e2e7ff] bg-white">
+          <div className="flex h-12 items-center justify-between px-3">
+            <h1 className="typo-page-title">交易历史</h1>
+          </div>
+        </header>
 
-      <main className="flex flex-1 flex-col overflow-hidden">
-        <section className="shrink-0 bg-[#d7e2ff] px-3 pb-4 pt-3 text-[#001b3f]">
+        <section className="bg-[#d7e2ff] px-3 pb-4 pt-3 text-[#001b3f]">
           <div className="flex items-end justify-between gap-2">
             <div>
               <p className="mb-1 typo-label text-[#24467c]/70">{periodLabel}成交额</p>
@@ -136,7 +136,7 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
           </div>
         </section>
 
-        <section className="shrink-0 border-b border-[#e2e7ff] bg-white px-3 py-2.5">
+        <section className="border-b border-[#e2e7ff] bg-white px-3 py-2.5">
           <div className="flex items-center gap-2 overflow-hidden">
             <label className="sr-only" htmlFor="history-type-filter">交易类型</label>
             <TwSelect
@@ -175,8 +175,9 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
             />
           </div>
         </section>
+      </div>
 
-        <section className="flex-1 overflow-y-auto">
+      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {grouped.length === 0 ? (
             <div className="px-3 py-8 text-center text-sm text-[#747781]">暂无交易记录，先去持仓页录入交易。</div>
           ) : (
@@ -225,7 +226,6 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
               </div>
             ))
           )}
-        </section>
       </main>
     </div>
   );

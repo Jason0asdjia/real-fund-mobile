@@ -673,7 +673,7 @@ export default function PortfolioPage() {
             <section className="min-h-0 flex-1 bg-white">
               <div
                 ref={tableRef}
-                className="h-full overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="h-full overflow-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 role="region"
                 aria-label="持仓总览表格"
                 onScroll={(event) =>

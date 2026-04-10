@@ -173,7 +173,7 @@ export default function DiscoverPage() {
               onChange={(event) => setKeyword(event.target.value)}
               placeholder="输入基金名称或代码"
               aria-label="搜索基金"
-              className="min-w-0 flex-1 border-0 bg-transparent p-0 text-xs font-medium text-[#131b2e] outline-none placeholder:text-[#8a93a4] focus:ring-0"
+              className="min-w-0 flex-1 border-0 bg-transparent p-0 text-base font-medium text-[#131b2e] outline-none placeholder:text-[#8a93a4] focus:ring-0"
             />
             {keyword ? (
               <button
