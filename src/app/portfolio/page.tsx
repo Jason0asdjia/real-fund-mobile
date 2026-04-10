@@ -264,7 +264,7 @@ const readColumnOrder = (): ColumnId[] => {
 };
 
 export default function PortfolioPage() {
-  const { state, refreshFunds } = useAppState();
+  const { state } = useAppState();
   const [restoredState, setRestoredState] = useState<PortfolioViewState>({ windowY: 0, tableTop: 0, tableLeft: 0 });
   const [columnVisibility, setColumnVisibility] = useState<Record<ColumnId, boolean>>(() => readColumnVisibility());
   const [columnOrder, setColumnOrder] = useState<ColumnId[]>(() => readColumnOrder());
@@ -344,11 +344,6 @@ export default function PortfolioPage() {
       document.documentElement.style.overflow = previousHtmlOverflow;
     };
   }, []);
-
-  useEffect(() => {
-    if (state.funds.length === 0) return;
-    void refreshFunds();
-  }, [refreshFunds, state.funds.length]);
 
   const rows = useMemo(
     () => buildRows(state.funds, state.holdings, state.transactions, todayInMarket()),

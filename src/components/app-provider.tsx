@@ -138,7 +138,7 @@ const mergeQuoteWithIntradayFallback = (previous: FundSnapshot, next: FundSnapsh
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const isDevNoAuth = process.env.NODE_ENV !== "production";
-  const { user, authLoading, authError } = useAuth();
+  const { user, authLoading } = useAuth();
   const userId = user?.id ?? null;
   const [state, setState] = useState<AppState>(defaultAppState);
   const [hydrated, setHydrated] = useState(false);
@@ -152,6 +152,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const seedingRef = useRef(false);
   const didInitialRefreshRef = useRef(false);
   const refreshTokenRef = useRef(0);
+  const skipNextInitialRefreshRef = useRef(false);
+  const unauthenticatedClearTimerRef = useRef<number | null>(null);
   const lastForegroundRefreshRef = useRef(0);
   const archiveBackfillInFlightRef = useRef(new Set<string>());
   const archiveBackfillAttemptRef = useRef<Record<string, number>>({});
@@ -188,21 +190,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const hydrateCloudFundsForView = useCallback(async (funds: FundSnapshot[]) => {
-    if (funds.length === 0) return funds;
+    if (funds.length === 0) return { funds, refreshedCount: 0 };
 
     const hydratedResults = await Promise.allSettled(
       funds.map((fund) => fetchFundBaseData(fund.code, { code: fund.code, name: fund.name || fund.code }, "interactive")),
     );
 
-    return hydratedResults.map((result, index) => {
+    let refreshedCount = 0;
+
+    const nextFunds = hydratedResults.map((result, index) => {
       if (result.status !== "fulfilled") {
         return funds[index];
       }
 
+      refreshedCount += 1;
       const nextFund = result.value;
       recordValuation(nextFund.code, { gsz: nextFund.gsz, gztime: nextFund.gztime });
       return nextFund;
     });
+
+    return { funds: nextFunds, refreshedCount };
   }, []);
 
   useEffect(() => {
@@ -210,10 +217,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     let active = true;
 
+    const clearUnauthenticatedTimer = () => {
+      if (unauthenticatedClearTimerRef.current == null) return;
+      window.clearTimeout(unauthenticatedClearTimerRef.current);
+      unauthenticatedClearTimerRef.current = null;
+    };
+
     const bootstrap = async () => {
       if (!userId) {
         if (!active) return;
         if (isDevNoAuth) {
+          clearUnauthenticatedTimer();
           const localState = loadAppState();
           const localSeries = getAllValuationSeries();
           setState(localState);
@@ -224,23 +238,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        if (hydrated && authError) {
-          return;
-        }
-
-        pendingConflictRef.current = null;
-        setConflictResolution({
-          open: false,
-          localSummary: { funds: 0, holdings: 0, transactions: 0, searchHistory: 0 },
-          cloudSummary: { funds: 0, holdings: 0, transactions: 0, searchHistory: 0 },
-          resolving: false,
-        });
-        setState(defaultAppState);
-        setValuationSeries({});
-        fundsRef.current = [];
-        setHydrated(true);
+        if (unauthenticatedClearTimerRef.current != null) return;
+        unauthenticatedClearTimerRef.current = window.setTimeout(() => {
+          if (!active) return;
+          pendingConflictRef.current = null;
+          setConflictResolution({
+            open: false,
+            localSummary: { funds: 0, holdings: 0, transactions: 0, searchHistory: 0 },
+            cloudSummary: { funds: 0, holdings: 0, transactions: 0, searchHistory: 0 },
+            resolving: false,
+          });
+          setState(defaultAppState);
+          setValuationSeries({});
+          fundsRef.current = [];
+          setHydrated(true);
+          unauthenticatedClearTimerRef.current = null;
+        }, 1200);
         return;
       }
+
+      clearUnauthenticatedTimer();
 
       const localState = loadAppState();
       const localSeries = getAllValuationSeries();
@@ -265,10 +282,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         if (cloud) {
           const cloudState = hydrateAppStateFromCloudPayload(cloud);
-          const cloudFunds = await hydrateCloudFundsForView(cloudState.funds);
+          const { funds: cloudFunds, refreshedCount } = await hydrateCloudFundsForView(cloudState.funds);
           const cloudStateForRuntime = {
             ...cloudState,
             funds: cloudFunds,
+            lastUpdatedAt: refreshedCount > 0 ? nowInMarket().format("YYYY-MM-DD HH:mm:ss") : cloudState.lastUpdatedAt,
           };
           const cloudPayload = createCloudPayload(cloudState, cloud.preferences);
           const shouldAskConflict = hasMeaningfulCloudData(localPayload) && hasMeaningfulCloudData(cloudPayload)
@@ -291,6 +309,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             setState(bootstrapState);
             setPreferenceSignature(JSON.stringify(localPreferences));
           } else {
+            skipNextInitialRefreshRef.current = refreshedCount > 0;
             applyPayloadAsRuntime(createCloudPayload(cloudStateForRuntime, cloud.preferences));
             setLocalOwnerUser(userId);
           }
@@ -322,8 +341,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       active = false;
+      clearUnauthenticatedTimer();
     };
-  }, [authError, authLoading, hydrateCloudFundsForView, hydrated, isDevNoAuth, userId]);
+  }, [authLoading, hydrateCloudFundsForView, isDevNoAuth, userId]);
 
   useEffect(() => {
     fundsRef.current = state.funds;
@@ -469,7 +489,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       applyPayloadAsRuntime(initialPayload);
       setValuationSeries(getAllValuationSeries());
 
-      const cloudFunds = await hydrateCloudFundsForView(cloudState.funds);
+      const { funds: cloudFunds } = await hydrateCloudFundsForView(cloudState.funds);
       setState((current) => {
         const merged = {
           ...current,
@@ -550,12 +570,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!hydrated) return;
     if (state.funds.length === 0) {
       didInitialRefreshRef.current = false;
+      skipNextInitialRefreshRef.current = false;
       return;
     }
     if (didInitialRefreshRef.current) return;
 
     didInitialRefreshRef.current = true;
     setPassiveRefreshAt((current) => current ?? Date.now());
+    if (skipNextInitialRefreshRef.current) {
+      skipNextInitialRefreshRef.current = false;
+      return;
+    }
     refreshFunds();
   }, [hydrated, state.funds.length, refreshFunds]);
 
