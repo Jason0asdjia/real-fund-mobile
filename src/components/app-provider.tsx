@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { useAuth } from "@/components/auth-provider";
 import { buildCloudPayloadFromState, createCloudPayload, fetchCloudUserData, hasMeaningfulCloudData, hydrateAppStateFromCloudPayload, mergeCloudPayloads, upsertCloudUserData } from "@/lib/cloud-user-data";
-import { fetchFundArchiveData, fetchFundBaseData, searchFunds } from "@/lib/fund-api";
+import { fetchFundArchiveData, fetchFundBaseData, fetchFundHistoricalNavSeries, searchFunds } from "@/lib/fund-api";
 import { applyConfirmedTransactionsToHolding, isTransactionConfirmedInMarket } from "@/lib/portfolio";
 import { APP_STATE_KEY, defaultAppState, loadAppState, normalizeAppState, saveAppState } from "@/lib/storage";
 import { isEstimateTimestampUsable, nowInMarket } from "@/lib/time";
@@ -52,6 +52,7 @@ const AppContext = createContext<AppContextValue | null>(null);
 const LOCAL_OWNER_USER_ID_KEY = "real-fund-mobile:owner-user-id";
 const OFFICIAL_NAV_HISTORY_CACHE_KEY = "real-fund-mobile:official-nav-history";
 const MAX_ARCHIVE_PREFETCH_CONCURRENCY = 3;
+const MAX_HISTORY_PREFETCH_CONCURRENCY = 2;
 
 const setLocalOwnerUser = (value: string | null) => {
   if (typeof window === "undefined") return;
@@ -154,6 +155,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const lastForegroundRefreshRef = useRef(0);
   const archiveBackfillInFlightRef = useRef(new Set<string>());
   const archiveBackfillAttemptRef = useRef<Record<string, number>>({});
+  const historyPreheatInFlightRef = useRef(new Set<string>());
+  const historyPreheatDoneRef = useRef(new Set<string>());
+  const historyPreheatAttemptRef = useRef<Record<string, number>>({});
   const lastCloudPayloadRef = useRef("");
   const skipNextCloudSyncRef = useRef(false);
   const suppressEmptyCloudSyncRef = useRef(false);
@@ -655,6 +659,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     return () => window.clearTimeout(timer);
   }, [backfillFundArchives, hydrated, state.funds]);
+
+  useEffect(() => {
+    if (!hydrated || document.hidden || state.funds.length === 0) return;
+    if (typeof window !== "undefined" && window.location.pathname.startsWith("/discover")) return;
+
+    const now = Date.now();
+    const queue = state.funds.filter((fund) => {
+      if (!fund?.code) return false;
+      if (historyPreheatDoneRef.current.has(fund.code)) return false;
+      if (historyPreheatInFlightRef.current.has(fund.code)) return false;
+      const lastAttemptAt = historyPreheatAttemptRef.current[fund.code] || 0;
+      return now - lastAttemptAt >= 60_000;
+    }).slice(0, MAX_HISTORY_PREFETCH_CONCURRENCY);
+
+    if (queue.length === 0) return;
+
+    const timer = window.setTimeout(() => {
+      void Promise.allSettled(queue.map(async (fund) => {
+        historyPreheatInFlightRef.current.add(fund.code);
+        historyPreheatAttemptRef.current[fund.code] = Date.now();
+        try {
+          await fetchFundHistoricalNavSeries(fund.code, 360);
+          historyPreheatDoneRef.current.add(fund.code);
+        } catch {
+          // retry in next cycle
+        } finally {
+          historyPreheatInFlightRef.current.delete(fund.code);
+        }
+      }));
+    }, 680);
+
+    return () => window.clearTimeout(timer);
+  }, [hydrated, state.funds]);
 
   const addFund = useCallback(async (input: SearchFundResult) => {
     const existing = fundsRef.current.find((item) => item.code === input.code);

@@ -28,6 +28,8 @@ const sourceQueue = new Map<keyof typeof SOURCE_MIN_INTERVAL_MS, Promise<void>>(
 const previewInFlight = new Map<string, Promise<FundSnapshot>>();
 const fullInFlight = new Map<string, Promise<FundSnapshot>>();
 const archiveInFlight = new Map<string, Promise<FundSnapshot>>();
+const historicalNavSeriesSessionCache = new Map<string, CachedData<Array<{ date: string; nav: number }>>>();
+const HISTORICAL_NAV_SERIES_SESSION_CACHE_MS = 20 * 60 * 1000;
 
 type RequestMode = "throttled" | "interactive";
 
@@ -353,11 +355,22 @@ export type FundHistoricalNavPoint = {
 };
 
 export const fetchFundHistoricalNavSeries = async (code: string, maxCount = 240, sinceDate?: string): Promise<FundHistoricalNavPoint[]> => {
+  const sessionCached = historicalNavSeriesSessionCache.get(code);
+  const hasFreshSessionCache = Boolean(sessionCached && Date.now() - sessionCached.ts < HISTORICAL_NAV_SERIES_SESSION_CACHE_MS);
+  const minReusableSessionPoints = Math.min(maxCount, 240);
+  const hasEnoughSessionPoints = Boolean(sessionCached && sessionCached.data.length >= minReusableSessionPoints);
+  if (!sinceDate && hasFreshSessionCache && hasEnoughSessionPoints && sessionCached) {
+    return sessionCached.data.slice(-maxCount);
+  }
+
+  // Eastmoney lsjz has unstable upper bound for `per` across environments.
+  // Keep request size conservative and compute page count from actual rows.
   const per = 49;
   const firstPage = await fetchHistoricalNetValuesPage(code, 1, per, sinceDate || "");
   const totalPages = Math.max(1, Number(firstPage?.pages) || 1);
-  const cappedPages = Math.min(totalPages, Math.max(1, Math.ceil(maxCount / per)));
   const rows = parseNetValuesFromHtml(firstPage?.content || "");
+  const effectivePer = Math.max(1, rows.length || per);
+  const cappedPages = Math.min(totalPages, Math.max(1, Math.ceil(maxCount / effectivePer)));
 
   if (cappedPages > 1) {
     const restPages = await Promise.all(
@@ -374,10 +387,31 @@ export const fetchFundHistoricalNavSeries = async (code: string, maxCount = 240,
     deduped.set(item.date, item.nav);
   });
 
-  return [...deduped.entries()]
+  const networkSeries = [...deduped.entries()]
     .map(([date, nav]) => ({ date, nav }))
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(-maxCount);
+
+  const merged = hasFreshSessionCache && sessionCached
+    ? (() => {
+      const mergedMap = new Map<string, number>();
+      sessionCached.data.forEach((item) => mergedMap.set(item.date, item.nav));
+      networkSeries.forEach((item) => mergedMap.set(item.date, item.nav));
+      return [...mergedMap.entries()]
+        .map(([date, nav]) => ({ date, nav }))
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(-Math.max(maxCount, 360));
+    })()
+    : networkSeries;
+
+  if (merged.length > 0) {
+    historicalNavSeriesSessionCache.set(code, {
+      data: merged,
+      ts: Date.now(),
+    });
+  }
+
+  return merged.slice(-maxCount);
 };
 
 const requestTencentFundQuote = (code: string, priority: "high" | "normal" | "interactive" = "normal") =>

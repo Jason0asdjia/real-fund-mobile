@@ -20,6 +20,9 @@ type FundDetailViewProps = {
 type PeriodKey = "1m" | "3m" | "1y" | "max";
 
 const OFFICIAL_NAV_HISTORY_CACHE_KEY = "real-fund-mobile:official-nav-history";
+const MIN_CHART_POINTS_FOR_CACHE_BOOTSTRAP = 120;
+const QUICK_CHART_POINTS = 90;
+const FULL_CHART_POINTS = 360;
 
 const PERIOD_OPTIONS: Array<{ key: PeriodKey; label: string; points?: number }> = [
   { key: "1m", label: "1月", points: 30 },
@@ -152,7 +155,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
       const parsed = JSON.parse(raw) as Record<string, Array<{ date: string; nav: number }>>;
       const cached = Array.isArray(parsed?.[code]) ? parsed[code] : [];
       const normalized = cached.filter((item) => item?.date && Number.isFinite(Number(item?.nav))).map((item) => ({ date: item.date, nav: Number(item.nav) }));
-      if (normalized.length > 0) {
+      if (normalized.length >= MIN_CHART_POINTS_FOR_CACHE_BOOTSTRAP) {
         setOfficialNavSeries(normalized);
       }
     } catch {
@@ -167,32 +170,64 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
     const loadHistory = async () => {
       try {
         let cachedSeries: Array<{ date: string; nav: number }> = [];
+        const saveSeriesToLocalCache = (series: Array<{ date: string; nav: number }>) => {
+          if (typeof window === "undefined" || series.length === 0) return;
+          try {
+            const raw = window.localStorage.getItem(OFFICIAL_NAV_HISTORY_CACHE_KEY);
+            const parsed = raw ? (JSON.parse(raw) as Record<string, Array<{ date: string; nav: number }>>) : {};
+            parsed[code] = series;
+            window.localStorage.setItem(OFFICIAL_NAV_HISTORY_CACHE_KEY, JSON.stringify(parsed));
+          } catch {
+            // noop
+          }
+        };
+
         if (typeof window !== "undefined") {
           try {
             const raw = window.localStorage.getItem(OFFICIAL_NAV_HISTORY_CACHE_KEY);
             const parsed = raw ? (JSON.parse(raw) as Record<string, Array<{ date: string; nav: number }>>) : {};
-            cachedSeries = Array.isArray(parsed?.[code]) ? parsed[code] : [];
+            const rawCached = Array.isArray(parsed?.[code]) ? parsed[code] : [];
+            cachedSeries = rawCached
+              .filter((item) => item?.date && Number.isFinite(Number(item?.nav)))
+              .map((item) => ({ date: item.date, nav: Number(item.nav) }));
           } catch {
             cachedSeries = [];
           }
         }
 
-        const lastCachedDate = cachedSeries.length ? cachedSeries[cachedSeries.length - 1]?.date : undefined;
-        const fetchedSeries = await fetchFundHistoricalNavSeries(code, 360, lastCachedDate);
-        const series = lastCachedDate ? mergeNavSeries(cachedSeries, fetchedSeries, 360) : fetchedSeries;
+        if (cachedSeries.length > 0) {
+          setOfficialNavSeries(cachedSeries.slice(-FULL_CHART_POINTS));
+        }
+
+        // Phase 1: quick fill for fast first paint (1m/3m usable)
+        let stagedSeries = cachedSeries;
+        if (stagedSeries.length < QUICK_CHART_POINTS) {
+          const quickFetched = await fetchFundHistoricalNavSeries(code, QUICK_CHART_POINTS);
+          stagedSeries = stagedSeries.length
+            ? mergeNavSeries(stagedSeries, quickFetched, FULL_CHART_POINTS)
+            : quickFetched;
+
+          if (!active) return;
+          if (stagedSeries.length > 0) {
+            setOfficialNavSeries(stagedSeries);
+            saveSeriesToLocalCache(stagedSeries);
+          }
+        }
+
+        if (active) {
+          setOfficialNavSeriesLoading(false);
+        }
+
+        // Phase 2: full fill in background for 1y/max
+        const baseSeries = stagedSeries.length ? stagedSeries : cachedSeries;
+        const canUseIncrementalSince = baseSeries.length >= MIN_CHART_POINTS_FOR_CACHE_BOOTSTRAP;
+        const lastCachedDate = canUseIncrementalSince ? baseSeries[baseSeries.length - 1]?.date : undefined;
+        const fetchedSeries = await fetchFundHistoricalNavSeries(code, FULL_CHART_POINTS, lastCachedDate);
+        const series = baseSeries.length ? mergeNavSeries(baseSeries, fetchedSeries, FULL_CHART_POINTS) : fetchedSeries;
         if (!active) return;
         if (series.length > 0) {
           setOfficialNavSeries(series);
-          if (typeof window !== "undefined") {
-            try {
-              const raw = window.localStorage.getItem(OFFICIAL_NAV_HISTORY_CACHE_KEY);
-              const parsed = raw ? (JSON.parse(raw) as Record<string, Array<{ date: string; nav: number }>>) : {};
-              parsed[code] = series;
-              window.localStorage.setItem(OFFICIAL_NAV_HISTORY_CACHE_KEY, JSON.stringify(parsed));
-            } catch {
-              // noop
-            }
-          }
+          saveSeriesToLocalCache(series);
         }
       } catch {
         // keep cached series when request fails
@@ -444,7 +479,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
                 <div className="h-[180px] animate-pulse rounded-lg bg-[#f6f8fc]" />
               </div>
             ) : (
-              <Area {...areaConfig} height={220} />
+              <Area key={`${period}-${filteredPoints.length}-${filteredPoints[0]?.date || "none"}-${filteredPoints.at(-1)?.date || "none"}`} {...areaConfig} height={220} />
             )}
           </div>
         </section>
