@@ -562,8 +562,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const signature = JSON.stringify(payload);
     if (payload.sync.dataVersion <= state.sync.lastSyncedVersion && signature === lastCloudPayloadRef.current) return;
 
+    cloudSyncInFlightRef.current = true;
+
     const timer = window.setTimeout(() => {
-      cloudSyncInFlightRef.current = true;
       void fetchCloudUserMeta(userId)
         .then(async (cloudMeta) => {
           if (cloudMeta) {
