@@ -136,19 +136,41 @@ const mergeQuoteWithIntradayFallback = (previous: FundSnapshot, next: FundSnapsh
   };
 };
 
+const getInitialRuntimeSnapshot = () => {
+  if (typeof window === "undefined") {
+    return {
+      state: defaultAppState,
+      valuationSeries: {} as Record<string, ValuationPoint[]>,
+      hydrated: false,
+    };
+  }
+
+  const state = loadAppState();
+  return {
+    state,
+    valuationSeries: getAllValuationSeries(),
+    hydrated: true,
+  };
+};
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const isDevNoAuth = process.env.NODE_ENV !== "production";
   const { user, authLoading, isSigningOut } = useAuth();
   const userId = user?.id ?? null;
-  const [state, setState] = useState<AppState>(defaultAppState);
-  const [hydrated, setHydrated] = useState(false);
+  const initialRuntimeRef = useRef<ReturnType<typeof getInitialRuntimeSnapshot>>();
+  if (!initialRuntimeRef.current) {
+    initialRuntimeRef.current = getInitialRuntimeSnapshot();
+  }
+  const initialRuntime = initialRuntimeRef.current;
+  const [state, setState] = useState<AppState>(initialRuntime.state);
+  const [hydrated, setHydrated] = useState(initialRuntime.hydrated);
   const [refreshing, setRefreshing] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [error, setError] = useState("");
   const [passiveRefreshAt, setPassiveRefreshAt] = useState<number | null>(null);
-  const [valuationSeries, setValuationSeries] = useState<Record<string, ValuationPoint[]>>({});
-  const hydratedRef = useRef(false);
-  const fundsRef = useRef<FundSnapshot[]>([]);
+  const [valuationSeries, setValuationSeries] = useState<Record<string, ValuationPoint[]>>(initialRuntime.valuationSeries);
+  const hydratedRef = useRef(initialRuntime.hydrated);
+  const fundsRef = useRef<FundSnapshot[]>(initialRuntime.state.funds);
   const refreshingRef = useRef(false);
   const seedingRef = useRef(false);
   const didInitialRefreshRef = useRef(false);
@@ -179,6 +201,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     | null
   >(null);
+
+  useEffect(() => {
+    if (!initialRuntime.hydrated) return;
+    setPreferenceSignature(JSON.stringify(readImportantPreferences()));
+  }, [initialRuntime.hydrated]);
 
   const applyPayloadAsRuntime = (payload: ReturnType<typeof createCloudPayload>) => {
     const nextState = hydrateAppStateFromCloudPayload(payload);

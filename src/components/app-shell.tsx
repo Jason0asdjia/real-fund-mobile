@@ -24,13 +24,18 @@ const getRouteIndex = (pathname: string) => {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const isDevNoAuth = process.env.NODE_ENV !== "production";
   const pathname = usePathname();
-  const { conflictResolution, resolveDataConflict } = useAppState();
+  const { conflictResolution, resolveDataConflict, hydrated, state } = useAppState();
   const { user, authLoading, authError, isConfigured, signInWithGitHub } = useAuth();
   const sectionPath = getSectionPath(pathname);
   const previousIndexRef = useRef(getRouteIndex(pathname));
 
   const currentIndex = getRouteIndex(pathname);
   const direction = currentIndex >= previousIndexRef.current ? 1 : -1;
+  const hasLocalRuntimeData = hydrated && (
+    state.funds.length > 0
+    || Object.keys(state.holdings).length > 0
+    || Object.values(state.transactions).some((items) => Array.isArray(items) && items.length > 0)
+  );
 
   useEffect(() => {
     previousIndexRef.current = currentIndex;
@@ -44,7 +49,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, [conflictResolution.open]);
 
-  if (authLoading && !isDevNoAuth) {
+  if (authLoading && !isDevNoAuth && !hasLocalRuntimeData) {
     return (
       <div className="app-frame">
         <div className="ambient ambient--one" />
@@ -79,7 +84,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user && !isDevNoAuth) {
+  if (!user && !isDevNoAuth && !hasLocalRuntimeData) {
     return (
       <div className="app-frame">
         <div className="ambient ambient--one" />
