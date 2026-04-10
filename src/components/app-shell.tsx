@@ -174,7 +174,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </button>
                 <button
                   type="button"
-                  className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[#00193c] px-3 text-sm font-semibold text-white disabled:opacity-60"
+                  className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[#00193c] px-3 text-sm font-semibold !text-white disabled:opacity-60"
                   disabled={conflictResolution.resolving}
                   onClick={() => {
                     void resolveDataConflict("merge");
