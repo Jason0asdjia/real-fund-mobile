@@ -235,6 +235,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setCloudSyncStatus({ open: true, title, message });
   }, []);
 
+  const hideCloudSyncStatus = useCallback(() => {
+    setCloudSyncStatus((current) => ({ ...current, open: false }));
+  }, []);
+
   const withCloudSyncOverlay = useCallback(async <T,>(title: string, message: string, task: () => Promise<T>) => {
     showCloudSyncStatus(title, message);
     try {
@@ -388,6 +392,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             lastCloudPayloadRef.current = JSON.stringify(localPayload);
             applySyncedState(stateRef.current, localPayload.sync.dataVersion, localPayload.sync.updatedAt);
           }
+          hideCloudSyncStatus();
           setLocalOwnerUser(userId);
           return;
         }
@@ -398,6 +403,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (sameVersion && sameHash) {
           lastCloudPayloadRef.current = JSON.stringify(localPayload);
           applySyncedState(stateRef.current, localPayload.sync.dataVersion, cloudMeta.updatedAt);
+          hideCloudSyncStatus();
           setLocalOwnerUser(userId);
           return;
         }
@@ -475,6 +481,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setLocalOwnerUser(userId);
       } catch {
         if (!active) return;
+        hideCloudSyncStatus();
         setState(bootstrapState);
         setValuationSeries(bootstrapSeries);
         fundsRef.current = bootstrapState.funds;
@@ -486,7 +493,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
-  }, [applySyncedState, authLoading, hydrateCloudFundsForView, isDevNoAuth, isSigningOut, showCloudSyncStatus, userId, withCloudSyncOverlay]);
+  }, [applySyncedState, authLoading, hideCloudSyncStatus, hydrateCloudFundsForView, isDevNoAuth, isSigningOut, showCloudSyncStatus, userId, withCloudSyncOverlay]);
 
   useEffect(() => {
     fundsRef.current = state.funds;
