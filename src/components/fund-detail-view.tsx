@@ -7,7 +7,7 @@ import { ArrowDownLeft, ArrowUpRight, ChevronLeft, ChevronRight, CircleMinus, Ci
 import { Area, Pie } from "@ant-design/charts";
 
 import { useAppState } from "@/components/app-provider";
-import { fetchFundBaseData, fetchFundData, fetchFundHistoricalNavSeries, fetchFundPreviewData } from "@/lib/fund-api";
+import { fetchFundArchiveData, fetchFundBaseData, fetchFundHistoricalNavSeries, fetchFundPreviewData } from "@/lib/fund-api";
 import { formatCurrency, formatPercent, formatSignedCurrency } from "@/lib/portfolio";
 import type { FundSnapshot } from "@/lib/types";
 
@@ -123,10 +123,13 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
     setArchiveLoading(true);
 
     const timer = window.setTimeout(() => {
-      void fetchFundData(code, remoteFund)
+      void fetchFundArchiveData(code, remoteFund)
         .then((snapshot) => {
           if (!active) return;
-          setRemoteFund(snapshot);
+          setRemoteFund((current) => ({
+            ...(current || remoteFund),
+            ...snapshot,
+          }));
         })
         .finally(() => {
           if (active) {

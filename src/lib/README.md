@@ -63,6 +63,10 @@
 - 同源请求串行队列（`runWithSourceInterval`）
 - 估值缓存 `ESTIMATE_CACHE_MS = 45s`
 - 超时保护：估值/官方回退请求均有 timeout
+- 刷新分层：
+  - `fetchFundBaseData`：轻量报价刷新（用于持仓页定时刷新）
+  - `fetchFundArchiveData`：档案补齐（重仓/概况字段后台异步预取）
+  - `fetchFundData`：兼容全量入口（base + archive）
 
 ### 5) 与页面计算直接相关的字段语义
 - `dwjz/jzrq/zzl`：官方确定值（日终口径）

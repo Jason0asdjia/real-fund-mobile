@@ -27,6 +27,7 @@ const sourceLastRequestAt = new Map<keyof typeof SOURCE_MIN_INTERVAL_MS, number>
 const sourceQueue = new Map<keyof typeof SOURCE_MIN_INTERVAL_MS, Promise<void>>();
 const previewInFlight = new Map<string, Promise<FundSnapshot>>();
 const fullInFlight = new Map<string, Promise<FundSnapshot>>();
+const archiveInFlight = new Map<string, Promise<FundSnapshot>>();
 
 type RequestMode = "throttled" | "interactive";
 
@@ -645,6 +646,49 @@ const pickProfileField = (rowMap: Map<string, string>, candidates: string[]) => 
 const hasProfileData = (profile: Pick<FundSnapshot, "fundType" | "riskLevel" | "fundManager" | "fundCompany" | "fundScale" | "trackingTarget" | "inceptionDate">) =>
   Boolean(profile.fundType || profile.riskLevel || profile.fundManager || profile.fundCompany || profile.fundScale || profile.trackingTarget || profile.inceptionDate);
 
+const mergeArchiveFields = (
+  base: FundSnapshot,
+  previousFund?: FundSnapshot | null,
+  holdingsResult?: PromiseSettledResult<{ holdings: FundHoldingStock[]; holdingsReportDate: string | null; holdingsIsLastQuarter: boolean }>,
+  profileResult?: PromiseSettledResult<Pick<FundSnapshot, "fundType" | "riskLevel" | "fundManager" | "fundCompany" | "fundScale" | "trackingTarget" | "inceptionDate">>,
+) => {
+  const holdingsData = holdingsResult?.status === "fulfilled"
+    ? holdingsResult.value
+    : {
+      holdings: base.holdings || previousFund?.holdings || [],
+      holdingsReportDate: base.holdingsReportDate || previousFund?.holdingsReportDate || null,
+      holdingsIsLastQuarter: base.holdingsIsLastQuarter || previousFund?.holdingsIsLastQuarter || false,
+    };
+  const profileData = profileResult?.status === "fulfilled"
+    ? profileResult.value
+    : {
+      fundType: base.fundType || previousFund?.fundType || null,
+      riskLevel: base.riskLevel || previousFund?.riskLevel || null,
+      fundManager: base.fundManager || previousFund?.fundManager || null,
+      fundCompany: base.fundCompany || previousFund?.fundCompany || null,
+      fundScale: base.fundScale || previousFund?.fundScale || null,
+      trackingTarget: base.trackingTarget || previousFund?.trackingTarget || null,
+      inceptionDate: base.inceptionDate || previousFund?.inceptionDate || null,
+    };
+
+  const archiveFetchSucceeded = holdingsResult?.status === "fulfilled" || profileResult?.status === "fulfilled";
+  const archiveHasData = Boolean(holdingsData.holdings.length || holdingsData.holdingsReportDate || hasProfileData(profileData));
+  const archiveStatus = archiveHasData
+    ? "ready"
+    : archiveFetchSucceeded
+      ? "empty"
+      : base.archiveStatus || previousFund?.archiveStatus || "pending";
+
+  return {
+    ...base,
+    ...profileData,
+    holdings: holdingsData.holdings,
+    holdingsReportDate: holdingsData.holdingsReportDate,
+    holdingsIsLastQuarter: holdingsData.holdingsIsLastQuarter,
+    archiveStatus,
+  } satisfies FundSnapshot;
+};
+
 const fetchFundProfile = async (code: string): Promise<Pick<FundSnapshot, "fundType" | "riskLevel" | "fundManager" | "fundCompany" | "fundScale" | "trackingTarget" | "inceptionDate">> => {
   const cached = profileCache.get(code);
   if (cached && Date.now() - cached.ts < PROFILE_CACHE_MS) {
@@ -968,38 +1012,21 @@ export const fetchFundData = async (
       fetchHoldings(code),
       fetchFundProfile(code),
     ]);
+    return mergeArchiveFields(base, previousFund, holdingsResult, profileResult);
+  });
+};
 
-  const holdingsData = holdingsResult.status === "fulfilled"
-    ? holdingsResult.value
-    : {
-      holdings: base.holdings || previousFund?.holdings || [],
-      holdingsReportDate: base.holdingsReportDate || previousFund?.holdingsReportDate || null,
-      holdingsIsLastQuarter: base.holdingsIsLastQuarter || previousFund?.holdingsIsLastQuarter || false,
-    };
-  const profileData = profileResult.status === "fulfilled"
-    ? profileResult.value
-    : {
-      fundType: base.fundType || previousFund?.fundType || null,
-      riskLevel: base.riskLevel || previousFund?.riskLevel || null,
-      fundManager: base.fundManager || previousFund?.fundManager || null,
-      fundCompany: base.fundCompany || previousFund?.fundCompany || null,
-      fundScale: base.fundScale || previousFund?.fundScale || null,
-      trackingTarget: base.trackingTarget || previousFund?.trackingTarget || null,
-      inceptionDate: base.inceptionDate || previousFund?.inceptionDate || null,
-    };
-  const archiveFetchSucceeded = holdingsResult.status === "fulfilled" || profileResult.status === "fulfilled";
-  const archiveHasData = Boolean(holdingsData.holdings.length || holdingsData.holdingsReportDate || hasProfileData(profileData));
-  const archiveStatus = archiveHasData ? "ready" : archiveFetchSucceeded ? "empty" : base.archiveStatus || previousFund?.archiveStatus || "pending";
-
-    const snapshot: FundSnapshot = {
-      ...base,
-      ...profileData,
-      holdings: holdingsData.holdings,
-      holdingsReportDate: holdingsData.holdingsReportDate,
-      holdingsIsLastQuarter: holdingsData.holdingsIsLastQuarter,
-      archiveStatus,
-    };
-    return snapshot;
+export const fetchFundArchiveData = async (
+  code: string,
+  previousFund?: FundSnapshot | null,
+): Promise<FundSnapshot> => {
+  return withInFlightDedup(archiveInFlight, code, async () => {
+    const baseSnapshot = previousFund ?? ({ code, name: `基金 ${code}` } as FundSnapshot);
+    const [holdingsResult, profileResult] = await Promise.allSettled([
+      fetchHoldings(code),
+      fetchFundProfile(code),
+    ]);
+    return mergeArchiveFields(baseSnapshot, previousFund, holdingsResult, profileResult);
   });
 };
 

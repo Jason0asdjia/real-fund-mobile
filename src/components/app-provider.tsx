@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { useAuth } from "@/components/auth-provider";
 import { buildCloudPayloadFromState, createCloudPayload, fetchCloudUserData, hasMeaningfulCloudData, hydrateAppStateFromCloudPayload, mergeCloudPayloads, upsertCloudUserData } from "@/lib/cloud-user-data";
-import { fetchFundBaseData, fetchFundData, searchFunds } from "@/lib/fund-api";
+import { fetchFundArchiveData, fetchFundBaseData, searchFunds } from "@/lib/fund-api";
 import { applyConfirmedTransactionsToHolding, isTransactionConfirmedInMarket } from "@/lib/portfolio";
 import { APP_STATE_KEY, defaultAppState, loadAppState, normalizeAppState, saveAppState } from "@/lib/storage";
 import { isEstimateTimestampUsable, nowInMarket } from "@/lib/time";
@@ -497,7 +497,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       const refreshedResults = await Promise.allSettled(
         fundsRef.current.map(async (fund) => {
-          const nextFund = await fetchFundData(fund.code, fund);
+          const nextFund = await fetchFundBaseData(fund.code, fund);
           recordValuation(nextFund.code, { gsz: nextFund.gsz, gztime: nextFund.gztime });
           return nextFund;
         }),
@@ -546,6 +546,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (didInitialRefreshRef.current) return;
 
     didInitialRefreshRef.current = true;
+    setPassiveRefreshAt((current) => current ?? Date.now());
     refreshFunds();
   }, [hydrated, state.funds.length, refreshFunds]);
 
@@ -553,6 +554,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!hydrated) return;
     if (state.refreshMs < 5000) return;
     if (state.funds.length === 0) return;
+
+    setPassiveRefreshAt((current) => current ?? Date.now());
 
     const timer = window.setInterval(() => {
       console.info(`[refresh-ms] trigger: interval=${state.refreshMs}ms at=${nowInMarket().format("YYYY-MM-DD HH:mm:ss")} CST`);
@@ -598,7 +601,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     archiveBackfillAttemptRef.current[fund.code] = Date.now();
 
     try {
-      const nextFund = await fetchFundData(fund.code, fund);
+      const nextFund = await fetchFundArchiveData(fund.code, fund);
       setState((current) => ({
         ...current,
         funds: current.funds.map((item) =>
