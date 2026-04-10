@@ -244,7 +244,7 @@ export function FundSellView({ code }: FundSellViewProps) {
           type="button"
           onClick={handleConfirm}
           disabled={!amount || !share || !latestNav || maxSellAmount <= 0}
-          className="inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-[#d5dbea] bg-white px-3 text-sm font-normal text-[#131b2e] disabled:opacity-40"
+          className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-white px-3 text-sm font-normal text-[#131b2e] disabled:opacity-40"
         >
           确认修改
         </button>

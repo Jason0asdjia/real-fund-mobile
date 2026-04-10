@@ -316,7 +316,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
         <button
           type="button"
           onClick={handleConfirm}
-          className="inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-[#d5dbea] bg-white px-3 typo-body-strong"
+          className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-white px-3 typo-body-strong"
         >
           确认修改
         </button>
