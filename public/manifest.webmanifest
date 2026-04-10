@@ -2,7 +2,7 @@
   "name": "Real Fund Mobile",
   "short_name": "Real Fund",
   "description": "Mobile-first real-time fund tracker.",
-  "start_url": "/dashboard",
+  "start_url": "/portfolio",
   "display": "standalone",
   "background_color": "#f6f7fb",
   "theme_color": "#f6f7fb",

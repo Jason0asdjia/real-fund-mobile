@@ -245,8 +245,8 @@ export default function MarketPage() {
         </section>
       </div>
 
-      <main className="flex-1 overflow-y-auto">
-        <section className="border-b border-[#e2e7ff] py-3">
+      <main className="min-h-0 flex-1 overflow-hidden">
+        <section className="shrink-0 border-b border-[#e2e7ff] py-3">
           <div className="mb-2 flex items-center justify-between px-3">
             <h2 className="text-sm font-bold text-[#131b2e]">热门板块</h2>
             <span className="text-sm font-semibold text-[#005bc0]">更多行情</span>
@@ -273,38 +273,40 @@ export default function MarketPage() {
           </div>
         </section>
 
-        <section className="border-b border-[#e2e7ff] py-3">
-          <div className="mb-2 flex items-center justify-between px-3">
-            <h2 className="text-sm font-bold text-[#131b2e]">基金领涨排行</h2>
-          </div>
-          <div className="divide-y divide-[#f2f3ff]">
-            {topFunds.map((item) => (
-              <Link key={item.code} href={`/portfolio/${item.code}`} className="flex items-center justify-between px-3 py-1.5">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold">{item.name}</p>
-                  <p className="text-sm font-medium tabular-nums text-[#747781]">{item.code}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-[#005bc0]">{formatPercent(item.change)}</p>
-                  <p className="text-sm text-[#747781]">{item.nav == null ? "净值: —" : `净值: ${item.nav.toFixed(4)}`}</p>
-                </div>
-              </Link>
-            ))}
-            {!topFunds.length ? <p className="px-3 py-4 text-sm text-[#747781]">暂无基金数据，先去发现页添加基金。</p> : null}
-          </div>
-        </section>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <section className="border-b border-[#e2e7ff] py-3">
+            <div className="mb-2 flex items-center justify-between px-3">
+              <h2 className="text-sm font-bold text-[#131b2e]">基金领涨排行</h2>
+            </div>
+            <div className="divide-y divide-[#f2f3ff]">
+              {topFunds.map((item) => (
+                <Link key={item.code} href={`/portfolio/${item.code}`} className="flex items-center justify-between px-3 py-1.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold">{item.name}</p>
+                    <p className="text-sm font-medium tabular-nums text-[#747781]">{item.code}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-[#005bc0]">{formatPercent(item.change)}</p>
+                    <p className="text-sm text-[#747781]">{item.nav == null ? "净值: —" : `净值: ${item.nav.toFixed(4)}`}</p>
+                  </div>
+                </Link>
+              ))}
+              {!topFunds.length ? <p className="px-3 py-4 text-sm text-[#747781]">暂无基金数据，先去发现页添加基金。</p> : null}
+            </div>
+          </section>
 
-        <section className="py-3">
-          <h2 className="mb-2 px-3 text-sm font-bold text-[#131b2e]">7x24快讯</h2>
-          <div className="divide-y divide-[#f2f3ff]">
-            {quickNews.length > 0 ? quickNews.map((item) => (
-              <article key={item.time + item.text} className="flex gap-3 px-3 py-3">
-                <span className={`pt-0.5 text-sm font-semibold ${item.time === "14:35" ? "text-[#005bc0]" : "text-[#747781]"}`}>{item.time}</span>
-                <p className="m-0 text-sm leading-5">{item.text}</p>
-              </article>
-            )) : <p className="px-3 py-4 text-sm text-[#747781]">{marketLoaded ? "暂无快讯" : "加载快讯中..."}</p>}
-          </div>
-        </section>
+          <section className="py-3">
+            <h2 className="mb-2 px-3 text-sm font-bold text-[#131b2e]">7x24快讯</h2>
+            <div className="divide-y divide-[#f2f3ff]">
+              {quickNews.length > 0 ? quickNews.map((item) => (
+                <article key={item.time + item.text} className="flex gap-3 px-3 py-3">
+                  <span className={`pt-0.5 text-sm font-semibold ${item.time === "14:35" ? "text-[#005bc0]" : "text-[#747781]"}`}>{item.time}</span>
+                  <p className="m-0 text-sm leading-5">{item.text}</p>
+                </article>
+              )) : <p className="px-3 py-4 text-sm text-[#747781]">{marketLoaded ? "暂无快讯" : "加载快讯中..."}</p>}
+            </div>
+          </section>
+        </div>
       </main>
 
       {indexModalOpen ? (

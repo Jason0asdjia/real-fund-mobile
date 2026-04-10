@@ -1,4 +1,4 @@
-const CACHE_NAME = "real-fund-mobile-v2";
+const CACHE_NAME = "real-fund-mobile-v3";
 const OFFLINE_URL = "/offline.html";
 
 self.addEventListener("install", (event) => {
@@ -23,6 +23,10 @@ self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(event.request.url);
 
   if (requestUrl.origin !== self.location.origin) return;
+
+  if (requestUrl.pathname === "/manifest.webmanifest" || requestUrl.pathname === "/sw.js") {
+    return;
+  }
 
   if (requestUrl.pathname.startsWith("/_next/")) return;
 

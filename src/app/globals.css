@@ -28,6 +28,10 @@
     @apply m-0 min-h-screen bg-slate-50 text-slate-900 antialiased;
   }
 
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
     font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Source Han Sans SC", "Inter", system-ui, -apple-system, sans-serif;
     font-size: var(--type-body-size);
@@ -72,7 +76,7 @@
   }
 
   .app-main {
-    @apply relative z-10 min-h-[100dvh] bg-white px-3 pt-4 md:px-4;
+    @apply relative z-10 min-h-[100dvh] overflow-hidden bg-white px-3 pt-4 md:px-4;
     padding-bottom: calc(env(safe-area-inset-bottom) + 5.6rem);
   }
 
