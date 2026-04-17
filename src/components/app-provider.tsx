@@ -34,6 +34,7 @@ type AppContextValue = {
   toggleFavorite: (code: string) => void;
   setRefreshMs: (value: number) => void;
   clearSearchHistory: () => void;
+  touchState: () => void;
   clearAll: () => void;
   clearLocalOnly: () => void;
   seedDemoData: () => Promise<void>;
@@ -1370,6 +1371,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, [applyUserDataMutation]);
 
+  const touchState = useCallback(() => {
+    setState((current) => ({ ...current }));
+  }, []);
+
   const clearAll = useCallback(() => {
     refreshTokenRef.current += 1;
     refreshingRef.current = false;
@@ -1483,6 +1488,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleFavorite,
       setRefreshMs,
       clearSearchHistory,
+      touchState,
       clearAll,
       clearLocalOnly,
       seedDemoData,
@@ -1520,6 +1526,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       seedDemoData,
       setRefreshMs,
       state,
+      touchState,
       toggleFavorite,
       updateHolding,
       valuationSeries,

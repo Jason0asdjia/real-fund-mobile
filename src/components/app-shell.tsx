@@ -24,7 +24,7 @@ const getRouteIndex = (pathname: string) => {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const isDevNoAuth = process.env.NODE_ENV !== "production";
   const pathname = usePathname();
-  const { conflictResolution, resolveDataConflict, hydrated, state, cloudSyncStatus } = useAppState();
+  const { conflictResolution, resolveDataConflict, hydrated, state, cloudSyncStatus, touchState } = useAppState();
   const { user, authLoading, authError, isConfigured, signInWithGitHub } = useAuth();
   const sectionPath = getSectionPath(pathname);
   const previousIndexRef = useRef(getRouteIndex(pathname));
@@ -40,6 +40,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     previousIndexRef.current = currentIndex;
   }, [currentIndex]);
+
+  useEffect(() => {
+    if (pathname !== "/portfolio") return;
+    touchState();
+  }, [pathname, touchState]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
