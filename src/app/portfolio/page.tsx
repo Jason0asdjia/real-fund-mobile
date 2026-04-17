@@ -506,20 +506,34 @@ export default function PortfolioPage() {
                       ? formatSignedCurrency(row.todayProfit)
                       : formatSignedCurrency(row.holdingProfit);
 
+    const signedValue =
+      id === "yesterdayChangePercent"
+        ? row.yesterdayChangePercent
+        : id === "estimateChangePercent"
+          ? row.estimateChangePercent
+          : id === "totalChangePercent"
+            ? row.totalChangePercent
+            : id === "todayProfit"
+              ? row.todayProfit
+              : id === "holdingProfit"
+                ? row.holdingProfit
+                : null;
+    const valueClass = signedValue == null ? "text-slate-900" : getSignedValueTextClass(signedValue);
+
     const valueNode =
       id === "todayProfit" && row.todayProfitStatus !== "none" ? (
-        <span className="inline-flex items-center gap-1">
+        <span className={`inline-flex items-center gap-1 ${valueClass}`}>
           {row.todayProfitStatus === "official" ? (
             <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current">
               <Check size={10} strokeWidth={3} />
             </span>
           ) : (
-            <Circle size={12} className="text-red-500" strokeWidth={2.2} />
+            <Circle size={12} className="text-rose-600" strokeWidth={2.2} />
           )}
-          <span>{primaryValue}</span>
+          <span className={valueClass}>{primaryValue}</span>
         </span>
       ) : (
-        <span>{primaryValue}</span>
+        <span className={valueClass}>{primaryValue}</span>
       );
 
     const updatedAt =
@@ -560,12 +574,10 @@ export default function PortfolioPage() {
   const getCellClass = (row: PortfolioOverviewRow, id: PortfolioOverviewColumnId) => {
     const base = "border-b border-slate-200 px-4 py-3 text-sm tabular-nums align-top text-slate-900 whitespace-nowrap";
     if (id === "yesterdayChangePercent" || id === "estimateChangePercent") {
-      const value = id === "yesterdayChangePercent" ? row.yesterdayChangePercent : row.estimateChangePercent;
-      return `${base} ${getSignedValueTextClass(value)}`;
+      return base;
     }
     if (id === "totalChangePercent" || id === "todayProfit" || id === "holdingProfit") {
-      const value = id === "totalChangePercent" ? row.totalChangePercent : id === "todayProfit" ? row.todayProfit : row.holdingProfit;
-      return `${base} ${getSignedValueTextClass(value)}`;
+      return base;
     }
     if (id === "holdingAmount") return `${base}`;
     return `${base} font-medium`;
@@ -612,7 +624,7 @@ export default function PortfolioPage() {
                   <Check size={8} strokeWidth={3} />
                 </span>
               ) : totalTodayProfitStatus === "estimated" ? (
-                <Circle size={10} className="text-rose-500" strokeWidth={2.2} />
+                <Circle size={10} className="text-rose-600" strokeWidth={2.2} />
               ) : null}
             </p>
             <button
