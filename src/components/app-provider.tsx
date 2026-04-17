@@ -29,6 +29,7 @@ type AppContextValue = {
   clearHolding: (code: string) => void;
   updateHolding: (code: string, next: FundHolding) => void;
   addTransaction: (code: string, next: Omit<FundTransaction, "id">) => void;
+  updateTransaction: (code: string, id: string, next: Omit<FundTransaction, "id">) => void;
   removeTransaction: (code: string, id: string) => void;
   toggleFavorite: (code: string) => void;
   setRefreshMs: (value: number) => void;
@@ -95,6 +96,127 @@ const needsArchiveBackfill = (fund: FundSnapshot) => {
 const toFiniteNumber = (value: unknown) => {
   const next = Number(value);
   return Number.isFinite(next) ? next : null;
+};
+
+const normalizeHoldingForMath = (holding?: FundHolding) => {
+  const share = typeof holding?.share === "number" && Number.isFinite(holding.share) ? holding.share : 0;
+  const cost = typeof holding?.cost === "number" && Number.isFinite(holding.cost) ? holding.cost : 0;
+  const totalCost = share > 0 ? share * cost : 0;
+  return {
+    share: Math.max(share, 0),
+    totalCost: Math.max(totalCost, 0),
+    firstPurchaseDate: holding?.firstPurchaseDate || null,
+  };
+};
+
+const addConfirmedTransactionToHolding = (holding: FundHolding | undefined, tx: FundTransaction) => {
+  if (!isTransactionConfirmedInMarket(tx)) return holding || { share: null, cost: null, firstPurchaseDate: null };
+
+  const txShare = Number(tx.share);
+  const txPrice = Number(tx.price);
+  const txFee = Number(tx.fee || 0);
+  if (!Number.isFinite(txShare) || !Number.isFinite(txPrice) || txShare <= 0 || txPrice <= 0) {
+    return holding || { share: null, cost: null, firstPurchaseDate: null };
+  }
+
+  const base = normalizeHoldingForMath(holding);
+  const fee = Number.isFinite(txFee) ? txFee : 0;
+
+  if (tx.type === "buy") {
+    const nextShare = base.share + txShare;
+    const nextTotalCost = base.totalCost + txShare * txPrice + fee;
+    const firstPurchaseDate = base.firstPurchaseDate && base.firstPurchaseDate < tx.date ? base.firstPurchaseDate : tx.date;
+    return {
+      share: nextShare,
+      cost: nextShare > 0 ? nextTotalCost / nextShare : null,
+      firstPurchaseDate,
+    };
+  }
+
+  if (base.share <= 0) {
+    return {
+      share: null,
+      cost: null,
+      firstPurchaseDate: null,
+    };
+  }
+
+  const soldShare = Math.min(txShare, base.share);
+  const avgCost = base.share > 0 ? base.totalCost / base.share : 0;
+  const remainingShare = base.share - soldShare;
+  const remainingCost = base.totalCost - soldShare * avgCost;
+
+  return remainingShare > 1e-8
+    ? {
+        share: remainingShare,
+        cost: remainingShare > 0 ? remainingCost / remainingShare : null,
+        firstPurchaseDate: base.firstPurchaseDate,
+      }
+    : {
+        share: null,
+        cost: null,
+        firstPurchaseDate: null,
+      };
+};
+
+const rollbackConfirmedTransactionFromHolding = (
+  holding: FundHolding | undefined,
+  removed: FundTransaction,
+  remainingTransactions: FundTransaction[],
+) => {
+  if (!isTransactionConfirmedInMarket(removed)) {
+    return holding || { share: null, cost: null, firstPurchaseDate: null };
+  }
+
+  const txShare = Number(removed.share);
+  const txPrice = Number(removed.price);
+  const txFee = Number(removed.fee || 0);
+  const base = normalizeHoldingForMath(holding);
+  const nextHoldings = holding || { share: null, cost: null, firstPurchaseDate: null };
+
+  if (removed.type === "buy" && txShare > 0 && txPrice > 0 && base.share > 0) {
+    const deductedCost = txShare * txPrice + (Number.isFinite(txFee) ? txFee : 0);
+    const nextShare = Math.max(0, base.share - txShare);
+    const nextTotalCost = Math.max(0, base.totalCost - deductedCost);
+
+    if (nextShare > 1e-8) {
+      const remainingConfirmedBuyDates = remainingTransactions
+        .filter((item) => item.type === "buy" && isTransactionConfirmedInMarket(item))
+        .map((item) => item.date)
+        .sort((a, b) => a.localeCompare(b));
+
+      const shouldRecomputeFirstDate = !base.firstPurchaseDate || base.firstPurchaseDate === removed.date;
+      const nextFirstPurchaseDate = shouldRecomputeFirstDate ? remainingConfirmedBuyDates[0] || null : base.firstPurchaseDate;
+
+      return {
+        share: nextShare,
+        cost: nextTotalCost / nextShare,
+        firstPurchaseDate: nextFirstPurchaseDate,
+      };
+    }
+
+    return {
+      share: null,
+      cost: null,
+      firstPurchaseDate: null,
+    };
+  }
+
+  if (removed.type === "sell" && txShare > 0) {
+    if (base.share > 0 && base.totalCost > 0) {
+      const currentCost = base.totalCost / base.share;
+      const nextShare = base.share + txShare;
+      const nextTotalCost = base.totalCost + txShare * currentCost;
+      return {
+        share: nextShare,
+        cost: nextTotalCost / nextShare,
+        firstPurchaseDate: base.firstPurchaseDate,
+      };
+    }
+    return applyConfirmedTransactionsToHolding(undefined, remainingTransactions);
+  }
+
+  return nextHoldings;
 };
 
 const dedupeFundsByCode = (funds: FundSnapshot[]) => {
@@ -1113,6 +1235,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [applyUserDataMutation]);
 
+  const updateTransaction = useCallback((code: string, id: string, next: Omit<FundTransaction, "id">) => {
+    applyUserDataMutation((current) => {
+      const previousTransactions = current.transactions[code] || [];
+      const previous = previousTransactions.find((item) => item.id === id);
+      if (!previous) return current;
+
+      const updatedTx: FundTransaction = {
+        ...next,
+        id,
+      };
+      const nextTransactions = previousTransactions
+        .map((item) => (item.id === id ? updatedTx : item))
+        .sort((a, b) => b.date.localeCompare(a.date));
+      const nextHoldings = { ...current.holdings };
+      const afterRollback = rollbackConfirmedTransactionFromHolding(current.holdings[code], previous, nextTransactions);
+      const finalHolding = addConfirmedTransactionToHolding(afterRollback, updatedTx);
+
+      nextHoldings[code] = finalHolding;
+
+      return {
+        ...current,
+        transactions: {
+          ...current.transactions,
+          [code]: nextTransactions,
+        },
+        holdings: nextHoldings,
+      };
+    });
+  }, [applyUserDataMutation]);
+
   const removeTransaction = useCallback((code: string, id: string) => {
     applyUserDataMutation((current) => {
       const previousTransactions = current.transactions[code] || [];
@@ -1326,6 +1478,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearHolding,
       updateHolding,
       addTransaction,
+      updateTransaction,
       removeTransaction,
       toggleFavorite,
       setRefreshMs,
@@ -1359,6 +1512,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       refreshing,
       removeFund,
       removeTransaction,
+      updateTransaction,
       search,
       recordSearchHistory,
       resolveDataConflict,

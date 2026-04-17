@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
@@ -15,6 +16,8 @@ type TxItem = FundTransaction & {
   fundName: string;
   amount: number;
 };
+
+const SWIPE_ACTION_WIDTH = 128;
 
 const txOrderToken = (item: TxItem) => {
   const idPrefix = String(item.id || "").split("-")[0];
@@ -44,10 +47,30 @@ const monthLabel = (monthKey: string) => {
 
 
 export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?: string }) {
-  const { state } = useAppState();
+  const router = useRouter();
+  const { state, removeTransaction } = useAppState();
   const [filter, setFilter] = useState<"all" | FundTransactionType>("all");
   const [timeRange, setTimeRange] = useState<"3m" | "6m" | "12m" | "all">("3m");
   const [fundFilter, setFundFilter] = useState<string>(initialFundFilter || "all");
+  const [openSwipeId, setOpenSwipeId] = useState<string | null>(null);
+  const [draggingSwipeId, setDraggingSwipeId] = useState<string | null>(null);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [deleteTarget, setDeleteTarget] = useState<TxItem | null>(null);
+  const swipeRef = useRef<{
+    id: string;
+    startX: number;
+    startY: number;
+    initialOffset: number;
+    lockedAxis: "x" | "y" | null;
+  } | null>(null);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.body.classList.toggle("app-modal-open", Boolean(deleteTarget));
+    return () => {
+      document.body.classList.remove("app-modal-open");
+    };
+  }, [deleteTarget]);
 
   const fundFilterOptions = useMemo(() => {
     const holdingFunds = state.funds.filter((fund) => state.holdings[fund.code]?.share && Number(state.holdings[fund.code]?.share) > 0);
@@ -114,6 +137,57 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
   const periodLabel = timeRange === "3m" ? "近三个月" : timeRange === "6m" ? "近六个月" : timeRange === "12m" ? "近一年" : "全部时间";
   const periodVolume = transactions.reduce((acc, item) => acc + Math.abs(item.amount), 0);
 
+  const handleTouchStart = (id: string, event: TouchEvent<HTMLElement>) => {
+    const touch = event.touches[0];
+    swipeRef.current = {
+      id,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      initialOffset: openSwipeId === id ? -SWIPE_ACTION_WIDTH : 0,
+      lockedAxis: null,
+    };
+    setDraggingSwipeId(id);
+    setDragOffset(openSwipeId === id ? -SWIPE_ACTION_WIDTH : 0);
+  };
+
+  const handleTouchMove = (event: TouchEvent<HTMLElement>) => {
+    if (!swipeRef.current) return;
+    const touch = event.touches[0];
+    const deltaX = touch.clientX - swipeRef.current.startX;
+    const deltaY = touch.clientY - swipeRef.current.startY;
+
+    if (!swipeRef.current.lockedAxis) {
+      swipeRef.current.lockedAxis = Math.abs(deltaX) >= Math.abs(deltaY) ? "x" : "y";
+    }
+
+    if (swipeRef.current.lockedAxis !== "x") return;
+
+    const nextOffset = Math.max(-SWIPE_ACTION_WIDTH, Math.min(0, swipeRef.current.initialOffset + deltaX));
+    setDragOffset(nextOffset);
+  };
+
+  const finishSwipe = () => {
+    if (!swipeRef.current) return;
+    const shouldOpen = dragOffset <= -SWIPE_ACTION_WIDTH / 2;
+    setOpenSwipeId(shouldOpen ? swipeRef.current.id : null);
+    setDraggingSwipeId(null);
+    setDragOffset(0);
+    swipeRef.current = null;
+  };
+
+  const handleEdit = (item: TxItem) => {
+    setOpenSwipeId(null);
+    const route = item.type === "buy" ? "buy" : "sell";
+    router.push(`/portfolio/${item.code}/${route}?from=history&editTxId=${encodeURIComponent(item.id)}`);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (!deleteTarget) return;
+    removeTransaction(deleteTarget.code, deleteTarget.id);
+    setOpenSwipeId((current) => (current === deleteTarget.id ? null : current));
+    setDeleteTarget(null);
+  };
+
   return (
     <div className="-mx-3 -mb-24 -mt-4 bg-white text-[#131b2e] md:-mx-4 md:-mb-24 md:-mt-4">
       <header className="border-b border-[#e2e7ff] bg-white">
@@ -175,7 +249,7 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
           </div>
       </section>
 
-      <main>
+      <main onScroll={() => setOpenSwipeId(null)}>
           {grouped.length === 0 ? (
             <div className="px-3 py-8 text-center text-sm text-[#747781]">暂无交易记录，先去持仓页录入交易。</div>
           ) : (
@@ -189,35 +263,65 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
                     const amountClass = isBuy ? "text-[#005bc0]" : "text-[#8c4f39]";
                     const typeText = isBuy ? "申购" : "赎回";
                     const confirmed = isTransactionConfirmedInMarket(item);
+                    const currentOffset = draggingSwipeId === item.id ? dragOffset : openSwipeId === item.id ? -SWIPE_ACTION_WIDTH : 0;
                     return (
-                      <article key={item.id} className="flex items-center gap-3 px-3 py-3">
-                        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded ${iconClass}`}>
-                          {isBuy ? <ArrowDownLeft size={16} /> : <ArrowUpRight size={16} />}
+                      <div
+                        key={item.id}
+                        className="relative overflow-hidden bg-white"
+                        onTouchStart={(event) => handleTouchStart(item.id, event)}
+                        onTouchMove={handleTouchMove}
+                        onTouchEnd={finishSwipe}
+                        onTouchCancel={finishSwipe}
+                      >
+                        <div className="absolute inset-y-0 right-0 z-[1] flex w-32 items-stretch">
+                          <button
+                            type="button"
+                            className="inline-flex h-full flex-1 items-center justify-center bg-blue-100 text-xs font-semibold text-blue-800"
+                            onClick={() => handleEdit(item)}
+                          >
+                            编辑
+                          </button>
+                          <button
+                            type="button"
+                            className="inline-flex h-full flex-1 items-center justify-center bg-red-100 text-xs font-semibold text-red-700"
+                            onClick={() => {
+                              setOpenSwipeId(null);
+                              setDeleteTarget(item);
+                            }}
+                          >
+                            删除
+                          </button>
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="mb-0.5 flex items-start justify-between gap-2">
-                            <Link href={`/portfolio/${item.code}`} className="truncate text-sm font-bold text-[#131b2e] hover:text-[#24467c]">
-                              {item.fundName}
-                            </Link>
-                            <span className={`shrink-0 text-sm font-bold tabular-nums ${amountClass}`}>{`${isBuy ? "+" : "-"}${formatCurrency(Math.abs(item.amount))}`}</span>
+
+                        <article className="relative z-10 flex items-center gap-3 bg-white px-3 py-3 transition-transform duration-150" style={{ transform: `translateX(${currentOffset}px)` }}>
+                          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded ${iconClass}`}>
+                            {isBuy ? <ArrowDownLeft size={16} /> : <ArrowUpRight size={16} />}
                           </div>
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[11px] font-semibold text-[#131b2e]">{typeText}</span>
-                              <Link href={`/portfolio/${item.code}`} className="text-[10px] font-semibold tabular-nums text-[#57657a] hover:text-[#24467c]">
-                                {item.code}
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-0.5 flex items-start justify-between gap-2">
+                              <Link href={`/portfolio/${item.code}`} className="truncate text-sm font-bold text-[#131b2e] hover:text-[#24467c]">
+                                {item.fundName}
                               </Link>
-                              <span className="text-[10px] text-[#747781]">{txDisplayTime(item)}</span>
+                              <span className={`shrink-0 text-sm font-bold tabular-nums ${amountClass}`}>{`${isBuy ? "+" : "-"}${formatCurrency(Math.abs(item.amount))}`}</span>
                             </div>
-                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${confirmed ? "bg-[#f2f3ff] text-[#57657a]" : "bg-[#fff1e6] text-[#a65000]"}`}>
-                              {confirmed ? "已确认" : "未确认"}
-                            </span>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-semibold text-[#131b2e]">{typeText}</span>
+                                <Link href={`/portfolio/${item.code}`} className="text-[10px] font-semibold tabular-nums text-[#57657a] hover:text-[#24467c]">
+                                  {item.code}
+                                </Link>
+                                <span className="text-[10px] text-[#747781]">{txDisplayTime(item)}</span>
+                              </div>
+                              <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${confirmed ? "bg-[#f2f3ff] text-[#57657a]" : "bg-[#fff1e6] text-[#a65000]"}`}>
+                                {confirmed ? "已确认" : "未确认"}
+                              </span>
+                            </div>
+                            <div className="mt-1 text-[10px] text-[#747781]">
+                              净值 {Number(item.price).toFixed(4)} · 份额 {item.share.toFixed(2)} · 手续费 {formatCurrency(item.fee || 0)}
+                            </div>
                           </div>
-                          <div className="mt-1 text-[10px] text-[#747781]">
-                            净值 {Number(item.price).toFixed(4)} · 份额 {item.share.toFixed(2)} · 手续费 {formatCurrency(item.fee || 0)}
-                          </div>
-                        </div>
-                      </article>
+                        </article>
+                      </div>
                     );
                   })}
                 </div>
@@ -225,6 +329,44 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
             ))
           )}
       </main>
+
+      {deleteTarget ? (
+        <div className="app-modal-backdrop" onClick={() => setDeleteTarget(null)}>
+          <div className="app-modal-sheet" onClick={(event) => event.stopPropagation()}>
+            <div className="app-modal-sheet__grabber" />
+            <div className="app-modal-sheet__header">
+              <h3 className="m-0 text-base font-normal text-[#131b2e]">确认删除交易</h3>
+              <button
+                type="button"
+                className="rounded-full border border-[#d5dbea] bg-white px-2 py-0.5 text-sm text-[#57657a]"
+                onClick={() => setDeleteTarget(null)}
+                aria-label="关闭删除交易确认弹窗"
+              >
+                ×
+              </button>
+            </div>
+            <div className="app-modal-sheet__content">
+              <p className="m-0 text-sm leading-6 text-[#57657a]">删除后该条交易会从历史记录移除，并同步更新持仓金额与成本。此操作无法撤销。</p>
+              <div className="mt-4 flex gap-2 pb-3">
+                <button
+                  type="button"
+                  className="flex-1 rounded-lg border border-[#d5dbea] bg-white px-3 py-2 text-sm font-medium text-[#24467c]"
+                  onClick={() => setDeleteTarget(null)}
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className="flex-1 rounded-lg border border-[#ffdbd0] bg-[#fff1ed] px-3 py-2 text-sm font-medium text-[#ba1a1a]"
+                  onClick={handleDeleteConfirm}
+                >
+                  确认删除
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

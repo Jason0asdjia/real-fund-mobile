@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, Repeat2 } from "lucide-react";
 import { DatePicker } from "antd";
 import dayjs from "dayjs";
+import { flushSync } from "react-dom";
 
 import { useAppState } from "@/components/app-provider";
 import { getHoldingMetrics } from "@/lib/portfolio";
@@ -188,10 +189,12 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
     const finalShare = derivedShare;
     const cost = derivedCostPerShare;
 
-    updateHolding(fund.code, {
-      share: finalShare,
-      cost,
-      firstPurchaseDate: dateInput || null,
+    flushSync(() => {
+      updateHolding(fund.code, {
+        share: finalShare,
+        cost,
+        firstPurchaseDate: dateInput || null,
+      });
     });
 
     if (redirectOnConfirm) {

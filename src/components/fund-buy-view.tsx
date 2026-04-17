@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, Info, Repeat2 } from "lucide-react";
 import { DatePicker } from "antd";
@@ -9,6 +9,7 @@ import dayjs from "dayjs";
 import { useAppState } from "@/components/app-provider";
 import { formatCurrency, formatSignedCurrency } from "@/lib/portfolio";
 import { holdingDaysInMarket, isBeforeTradeCutoffInMarket, todayInMarket } from "@/lib/time";
+import type { FundTransaction } from "@/lib/types";
 
 type FundBuyViewProps = {
   code: string;
@@ -26,7 +27,7 @@ const toNumber = (value: string) => {
 export function FundBuyView({ code }: FundBuyViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { addTransaction, state } = useAppState();
+  const { addTransaction, updateTransaction, state } = useAppState();
   const fund = state.funds.find((item) => item.code === code);
   const holding = fund ? state.holdings[fund.code] : undefined;
 
@@ -36,10 +37,21 @@ export function FundBuyView({ code }: FundBuyViewProps) {
   const [tradeDate, setTradeDate] = useState(todayInMarket());
   const [beforeClose, setBeforeClose] = useState(() => isBeforeTradeCutoffInMarket());
   const returnToDetail = searchParams.get("from") === "detail";
+  const returnToHistory = searchParams.get("from") === "history";
+  const editTxId = searchParams.get("editTxId");
+  const didInitEditRef = useRef(false);
+  const editingTransaction = useMemo(() => {
+    if (!editTxId) return null;
+    return (state.transactions[code] || []).find((item) => item.id === editTxId && item.type === "buy") || null;
+  }, [code, editTxId, state.transactions]);
 
   const handleBack = () => {
     if (returnToDetail) {
       router.back();
+      return;
+    }
+    if (returnToHistory) {
+      router.replace("/portfolio/history");
       return;
     }
     router.replace(`/portfolio/${code}`);
@@ -51,6 +63,18 @@ export function FundBuyView({ code }: FundBuyViewProps) {
       document.body.classList.remove("app-detail-open");
     };
   }, []);
+
+  useEffect(() => {
+    if (!editingTransaction || didInitEditRef.current) return;
+    const txAmount = Number(editingTransaction.share) * Number(editingTransaction.price);
+    const nextAmount = Number.isFinite(txAmount) && txAmount > 0 ? txAmount.toFixed(2) : "";
+    const nextShare = Number.isFinite(editingTransaction.share) && editingTransaction.share > 0 ? editingTransaction.share.toFixed(2) : "";
+    setAmountInput(nextAmount);
+    setShareInput(nextShare);
+    setTradeDate(editingTransaction.date);
+    setBeforeClose(!(editingTransaction.note || "").includes("15:00后"));
+    didInitEditRef.current = true;
+  }, [editingTransaction]);
 
   if (!fund) {
     return (
@@ -88,14 +112,19 @@ export function FundBuyView({ code }: FundBuyViewProps) {
 
   const handleConfirm = () => {
     if (!latestNav || amount <= 0 || share <= 0) return;
-    addTransaction(fund.code, {
+    const payload: Omit<FundTransaction, "id"> = {
       date: tradeDate,
       type: "buy",
       share,
       price: latestNav,
       fee: estimatedFee,
       note: beforeClose ? "15:00前下单" : "15:00后下单",
-    });
+    };
+    if (editingTransaction && editTxId) {
+      updateTransaction(fund.code, editTxId, payload);
+    } else {
+      addTransaction(fund.code, payload);
+    }
     handleBack();
   };
 
