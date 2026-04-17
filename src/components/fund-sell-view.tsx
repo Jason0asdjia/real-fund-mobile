@@ -161,14 +161,14 @@ export function FundSellView({ code }: FundSellViewProps) {
             <span className="text-[10px] font-medium text-[#747781]">费率: {(FEE_RATE * 100).toFixed(2)}%</span>
           </div>
           <div className="relative border-b border-[#d5dbea] pb-1">
-            <span className="absolute left-0 top-1/2 -translate-y-1/2 text-lg font-normal text-[#131b2e]">{mode === "amount" ? "¥" : "份"}</span>
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 typo-value-emphasis font-semibold text-[#131b2e]">{mode === "amount" ? "¥" : "份"}</span>
             <input
-              type="number"
               inputMode="decimal"
               value={mode === "amount" ? amountInput : shareInput}
               onChange={(event) => (mode === "amount" ? setAmountInput(event.target.value) : setShareInput(event.target.value))}
               placeholder="0.00"
-              className="w-full border-0 bg-transparent py-2 pl-6 pr-3 text-3xl font-normal tracking-tight text-[#131b2e] outline-none placeholder:text-[#9aa5bb] focus:ring-0"
+              className="typo-value-emphasis w-full border-0 bg-transparent py-2 pl-6 pr-3 outline-none placeholder:text-[#9aa5bb] focus:ring-0"
+              style={{ fontSize: "var(--type-metric-strong)", fontWeight: 700 }}
             />
           </div>
           <div className="mt-3 grid grid-cols-4 gap-2">
