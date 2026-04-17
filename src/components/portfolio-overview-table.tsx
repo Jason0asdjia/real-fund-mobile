@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode, Ref } from "react";
+import { useRef } from "react";
+import type { ReactNode, Ref, TouchEvent as ReactTouchEvent } from "react";
 import { SlidersHorizontal } from "lucide-react";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -69,12 +70,44 @@ export function PortfolioOverviewTable({
   getCellClass,
   renderCellValue,
 }: PortfolioOverviewTableProps) {
+  const touchStateRef = useRef<{ x: number; y: number } | null>(null);
+
+  const handleTouchStart = (event: ReactTouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0];
+    if (!touch) return;
+    touchStateRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleTouchMove = (event: ReactTouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0];
+    const touchState = touchStateRef.current;
+    if (!touch || !touchState) return;
+
+    const deltaX = touch.clientX - touchState.x;
+    const deltaY = touch.clientY - touchState.y;
+
+    if (Math.abs(deltaX) <= Math.abs(deltaY)) return;
+
+    const container = event.currentTarget;
+    const maxScrollLeft = container.scrollWidth - container.clientWidth;
+    if (maxScrollLeft <= 0) return;
+
+    const atLeftEdge = container.scrollLeft <= 0;
+    const atRightEdge = container.scrollLeft >= maxScrollLeft - 1;
+
+    if ((atLeftEdge && deltaX > 0) || (atRightEdge && deltaX < 0)) {
+      event.preventDefault();
+    }
+  };
+
   return (
     <div
       ref={scrollContainerRef}
-      className="h-full overflow-auto border border-slate-200 bg-white shadow-sm overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="h-full overflow-auto border border-slate-200 bg-white shadow-sm overscroll-contain [overscroll-behavior-x:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       role="region"
       aria-label="持仓总览表格"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onScroll={(event) =>
         onScrollPositionChange({
           top: event.currentTarget.scrollTop,
@@ -99,10 +132,7 @@ export function PortfolioOverviewTable({
               </div>
             </TableHead>
             {visibleColumns.map((column) => (
-              <TableHead
-                key={column.id}
-                className="sticky top-0 z-10 min-w-[108px] border-b border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-semibold text-slate-600"
-              >
+              <TableHead key={column.id} className="sticky top-0 z-10 w-auto border-b border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-semibold text-slate-600 whitespace-nowrap">
                 {column.label}
               </TableHead>
             ))}

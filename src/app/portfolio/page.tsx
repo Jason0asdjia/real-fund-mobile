@@ -553,7 +553,7 @@ export default function PortfolioPage() {
   };
 
   const getCellClass = (row: PortfolioOverviewRow, id: PortfolioOverviewColumnId) => {
-    const base = "border-b border-slate-200 px-4 py-3 text-sm tabular-nums align-top text-slate-900";
+    const base = "border-b border-slate-200 px-4 py-3 text-sm tabular-nums align-top text-slate-900 whitespace-nowrap";
     if (id === "yesterdayChangePercent" || id === "estimateChangePercent") {
       const value = id === "yesterdayChangePercent" ? row.yesterdayChangePercent : row.estimateChangePercent;
       if (value == null) return `${base} text-slate-500`;
