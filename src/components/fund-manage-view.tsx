@@ -45,6 +45,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
   const [shareInput, setShareInput] = useState("");
   const [profitInput, setProfitInput] = useState("");
   const [dateInput, setDateInput] = useState("");
+  const today = todayInMarket();
   const holdingDays = useMemo(() => {
     return holdingDaysInMarket(dateInput || null);
   }, [dateInput]);
@@ -53,6 +54,11 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
     const dwjz = fund?.dwjz == null ? null : Number(fund.dwjz);
     return dwjz != null && Number.isFinite(dwjz) && dwjz > 0 ? dwjz : null;
   }, [fund?.dwjz]);
+  const estimateNav = useMemo(() => {
+    const gsz = fund?.gsz == null ? null : Number(fund.gsz);
+    return gsz != null && Number.isFinite(gsz) && gsz > 0 ? gsz : null;
+  }, [fund?.gsz]);
+  const conversionNav = officialNav ?? estimateNav;
 
   const holdingShare = holding?.share != null && Number.isFinite(Number(holding.share)) ? Number(holding.share) : null;
   const holdingCost = holding?.cost != null && Number.isFinite(Number(holding.cost)) ? Number(holding.cost) : null;
@@ -111,13 +117,13 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
 
   const derivedShare = mode === "share"
     ? inputShare
-    : officialNav && inputAmount != null
-      ? inputAmount / officialNav
+    : conversionNav && inputAmount != null
+      ? inputAmount / conversionNav
       : null;
   const derivedAmount = mode === "amount"
     ? inputAmount
-    : officialNav && inputShare != null
-      ? inputShare * officialNav
+    : conversionNav && inputShare != null
+      ? inputShare * conversionNav
       : null;
   const derivedCostAmount = derivedAmount != null && inputProfit != null ? derivedAmount - inputProfit : null;
   const derivedCostPerShare = derivedShare && derivedShare > 0 && derivedCostAmount != null ? derivedCostAmount / derivedShare : null;
@@ -135,7 +141,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
   };
 
   const handleToggleMode = () => {
-    if (!officialNav || officialNav <= 0) {
+    if (!conversionNav || conversionNav <= 0) {
       setMode((prev) => (prev === "amount" ? "share" : "amount"));
       return;
     }
@@ -143,7 +149,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
     if (mode === "amount") {
       const amountValue = toNumber(amountInput);
       if (amountValue != null) {
-        setShareInput(formatInputNumber(amountValue / officialNav, 2));
+        setShareInput(formatInputNumber(amountValue / conversionNav, 2));
       }
       setMode("share");
       return;
@@ -151,7 +157,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
 
     const shareValue = toNumber(shareInput);
     if (shareValue != null) {
-      setAmountInput(formatInputNumber(shareValue * officialNav, 2));
+      setAmountInput(formatInputNumber(shareValue * conversionNav, 2));
     }
     setMode("amount");
   };
@@ -311,6 +317,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
                   format="YYYY-MM-DD"
                   allowClear
                   inputReadOnly
+                  disabledDate={(current) => Boolean(current && current.endOf("day").isAfter(dayjs(today, "YYYY-MM-DD").endOf("day")))}
                   className="no-zoom-picker tabular-nums w-[138px] text-right text-base font-semibold text-[#131b2e]"
                   onChange={(_, dateString) => setDateInput(Array.isArray(dateString) ? dateString[0] || "" : dateString || "")}
                 />

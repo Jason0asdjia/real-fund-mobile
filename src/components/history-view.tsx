@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronRight } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 import { TwSelect } from "@/components/ui/tw-select";
@@ -56,6 +56,7 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
   const [draggingSwipeId, setDraggingSwipeId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState(0);
   const [deleteTarget, setDeleteTarget] = useState<TxItem | null>(null);
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(() => new Set([nowInMarket().format("YYYY-MM")]));
   const swipeRef = useRef<{
     id: string;
     startX: number;
@@ -133,6 +134,18 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
     });
     return Array.from(bucket.entries());
   }, [transactions]);
+
+  useEffect(() => {
+    const monthKeys = grouped.map(([month]) => month);
+    setExpandedMonths((prev) => {
+      const next = new Set(Array.from(prev).filter((month) => monthKeys.includes(month)));
+      if (next.size > 0) return next;
+      const currentMonth = nowInMarket().format("YYYY-MM");
+      if (monthKeys.includes(currentMonth)) return new Set([currentMonth]);
+      if (monthKeys.length > 0) return new Set([monthKeys[0]]);
+      return new Set<string>();
+    });
+  }, [grouped]);
 
   const periodLabel = timeRange === "3m" ? "近三个月" : timeRange === "6m" ? "近六个月" : timeRange === "12m" ? "近一年" : "全部时间";
   const periodVolume = transactions.reduce((acc, item) => acc + Math.abs(item.amount), 0);
@@ -249,13 +262,31 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
           </div>
       </section>
 
-      <main onScroll={() => setOpenSwipeId(null)}>
+      <main className="pb-[calc(env(safe-area-inset-bottom)+6.8rem)]" onScroll={() => setOpenSwipeId(null)}>
           {grouped.length === 0 ? (
             <div className="px-3 py-8 text-center text-sm text-[#747781]">暂无交易记录，先去持仓页录入交易。</div>
           ) : (
             grouped.map(([month, items]) => (
               <div key={month}>
-                <div className="bg-[#f8f9ff] px-3 py-2 typo-section-title">{monthLabel(month)}</div>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between bg-[#f8f9ff] px-3 py-2 text-left typo-section-title"
+                  onClick={() => {
+                    setExpandedMonths((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(month)) {
+                        next.delete(month);
+                      } else {
+                        next.add(month);
+                      }
+                      return next;
+                    });
+                  }}
+                >
+                  <span>{monthLabel(month)}</span>
+                  {expandedMonths.has(month) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                </button>
+                {expandedMonths.has(month) ? (
                 <div className="divide-y divide-[#f2f3ff]">
                   {items.map((item) => {
                     const isBuy = item.type === "buy";
@@ -325,6 +356,7 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
                     );
                   })}
                 </div>
+                ) : null}
               </div>
             ))
           )}

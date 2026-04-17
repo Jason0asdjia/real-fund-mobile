@@ -7,6 +7,7 @@ import { DatePicker } from "antd";
 import dayjs from "dayjs";
 
 import { useAppState } from "@/components/app-provider";
+import { fetchFundHistoricalNavSeries } from "@/lib/fund-api";
 import { formatCurrency, formatSignedCurrency } from "@/lib/portfolio";
 import { holdingDaysInMarket, isBeforeTradeCutoffInMarket, todayInMarket } from "@/lib/time";
 import type { FundTransaction } from "@/lib/types";
@@ -36,6 +37,8 @@ export function FundBuyView({ code }: FundBuyViewProps) {
   const [shareInput, setShareInput] = useState("");
   const [tradeDate, setTradeDate] = useState(todayInMarket());
   const [beforeClose, setBeforeClose] = useState(() => isBeforeTradeCutoffInMarket());
+  const [selectedTradeNav, setSelectedTradeNav] = useState<number | null>(null);
+  const [selectedTradeNavDate, setSelectedTradeNavDate] = useState<string | null>(null);
   const returnToDetail = searchParams.get("from") === "detail";
   const returnToHistory = searchParams.get("from") === "history";
   const editTxId = searchParams.get("editTxId");
@@ -44,6 +47,10 @@ export function FundBuyView({ code }: FundBuyViewProps) {
     if (!editTxId) return null;
     return (state.transactions[code] || []).find((item) => item.id === editTxId && item.type === "buy") || null;
   }, [code, editTxId, state.transactions]);
+
+  useEffect(() => {
+    didInitEditRef.current = false;
+  }, [code, editTxId]);
 
   const handleBack = () => {
     if (returnToDetail) {
@@ -76,6 +83,62 @@ export function FundBuyView({ code }: FundBuyViewProps) {
     didInitEditRef.current = true;
   }, [editingTransaction]);
 
+  const today = todayInMarket();
+  const officialNavRaw = Number(fund?.dwjz ?? 0);
+  const officialNav = Number.isFinite(officialNavRaw) && officialNavRaw > 0 ? officialNavRaw : 0;
+  const estimateNavRaw = Number(fund?.gsz ?? 0);
+  const estimateNav = Number.isFinite(estimateNavRaw) && estimateNavRaw > 0 ? estimateNavRaw : 0;
+  const latestNav = officialNav || estimateNav;
+  const fallbackNav = latestNav > 0
+    ? latestNav
+    : editingTransaction && Number.isFinite(Number(editingTransaction.price)) && Number(editingTransaction.price) > 0
+      ? Number(editingTransaction.price)
+      : 0;
+  const tradePrice = selectedTradeNav != null && selectedTradeNav > 0 ? selectedTradeNav : fallbackNav;
+
+  useEffect(() => {
+    let active = true;
+
+    const resolveTradeNav = async () => {
+      if (!fund) {
+        if (active) {
+          setSelectedTradeNav(null);
+          setSelectedTradeNavDate(null);
+        }
+        return;
+      }
+      if (!tradeDate || tradeDate >= today) {
+        if (active) {
+          setSelectedTradeNav(fallbackNav > 0 ? fallbackNav : null);
+          setSelectedTradeNavDate(today);
+        }
+        return;
+      }
+
+      try {
+        const points = await fetchFundHistoricalNavSeries(code, 480);
+        if (!active) return;
+        const ordered = points.slice().sort((a, b) => a.date.localeCompare(b.date));
+        const exact = ordered.find((item) => item.date === tradeDate);
+        const previous = ordered.filter((item) => item.date <= tradeDate).at(-1);
+        const historicalNav = exact?.nav ?? previous?.nav ?? null;
+        const resolvedDate = exact?.date ?? previous?.date ?? null;
+        setSelectedTradeNav(historicalNav != null && Number.isFinite(historicalNav) && historicalNav > 0 ? historicalNav : (fallbackNav > 0 ? fallbackNav : null));
+        setSelectedTradeNavDate(resolvedDate ?? (fallbackNav > 0 ? today : null));
+      } catch {
+        if (active) {
+          setSelectedTradeNav(fallbackNav > 0 ? fallbackNav : null);
+          setSelectedTradeNavDate(fallbackNav > 0 ? today : null);
+        }
+      }
+    };
+
+    void resolveTradeNav();
+    return () => {
+      active = false;
+    };
+  }, [code, fallbackNav, fund, today, tradeDate]);
+
   if (!fund) {
     return (
       <div className="-mx-3 -mb-24 -mt-4 min-h-[calc(100dvh-5.5rem)] bg-white md:-mx-4 md:-mb-24 md:-mt-4">
@@ -97,26 +160,28 @@ export function FundBuyView({ code }: FundBuyViewProps) {
       </div>
     );
   }
-
-  const latestNavRaw = Number(fund.dwjz ?? 0);
-  const latestNav = Number.isFinite(latestNavRaw) && latestNavRaw > 0 ? latestNavRaw : 0;
   const holdingShare = holding?.share != null && Number.isFinite(Number(holding.share)) ? Number(holding.share) : null;
   const holdingCost = holding?.cost != null && Number.isFinite(Number(holding.cost)) ? Number(holding.cost) : null;
-  const holdingAmount = holdingShare != null && latestNav > 0 ? holdingShare * latestNav : null;
-  const holdingProfit = holdingShare != null && holdingCost != null && latestNav > 0 ? (latestNav - holdingCost) * holdingShare : null;
-  const amountRaw = mode === "amount" ? toNumber(amountInput) || 0 : (toNumber(shareInput) || 0) * latestNav;
-  const shareRaw = mode === "share" ? toNumber(shareInput) || 0 : latestNav > 0 ? (toNumber(amountInput) || 0) / latestNav : 0;
+  const holdingAmount = holdingShare != null && tradePrice > 0 ? holdingShare * tradePrice : null;
+  const holdingProfit = holdingShare != null && holdingCost != null && tradePrice > 0 ? (tradePrice - holdingCost) * holdingShare : null;
+  const amountRaw = mode === "amount" ? toNumber(amountInput) || 0 : (toNumber(shareInput) || 0) * tradePrice;
+  const shareRaw = mode === "share" ? toNumber(shareInput) || 0 : tradePrice > 0 ? (toNumber(amountInput) || 0) / tradePrice : 0;
   const amount = Math.max(amountRaw, 0);
   const share = Math.max(shareRaw, 0);
   const estimatedFee = amount * FEE_RATE;
+  const tradeNavHint = tradePrice > 0
+    ? tradeDate < today && selectedTradeNavDate && selectedTradeNavDate !== tradeDate
+      ? `换算净值 ${tradePrice.toFixed(4)}（${selectedTradeNavDate} 最近交易日）`
+      : `换算净值 ${tradePrice.toFixed(4)}（按 ${selectedTradeNavDate || tradeDate || today}）`
+    : "暂无可用净值，无法换算";
 
   const handleConfirm = () => {
-    if (!latestNav || amount <= 0 || share <= 0) return;
+    if (!tradePrice || amount <= 0 || share <= 0) return;
     const payload: Omit<FundTransaction, "id"> = {
       date: tradeDate,
       type: "buy",
       share,
-      price: latestNav,
+      price: tradePrice,
       fee: estimatedFee,
       note: beforeClose ? "15:00前下单" : "15:00后下单",
     };
@@ -168,7 +233,7 @@ export function FundBuyView({ code }: FundBuyViewProps) {
             </div>
             <div className="border-t border-[#e2e7ff] pt-2 text-right">
               <p className="typo-label">最新净值（{fund.jzrq?.slice(5, 10) || "--"}）</p>
-              <p className="mt-1 text-base font-normal tabular-nums text-[#131b2e]">{latestNav ? latestNav.toFixed(4) : "—"}</p>
+              <p className="mt-1 text-base font-normal tabular-nums text-[#131b2e]">{tradePrice ? tradePrice.toFixed(4) : "—"}</p>
             </div>
           </div>
         </section>
@@ -227,6 +292,10 @@ export function FundBuyView({ code }: FundBuyViewProps) {
             <Info size={12} />
             <span>估算手续费: {formatCurrency(estimatedFee)}</span>
           </div>
+          <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-[#747781]">
+            <Info size={12} />
+            <span>{tradeNavHint}</span>
+          </div>
         </section>
 
         <section className="divide-y divide-[#e2e7ff]">
@@ -237,6 +306,7 @@ export function FundBuyView({ code }: FundBuyViewProps) {
               format="YYYY-MM-DD"
               allowClear={false}
               inputReadOnly
+              disabledDate={(current) => Boolean(current && current.endOf("day").isAfter(dayjs(today, "YYYY-MM-DD").endOf("day")))}
               className="no-zoom-picker text-base font-normal text-[#131b2e]"
               style={{ width: "100%" }}
               onChange={(_, dateString) => setTradeDate(Array.isArray(dateString) ? dateString[0] || "" : dateString || "")}
@@ -273,7 +343,7 @@ export function FundBuyView({ code }: FundBuyViewProps) {
         <button
           type="button"
           onClick={handleConfirm}
-          disabled={!amount || !share || !latestNav}
+          disabled={!amount || !share || !tradePrice}
           className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-white px-3 text-sm font-normal text-[#131b2e] disabled:opacity-40"
         >
           确认修改
