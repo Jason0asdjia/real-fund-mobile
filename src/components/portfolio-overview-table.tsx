@@ -86,16 +86,28 @@ export function PortfolioOverviewTable({
     const deltaX = touch.clientX - touchState.x;
     const deltaY = touch.clientY - touchState.y;
 
-    if (Math.abs(deltaX) <= Math.abs(deltaY)) return;
-
     const container = event.currentTarget;
+    const isHorizontalGesture = Math.abs(deltaX) > Math.abs(deltaY);
     const maxScrollLeft = container.scrollWidth - container.clientWidth;
-    if (maxScrollLeft <= 0) return;
+    const maxScrollTop = container.scrollHeight - container.clientHeight;
 
-    const atLeftEdge = container.scrollLeft <= 0;
-    const atRightEdge = container.scrollLeft >= maxScrollLeft - 1;
+    if (isHorizontalGesture && maxScrollLeft > 0) {
+      const atLeftEdge = container.scrollLeft <= 0;
+      const atRightEdge = container.scrollLeft >= maxScrollLeft - 1;
 
-    if ((atLeftEdge && deltaX > 0) || (atRightEdge && deltaX < 0)) {
+      if ((atLeftEdge && deltaX > 0) || (atRightEdge && deltaX < 0)) {
+        event.preventDefault();
+      }
+
+      return;
+    }
+
+    if (maxScrollTop <= 0) return;
+
+    const atTopEdge = container.scrollTop <= 0;
+    const atBottomEdge = container.scrollTop >= maxScrollTop - 1;
+
+    if ((atTopEdge && deltaY > 0) || (atBottomEdge && deltaY < 0)) {
       event.preventDefault();
     }
   };
@@ -103,7 +115,7 @@ export function PortfolioOverviewTable({
   return (
     <div
       ref={scrollContainerRef}
-      className="h-full overflow-auto border border-slate-200 bg-white shadow-sm overscroll-contain [overscroll-behavior-x:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="h-full overflow-auto border border-slate-200 bg-white shadow-sm overscroll-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       role="region"
       aria-label="持仓总览表格"
       onTouchStart={handleTouchStart}

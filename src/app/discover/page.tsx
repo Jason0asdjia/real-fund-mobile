@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Filter, Loader2, Minus, Plus, Search, Trash2, X } from "lucide-react";
+import { ArrowLeft, Filter, Loader2, Minus, Plus, Search, Trash2, X } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 import { fetchFundPreviewData } from "@/lib/fund-api";
@@ -110,6 +110,15 @@ export default function DiscoverPage() {
 
   const confirmTargetFund = removeConfirmCode ? state.funds.find((fund) => fund.code === removeConfirmCode) : null;
 
+  const handleBack = useCallback(() => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+
+    router.push("/portfolio");
+  }, [router]);
+
   const hasHolding = (code: string) => {
     const holding = state.holdings[code];
     return typeof holding?.share === "number" && Number.isFinite(holding.share) && holding.share > 0;
@@ -166,6 +175,21 @@ export default function DiscoverPage() {
     <div className="-mx-3 -mt-4 bg-white text-[#131b2e] md:-mx-4 md:-mt-4">
       <header className="border-b border-[#f0f2f7] bg-white px-4 py-3">
         <div className="flex items-center gap-2">
+          <span
+            role="link"
+            tabIndex={0}
+            aria-label="返回上一页"
+            className="inline-flex shrink-0 cursor-pointer items-center justify-center text-[#4d5b74] outline-none transition-colors hover:text-[#131b2e] focus-visible:text-[#131b2e]"
+            onClick={handleBack}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                handleBack();
+              }
+            }}
+          >
+            <ArrowLeft size={18} strokeWidth={2.2} />
+          </span>
           <label className="flex min-h-9 flex-1 items-center gap-2 rounded-md border border-[#e5e8f0] bg-[#f5f7fb] px-2.5">
             <Search size={14} className="shrink-0 text-[#8a93a4]" />
             <input

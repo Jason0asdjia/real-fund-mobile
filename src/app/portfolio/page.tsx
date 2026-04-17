@@ -552,23 +552,26 @@ export default function PortfolioPage() {
     );
   };
 
+  const getSignedValueTextClass = (value: number | null | undefined) => {
+    if (value == null || !Number.isFinite(value) || value === 0) return "text-slate-500";
+    return value < 0 ? "text-emerald-700" : "text-rose-600";
+  };
+
   const getCellClass = (row: PortfolioOverviewRow, id: PortfolioOverviewColumnId) => {
     const base = "border-b border-slate-200 px-4 py-3 text-sm tabular-nums align-top text-slate-900 whitespace-nowrap";
     if (id === "yesterdayChangePercent" || id === "estimateChangePercent") {
       const value = id === "yesterdayChangePercent" ? row.yesterdayChangePercent : row.estimateChangePercent;
-      if (value == null) return `${base} text-slate-500`;
-      return `${base} ${value < 0 ? "text-emerald-700" : "text-rose-600"}`;
+      return `${base} ${getSignedValueTextClass(value)}`;
     }
     if (id === "totalChangePercent" || id === "todayProfit" || id === "holdingProfit") {
       const value = id === "totalChangePercent" ? row.totalChangePercent : id === "todayProfit" ? row.todayProfit : row.holdingProfit;
-      if (value == null) return `${base} text-slate-500`;
-      return `${base} ${value < 0 ? "text-emerald-700" : "text-rose-600"}`;
+      return `${base} ${getSignedValueTextClass(value)}`;
     }
     if (id === "holdingAmount") return `${base}`;
     return `${base} font-medium`;
   };
 
-  const getProfitTextClass = (value: number) => (value < 0 ? "text-emerald-700" : "text-rose-600");
+  const getProfitTextClass = (value: number) => getSignedValueTextClass(value);
 
   return (
     <div className="-mx-3 -mt-4 flex h-[calc(100dvh-6.6rem)] w-[calc(100%+1.5rem)] max-w-none flex-col gap-0 overflow-hidden bg-white md:-mx-4 md:-mt-4 md:w-[calc(100%+2rem)]">
@@ -600,7 +603,7 @@ export default function PortfolioPage() {
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 border-t border-slate-200 bg-transparent">
+        <div className="mt-1 grid grid-cols-2 border-t border-slate-200 bg-transparent">
           <div className="min-w-0 pr-3 pt-2">
             <p className="m-0 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-500">
               <span>今日收益</span>
