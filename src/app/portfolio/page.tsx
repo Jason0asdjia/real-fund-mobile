@@ -605,7 +605,7 @@ export default function PortfolioPage() {
         <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
           <div className="min-w-0">
             <p className="m-0 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-500">基金总资产（人民币）</p>
-            <p className="mt-1.5 max-w-full overflow-hidden text-[clamp(2rem,8.5vw,2.75rem)] font-semibold leading-none tracking-[-0.05em] text-slate-950 text-ellipsis whitespace-nowrap">
+            <p className="mt-1.5 max-w-full overflow-hidden text-[clamp(1.875rem,7.8vw,2.5rem)] font-semibold leading-none tracking-[-0.05em] text-slate-950 text-ellipsis whitespace-nowrap">
               {numberFormatter.format(totals.amount)}
             </p>
           </div>
@@ -634,7 +634,7 @@ export default function PortfolioPage() {
               aria-label="切换今日收益显示方式"
             >
               <span
-                className={`block max-w-full overflow-hidden text-[clamp(1.5rem,7vw,2rem)] font-semibold leading-none tracking-[-0.04em] text-ellipsis whitespace-nowrap ${getProfitTextClass(
+                className={`block max-w-full overflow-hidden text-[clamp(1.375rem,6.4vw,1.875rem)] font-semibold leading-none tracking-[-0.04em] text-ellipsis whitespace-nowrap ${getProfitTextClass(
                   totals.today,
                 )}`}
               >
@@ -652,7 +652,7 @@ export default function PortfolioPage() {
               aria-label="切换累计收益显示方式"
             >
               <span
-                className={`block max-w-full overflow-hidden text-[clamp(1.5rem,7vw,2rem)] font-semibold leading-none tracking-[-0.04em] text-ellipsis whitespace-nowrap ${getProfitTextClass(
+                className={`block max-w-full overflow-hidden text-[clamp(1.375rem,6.4vw,1.875rem)] font-semibold leading-none tracking-[-0.04em] text-ellipsis whitespace-nowrap ${getProfitTextClass(
                   totals.total,
                 )}`}
               >
