@@ -2,9 +2,16 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Check, Circle, GripVertical, Search, SlidersHorizontal, X } from "lucide-react";
+import { Check, Circle, GripVertical, Search, X } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
+import {
+  PORTFOLIO_OVERVIEW_COLUMN_OPTIONS,
+  PortfolioOverviewTable,
+  type PortfolioOverviewColumn,
+  type PortfolioOverviewColumnId,
+  type PortfolioOverviewRow,
+} from "@/components/portfolio-overview-table";
 import { formatCurrency, formatSignedCurrency } from "@/lib/portfolio";
 import { holdingDaysInMarket, isEstimateTimestampUsable, toMarketDay, todayInMarket } from "@/lib/time";
 import type { FundHolding, FundSnapshot, FundTransaction } from "@/lib/types";
@@ -20,7 +27,7 @@ type PortfolioViewState = {
 };
 
 type DragGhostState = {
-  id: ColumnId;
+  id: PortfolioOverviewColumnId;
   x: number;
   y: number;
   width: number;
@@ -40,52 +47,12 @@ const readViewState = (): PortfolioViewState => {
   }
 };
 
-type PortfolioRow = {
-  code: string;
-  fundName: string;
-  estimateNav: string;
-  yesterdayChangePercent: number | null;
-  estimateChangePercent: number | null;
-  latestNav: string;
-  totalChangePercent: number | null;
-  holdingAmount: number;
-  holdingDays: number | null;
-  holdingDaysUpdatedAt: string;
-  todayProfit: number | null;
-  todayProfitStatus: "estimated" | "official" | "none";
-  holdingProfit: number | null;
-  estimatedHoldingProfit: number | null;
-  holdingAmountLabel: string;
-  officialUpdatedAt: string;
-  officialConfirmedUpdatedAt: string;
-  yesterdayChangeUpdatedAt: string;
-  estimateUpdatedAt: string;
-  holdingAmountUpdatedAt: string;
-  currentValueUpdatedAt: string;
-  estimatedProfitUpdatedAt: string;
-  debugSourceTag: string | null;
-};
-
-const COLUMN_OPTIONS = [
-  { id: "latestNav", label: "最新净值", defaultVisible: true },
-  { id: "estimateNav", label: "估算净值", defaultVisible: false },
-  { id: "yesterdayChangePercent", label: "昨日涨幅", defaultVisible: false },
-  { id: "estimateChangePercent", label: "估值涨幅", defaultVisible: true },
-  { id: "totalChangePercent", label: "估算收益", defaultVisible: true },
-  { id: "holdingAmount", label: "持仓金额", defaultVisible: false },
-  { id: "holdingDays", label: "持有天数", defaultVisible: false },
-  { id: "todayProfit", label: "当日收益", defaultVisible: false },
-  { id: "holdingProfit", label: "持有收益", defaultVisible: false },
-] as const;
-
-type ColumnId = typeof COLUMN_OPTIONS[number]["id"];
-
-const defaultColumnVisibility = COLUMN_OPTIONS.reduce<Record<ColumnId, boolean>>((acc, item) => {
+const defaultColumnVisibility = PORTFOLIO_OVERVIEW_COLUMN_OPTIONS.reduce<Record<PortfolioOverviewColumnId, boolean>>((acc, item) => {
   acc[item.id] = item.defaultVisible;
   return acc;
-}, {} as Record<ColumnId, boolean>);
+}, {} as Record<PortfolioOverviewColumnId, boolean>);
 
-const defaultColumnOrder = COLUMN_OPTIONS.map((item) => item.id);
+const defaultColumnOrder = PORTFOLIO_OVERVIEW_COLUMN_OPTIONS.map((item) => item.id);
 const isDevMode = process.env.NODE_ENV !== "production";
 
 const getSourceLabel = (source?: FundSnapshot["source"]) => {
@@ -115,7 +82,7 @@ const formatNav = (value?: string | number | null) => {
   return nav.toFixed(4);
 };
 
-const resolveTodayProfitStatus = (hasOfficialToday: boolean, todayProfit: number | null): PortfolioRow["todayProfitStatus"] => {
+const resolveTodayProfitStatus = (hasOfficialToday: boolean, todayProfit: number | null): PortfolioOverviewRow["todayProfitStatus"] => {
   if (todayProfit == null) return "none";
   if (hasOfficialToday) return "official";
 
@@ -127,7 +94,7 @@ const buildRows = (
   holdings: Record<string, FundHolding>,
   _transactions: Record<string, FundTransaction[]>,
   today: string,
-): PortfolioRow[] => {
+): PortfolioOverviewRow[] => {
   const holdingDaysSettlementLabel = toMarketDay(`${today}T00:00:00`).format("MM-DD");
 
   return funds.map((fund) => {
@@ -234,19 +201,19 @@ const buildRows = (
   });
 };
 
-const readColumnVisibility = (): Record<ColumnId, boolean> => {
+const readColumnVisibility = (): Record<PortfolioOverviewColumnId, boolean> => {
   if (typeof window === "undefined") return defaultColumnVisibility;
   try {
     const raw = window.localStorage.getItem(COLUMN_VISIBILITY_KEY);
     if (!raw) return defaultColumnVisibility;
-    const parsed = JSON.parse(raw) as Partial<Record<ColumnId, boolean>>;
+    const parsed = JSON.parse(raw) as Partial<Record<PortfolioOverviewColumnId, boolean>>;
     return { ...defaultColumnVisibility, ...parsed };
   } catch {
     return defaultColumnVisibility;
   }
 };
 
-const readColumnOrder = (): ColumnId[] => {
+const readColumnOrder = (): PortfolioOverviewColumnId[] => {
   if (typeof window === "undefined") return defaultColumnOrder;
   try {
     const raw = window.localStorage.getItem(COLUMN_ORDER_KEY);
@@ -254,7 +221,9 @@ const readColumnOrder = (): ColumnId[] => {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return defaultColumnOrder;
 
-    const parsedIds = parsed.filter((item): item is ColumnId => typeof item === "string" && defaultColumnOrder.includes(item as ColumnId));
+    const parsedIds = parsed.filter(
+      (item): item is PortfolioOverviewColumnId => typeof item === "string" && defaultColumnOrder.includes(item as PortfolioOverviewColumnId),
+    );
     const deduped = Array.from(new Set(parsedIds));
     const missing = defaultColumnOrder.filter((id) => !deduped.includes(id));
     return [...deduped, ...missing];
@@ -266,10 +235,10 @@ const readColumnOrder = (): ColumnId[] => {
 export default function PortfolioPage() {
   const { state } = useAppState();
   const [restoredState, setRestoredState] = useState<PortfolioViewState>({ windowY: 0, tableTop: 0, tableLeft: 0 });
-  const [columnVisibility, setColumnVisibility] = useState<Record<ColumnId, boolean>>(() => readColumnVisibility());
-  const [columnOrder, setColumnOrder] = useState<ColumnId[]>(() => readColumnOrder());
-  const [draggingColumnId, setDraggingColumnId] = useState<ColumnId | null>(null);
-  const [touchDraggingColumnId, setTouchDraggingColumnId] = useState<ColumnId | null>(null);
+  const [columnVisibility, setColumnVisibility] = useState<Record<PortfolioOverviewColumnId, boolean>>(() => readColumnVisibility());
+  const [columnOrder, setColumnOrder] = useState<PortfolioOverviewColumnId[]>(() => readColumnOrder());
+  const [draggingColumnId, setDraggingColumnId] = useState<PortfolioOverviewColumnId | null>(null);
+  const [touchDraggingColumnId, setTouchDraggingColumnId] = useState<PortfolioOverviewColumnId | null>(null);
   const [dragGhost, setDragGhost] = useState<DragGhostState | null>(null);
   const [columnModalOpen, setColumnModalOpen] = useState(false);
   const [showTodayProfitPercent, setShowTodayProfitPercent] = useState(false);
@@ -277,9 +246,9 @@ export default function PortfolioPage() {
   const viewStateRef = useRef<PortfolioViewState>({ windowY: 0, tableTop: 0, tableLeft: 0 });
   const tableRef = useRef<HTMLDivElement | null>(null);
   const tableRestoredRef = useRef(false);
-  const columnItemRefs = useRef<Partial<Record<ColumnId, HTMLDivElement | null>>>({});
-  const previousRectsRef = useRef<Partial<Record<ColumnId, DOMRect>>>({});
-  const touchDragTargetRef = useRef<ColumnId | null>(null);
+  const columnItemRefs = useRef<Partial<Record<PortfolioOverviewColumnId, HTMLDivElement | null>>>({});
+  const previousRectsRef = useRef<Partial<Record<PortfolioOverviewColumnId, DOMRect>>>({});
+  const touchDragTargetRef = useRef<PortfolioOverviewColumnId | null>(null);
 
   useEffect(() => {
     const next = readViewState();
@@ -375,8 +344,8 @@ export default function PortfolioPage() {
       : "none";
 
   const orderedColumns = useMemo(() => {
-    const optionById = new Map(COLUMN_OPTIONS.map((item) => [item.id, item] as const));
-    return columnOrder.map((id) => optionById.get(id)).filter((item): item is (typeof COLUMN_OPTIONS)[number] => Boolean(item));
+    const optionById = new Map(PORTFOLIO_OVERVIEW_COLUMN_OPTIONS.map((item) => [item.id, item] as const));
+    return columnOrder.map((id) => optionById.get(id)).filter((item): item is PortfolioOverviewColumn => Boolean(item));
   }, [columnOrder]);
 
   const visibleColumns = useMemo(
@@ -384,10 +353,10 @@ export default function PortfolioPage() {
     [columnVisibility, orderedColumns],
   );
 
-  const moveColumn = useCallback((sourceId: ColumnId, targetId: ColumnId) => {
+  const moveColumn = useCallback((sourceId: PortfolioOverviewColumnId, targetId: PortfolioOverviewColumnId) => {
     if (sourceId === targetId) return;
 
-    const nextPreviousRects: Partial<Record<ColumnId, DOMRect>> = {};
+    const nextPreviousRects: Partial<Record<PortfolioOverviewColumnId, DOMRect>> = {};
     defaultColumnOrder.forEach((id) => {
       const node = columnItemRefs.current[id];
       if (!node) return;
@@ -408,7 +377,7 @@ export default function PortfolioPage() {
 
   useLayoutEffect(() => {
     const previousRects = previousRectsRef.current;
-    const nextRects: Partial<Record<ColumnId, DOMRect>> = {};
+    const nextRects: Partial<Record<PortfolioOverviewColumnId, DOMRect>> = {};
 
     defaultColumnOrder.forEach((id) => {
       const node = columnItemRefs.current[id];
@@ -446,7 +415,7 @@ export default function PortfolioPage() {
     (clientX: number, clientY: number) => {
       if (!touchDraggingColumnId) return;
 
-      let hoveredId: ColumnId | null = null;
+      let hoveredId: PortfolioOverviewColumnId | null = null;
 
       defaultColumnOrder.forEach((id) => {
         if (hoveredId) return;
@@ -515,7 +484,7 @@ export default function PortfolioPage() {
     };
   }, [handleTouchDragMove, touchDraggingColumnId]);
 
-  const renderCellValue = (row: PortfolioRow, id: ColumnId) => {
+  const renderCellValue = (row: PortfolioOverviewRow, id: PortfolioOverviewColumnId) => {
     const primaryValue =
       id === "latestNav"
         ? row.latestNav
@@ -577,77 +546,104 @@ export default function PortfolioPage() {
     return (
       <div className="flex flex-col leading-tight">
         {valueNode}
-        <span className="mt-1 text-[10px] font-medium text-[#8a90a0]">{updatedAt}</span>
-        {isDevMode && row.debugSourceTag ? <span className="mt-0.5 text-[10px] font-semibold text-[#6f7ea3]">{row.debugSourceTag}</span> : null}
+        <span className="mt-1 text-[10px] font-medium text-slate-500">{updatedAt}</span>
+        {isDevMode && row.debugSourceTag ? <span className="mt-0.5 text-[10px] font-semibold text-slate-400">{row.debugSourceTag}</span> : null}
       </div>
     );
   };
 
-  const getCellClass = (row: PortfolioRow, id: ColumnId) => {
-    const base = "px-0 py-3 text-sm tabular-nums align-top";
+  const getCellClass = (row: PortfolioOverviewRow, id: PortfolioOverviewColumnId) => {
+    const base = "border-b border-slate-200 px-4 py-3 text-sm tabular-nums align-top text-slate-900";
     if (id === "yesterdayChangePercent" || id === "estimateChangePercent") {
       const value = id === "yesterdayChangePercent" ? row.yesterdayChangePercent : row.estimateChangePercent;
-      if (value == null) return `${base} text-[#747781]`;
-      return `${base} ${value < 0 ? "text-emerald-700" : "text-red-600"}`;
+      if (value == null) return `${base} text-slate-500`;
+      return `${base} ${value < 0 ? "text-emerald-700" : "text-rose-600"}`;
     }
     if (id === "totalChangePercent" || id === "todayProfit" || id === "holdingProfit") {
       const value = id === "totalChangePercent" ? row.totalChangePercent : id === "todayProfit" ? row.todayProfit : row.holdingProfit;
-      if (value == null) return `${base} text-[#747781]`;
-      return `${base} ${value < 0 ? "text-emerald-700" : "text-red-600"}`;
+      if (value == null) return `${base} text-slate-500`;
+      return `${base} ${value < 0 ? "text-emerald-700" : "text-rose-600"}`;
     }
-    if (id === "holdingAmount") return `${base} text-[#131b2e]`;
-    return `${base} font-medium text-[#131b2e]`;
+    if (id === "holdingAmount") return `${base}`;
+    return `${base} font-medium`;
   };
+
+  const getProfitTextClass = (value: number) => (value < 0 ? "text-emerald-700" : "text-rose-600");
 
   return (
     <div className="-mx-3 -mt-4 flex h-[calc(100dvh-6.6rem)] w-[calc(100%+1.5rem)] max-w-none flex-col gap-0 overflow-hidden bg-white md:-mx-4 md:-mt-4 md:w-[calc(100%+2rem)]">
-      <section className="bg-[#d7e2ff] px-3 pb-2 pt-2 text-[#001b3f]">
-        <header className="flex h-11 items-center justify-between">
-          <h1 className="typo-page-title">基金资产概览</h1>
-          <Link href="/discover" aria-label="搜索基金" className="rounded-md p-1 text-[#24467c] transition-colors hover:bg-black/5">
+      <section className="border-b border-slate-200 bg-slate-50 px-3 pb-2 pt-2 text-slate-900">
+        <header className="flex items-start justify-between gap-3 py-1">
+          <div>
+            <h1 className="m-0 text-[24px] font-semibold leading-none tracking-[-0.02em] text-slate-900 sm:text-[28px]">基金资产概览</h1>
+            <p className="mt-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">Portfolio Summary</p>
+          </div>
+          <Link
+            href="/discover"
+            aria-label="搜索基金"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+          >
             <Search size={18} />
           </Link>
         </header>
 
-        <div className="mt-1.5">
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <p className="typo-label text-[#24467c]/70">基金总资产（人民币）</p>
-            <p className="text-[10px] font-semibold text-[#24467c]/75">{totalUpdatedAt}</p>
+        <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+          <div className="min-w-0">
+            <p className="m-0 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-500">基金总资产（人民币）</p>
+            <p className="mt-1.5 max-w-full overflow-hidden text-[clamp(2rem,8.5vw,2.75rem)] font-semibold leading-none tracking-[-0.05em] text-slate-950 text-ellipsis whitespace-nowrap">
+              {numberFormatter.format(totals.amount)}
+            </p>
           </div>
-          <p className="typo-value-hero text-[#001b3f]">{numberFormatter.format(totals.amount)}</p>
+          <div className="shrink-0 pt-0.5 text-right">
+            <p className="m-0 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-500">最近更新</p>
+            <p className="mt-1.5 text-sm font-medium tabular-nums text-slate-700">{totalUpdatedAt}</p>
+          </div>
+        </div>
 
-          <div className="mt-4 flex items-center justify-between gap-2">
-            <div>
-              <p className="flex items-center gap-1 text-[9px] font-medium tracking-[0.06em] text-[#24467c]/70">
-                <span>今日收益</span>
-                {totalTodayProfitStatus === "official" ? (
-                  <span className="inline-flex h-3 w-3 items-center justify-center rounded-full border border-current">
-                    <Check size={8} strokeWidth={3} />
-                  </span>
-                ) : totalTodayProfitStatus === "estimated" ? (
-                  <Circle size={10} className="text-red-500" strokeWidth={2.2} />
-                ) : null}
-              </p>
-              <button
-                type="button"
-                className="mt-1 inline-flex items-center gap-1.5 border-0 bg-transparent p-0 text-left text-[#24467c] tabular-nums"
-                onClick={() => setShowTodayProfitPercent((prev) => !prev)}
-                aria-label="切换今日收益显示方式"
+        <div className="mt-3 grid grid-cols-2 border-t border-slate-200 bg-transparent">
+          <div className="min-w-0 pr-3 pt-2">
+            <p className="m-0 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-500">
+              <span>今日收益</span>
+              {totalTodayProfitStatus === "official" ? (
+                <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current text-slate-500">
+                  <Check size={8} strokeWidth={3} />
+                </span>
+              ) : totalTodayProfitStatus === "estimated" ? (
+                <Circle size={10} className="text-rose-500" strokeWidth={2.2} />
+              ) : null}
+            </p>
+            <button
+              type="button"
+              className="mt-2 inline-flex max-w-full items-center gap-1.5 overflow-hidden border-0 bg-transparent p-0 text-left tabular-nums text-slate-900"
+              onClick={() => setShowTodayProfitPercent((prev) => !prev)}
+              aria-label="切换今日收益显示方式"
+            >
+              <span
+                className={`block max-w-full overflow-hidden text-[clamp(1.5rem,7vw,2rem)] font-semibold leading-none tracking-[-0.04em] text-ellipsis whitespace-nowrap ${getProfitTextClass(
+                  totals.today,
+                )}`}
               >
-                <span className="text-lg font-bold leading-none">{showTodayProfitPercent ? formatSignedPercent(todayRate) : formatSignedCurrency(totals.today)}</span>
-              </button>
-            </div>
-            <div className="text-right">
-              <p className="text-[9px] font-medium tracking-[0.06em] text-[#24467c]/70">累计收益（持有收益）</p>
-              <button
-                type="button"
-                className="mt-1 border-0 bg-transparent p-0 text-right text-[#24467c] tabular-nums"
-                onClick={() => setShowTotalProfitPercent((prev) => !prev)}
-                aria-label="切换累计收益显示方式"
+                {showTodayProfitPercent ? formatSignedPercent(todayRate) : formatSignedCurrency(totals.today)}
+              </span>
+            </button>
+          </div>
+
+          <div className="min-w-0 pl-3 pt-2 text-right">
+            <p className="m-0 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-500">累计收益（持有收益）</p>
+            <button
+              type="button"
+              className="mt-2 max-w-full overflow-hidden border-0 bg-transparent p-0 text-right tabular-nums text-slate-900"
+              onClick={() => setShowTotalProfitPercent((prev) => !prev)}
+              aria-label="切换累计收益显示方式"
+            >
+              <span
+                className={`block max-w-full overflow-hidden text-[clamp(1.5rem,7vw,2rem)] font-semibold leading-none tracking-[-0.04em] text-ellipsis whitespace-nowrap ${getProfitTextClass(
+                  totals.total,
+                )}`}
               >
-                <span className="text-lg font-bold leading-none">{showTotalProfitPercent ? formatSignedPercent(totalRate) : formatSignedCurrency(totals.total)}</span>
-              </button>
-            </div>
+                {showTotalProfitPercent ? formatSignedPercent(totalRate) : formatSignedCurrency(totals.total)}
+              </span>
+            </button>
           </div>
         </div>
       </section>
@@ -666,62 +662,21 @@ export default function PortfolioPage() {
         ) : (
           <>
             <section className="min-h-0 flex-1 bg-white">
-              <div
-                ref={tableRef}
-                className="h-full overflow-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                role="region"
-                aria-label="持仓总览表格"
-                onScroll={(event) =>
+              <PortfolioOverviewTable
+                rows={rows}
+                visibleColumns={visibleColumns}
+                scrollContainerRef={tableRef}
+                onOpenColumnConfig={() => setColumnModalOpen(true)}
+                onScrollPositionChange={(position) =>
                   persistViewState({
-                    tableTop: event.currentTarget.scrollTop,
-                    tableLeft: event.currentTarget.scrollLeft,
+                    tableTop: position.top,
+                    tableLeft: position.left,
                   })
                 }
-              >
-                <table className="w-max min-w-full border-collapse text-left">
-                  <thead>
-                    <tr className="border-b border-[#e2e7ff] bg-[#f2f3ff]">
-                      <th className="sticky left-0 top-0 z-20 w-[132px] max-w-[132px] bg-[#f2f3ff] px-3 py-2.5 text-[10px] font-bold tracking-[0.08em] text-[#747781]">
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => setColumnModalOpen(true)}
-                            className="inline-flex h-5 w-5 items-center justify-center rounded text-[#53617a] hover:bg-black/5"
-                            aria-label="配置列显示"
-                          >
-                            <SlidersHorizontal size={13} />
-                          </button>
-                          <span>基金名称</span>
-                        </div>
-                      </th>
-                      {visibleColumns.map((column) => (
-                        <th key={column.id} className="sticky top-0 z-10 min-w-[84px] bg-[#f2f3ff] px-0 py-2.5 text-[10px] font-bold tracking-[0.08em] text-[#747781]">
-                          {column.label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#f2f3ff]">
-                    {rows.map((row) => (
-                      <tr key={row.code}>
-                        <td className="sticky left-0 z-[1] w-[132px] max-w-[132px] bg-white px-3 py-3">
-                          <Link href={`/portfolio/${row.code}`} className="block" onClick={() => persistViewState({ windowY: window.scrollY })}>
-                            <div className="max-w-[132px] truncate text-sm font-bold text-[#131b2e]">{row.fundName}</div>
-                            <div className="max-w-[132px] truncate text-[10px] tabular-nums text-[#747781]">
-                              {row.code} | {row.holdingAmountLabel}
-                            </div>
-                          </Link>
-                        </td>
-                        {visibleColumns.map((column) => (
-                          <td key={`${row.code}-${column.id}`} className={getCellClass(row, column.id)}>
-                            {renderCellValue(row, column.id)}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                onBeforeNavigate={() => persistViewState({ windowY: window.scrollY })}
+                getCellClass={getCellClass}
+                renderCellValue={renderCellValue}
+              />
             </section>
           </>
         )}
@@ -763,7 +718,7 @@ export default function PortfolioPage() {
                     }}
                     onDrop={(event) => {
                       event.preventDefault();
-                      const sourceId = event.dataTransfer.getData("text/plain") as ColumnId;
+                      const sourceId = event.dataTransfer.getData("text/plain") as PortfolioOverviewColumnId;
                       if (!sourceId) return;
                       moveColumn(sourceId, item.id);
                       setDraggingColumnId(null);
