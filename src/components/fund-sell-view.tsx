@@ -51,7 +51,7 @@ export function FundSellView({ code }: FundSellViewProps) {
       return;
     }
     if (returnToHistory) {
-      router.replace("/portfolio/history");
+      router.replace("/history");
       return;
     }
     router.replace(`/portfolio/${code}`);
@@ -236,7 +236,7 @@ export function FundSellView({ code }: FundSellViewProps) {
               format="YYYY-MM-DD"
               allowClear={false}
               inputReadOnly
-              className="text-sm font-normal text-[#131b2e]"
+              className="no-zoom-picker text-base font-normal text-[#131b2e]"
               style={{ width: "100%" }}
               onChange={(_, dateString) => setTradeDate(Array.isArray(dateString) ? dateString[0] || "" : dateString || "")}
             />

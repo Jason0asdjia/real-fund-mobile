@@ -311,7 +311,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
                   format="YYYY-MM-DD"
                   allowClear
                   inputReadOnly
-                  className="typo-body-strong tabular-nums w-[138px] text-right"
+                  className="no-zoom-picker tabular-nums w-[138px] text-right text-base font-semibold text-[#131b2e]"
                   onChange={(_, dateString) => setDateInput(Array.isArray(dateString) ? dateString[0] || "" : dateString || "")}
                 />
              </label>

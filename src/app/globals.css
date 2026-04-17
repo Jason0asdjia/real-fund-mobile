@@ -596,6 +596,10 @@
     padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
   }
 
+  .no-zoom-picker .ant-picker-input > input {
+    font-size: 16px !important;
+  }
+
   .bottom-nav__item {
     @apply relative z-[1] flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-500;
   }
