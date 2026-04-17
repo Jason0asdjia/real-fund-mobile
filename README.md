@@ -5,9 +5,9 @@
 ## 项目简介
 
 - `mobile-first`，主视口按约 375px 设计
-- 核心导航：持仓总览 / 发现 / 行情中心 / 个人中心
+- 核心导航：持仓总览 / 发现 / 行情中心 / 交易历史 / 个人中心
 - 支持 PWA（主屏启动、离线页、Service Worker）
-- 保留基金场景核心能力：搜索、估值、净值回退、持仓收益计算、缓存策略
+- 保留基金场景核心能力：搜索、估值、净值回退、持仓收益计算、缓存策略、云端同步
 
 ## 主要功能
 
@@ -15,16 +15,19 @@
 - `Portfolio`：持仓管理、收益计算、基金详情与买卖记录
 - `Discover`：基金搜索、追踪、最近搜索
 - `Market`：指数、板块、快讯等行情数据
+- `History`：交易流水筛选、回顾与删除
 - `Settings`：刷新频率、PWA 状态、本地数据管理
 
 ## 技术栈
 
 - Next.js 14 + React 18 + TypeScript
-- Tailwind CSS 3
+- Tailwind CSS 4
+- Ant Design 6
 - Framer Motion
 - Day.js
 - Lucide React
 - localStorage（本地状态持久化）
+- Supabase Auth + 云端用户数据同步（可选）
 
 ## 快速开始
 
@@ -37,7 +40,7 @@ npm run dev
 
 ## Supabase 使用与设置（简要）
 
-本项目的云端用户数据与 GitHub 登录基于 Supabase，可选开启；未配置时应用仍可本地使用。
+本项目的云端用户数据与 GitHub 登录基于 Supabase，可选开启；开发环境默认允许本地直接使用，生产环境接入后可同步数据与关键偏好。
 
 1. 在 Supabase 创建项目。
 2. 到 `Project Settings -> API` 获取：
@@ -75,18 +78,24 @@ npm run build
 src/
   app/          # 页面与路由（App Router）
   components/   # 视图与交互组件
-  lib/          # API 封装、领域模型、时间与存储能力
+  lib/          # API 封装、领域模型、时间、存储、云同步与偏好能力
 public/         # PWA 与静态资源（manifest/sw/offline）
 supabase/sql/   # Supabase 初始化 SQL
 ```
 
-## 数据来源说明
+## 数据与同步
 
 项目延续 `real-time-fund` 的业务链路，但采用新的移动端 UI 与结构。当前主要复用的数据路径包括：
 
 - 基金搜索（东方财富 JSONP）
 - 实时估值（fundgz）
 - 历史净值回退（F10DataApi）
+
+数据策略：
+
+- 页面运行采用 `local-first`
+- 本地状态与关键 UI 偏好先落地浏览器存储
+- 登录后再与 Supabase 云端数据做版本比对、拉取、上传或合并
 
 ## 参考来源
 
@@ -103,10 +112,10 @@ supabase/sql/   # Supabase 初始化 SQL
 
 - `README.md`：给人看的项目说明（目标、功能、启动、目录）
 - `AGENT.md`：给 AI/协作者看的约束与实现规范
-- `src/app/README.md`：页面层口径与展示规则
-- `src/components/README.md`：组件层状态流与交互约束
-- `src/lib/README.md`：API、字段语义与回退策略
-- `API_AND_FIELDS_UPDATES.md`：历史变更归档
+- `src/app/README.md`：页面结构、导航与持仓页展示规则
+- `src/components/README.md`：壳层、Provider、交互与状态流
+- `src/lib/README.md`：API、存储、字段语义、回退与同步策略
+- `public/README.md`：PWA 静态资源说明
 
 ## 已知限制
 

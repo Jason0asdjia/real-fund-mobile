@@ -3,15 +3,20 @@
 路径：`/src/lib`
 
 ## 责任
+
 - 基金数据请求与解析
 - 持仓与收益计算
-- 本地缓存与时间序列处理
+- 本地存储、偏好、时间序列和云端同步
 
 ## 关键文件
+
 - `/src/lib/fund-api.ts`：基金搜索/估值/历史净值请求
 - `/src/lib/market-api.ts`：行情指数、基金板块、7x24 快讯请求
 - `/src/lib/portfolio.ts`：持仓计算与统计
 - `/src/lib/storage.ts`：本地存储读写
+- `/src/lib/user-preferences.ts`：关键 UI 偏好读写与同步白名单
+- `/src/lib/cloud-user-data.ts`：云端 payload、合并、拉取、上传
+- `/src/lib/supabase-client.ts`：Supabase 客户端
 - `/src/lib/valuation-timeseries.ts`：估值序列缓存
 - `/src/lib/time.ts`：交易时间处理
 - `/src/lib/types.ts`：业务类型定义
@@ -76,9 +81,30 @@
 - `officialConfirmedAt/officialConfirmedForDate`：官方值首次确认时间与对应净值日
 - `officialSource/estimateSource/source`：官方来源、估值来源、当前活跃来源
 
+## 存储与同步
+
+### 本地状态
+
+- `storage.ts` 管理 `AppState`、设备 ID、数据版本号下限
+- `normalizeAppState()` 负责容错和结构修正
+- 每次用户数据变更都会递增 `sync.dataVersion`
+
+### 关键偏好
+
+- `user-preferences.ts` 只管理需要跨设备同步的关键 UI 偏好
+- 当前包括：持仓列显隐、持仓列顺序、行情页自选指数、手动同步时间戳
+
+### 云端同步
+
+- `cloud-user-data.ts` 将应用状态拆为 `coreState + preferences + sync`
+- 同步策略是 `local-first, async-cloud-sync`
+- 支持云端较新拉取、本地较新上传、同版本冲突合并
+- 合并时会合并基金列表、交易记录、搜索历史、收藏和关键偏好
+
 ## 约束
+
 - 保持纯函数优先，减少 UI 耦合
 - 不破坏既有 localStorage 键结构
 - 计算逻辑若影响 UI 呈现（收益率、净值格式等），需同步验证 portfolio/market/settings 页面
 - 业务时间统一走 `time.ts`
-- 当前实现规范优先参考本文件；历史补充记录见根目录 `/API_AND_FIELDS_UPDATES.md`
+- 当前实现以代码和本文件为准
