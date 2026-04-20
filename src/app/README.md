@@ -18,7 +18,7 @@
 - `discover/page.tsx`：基金搜索、预览、添加
 - `market/page.tsx`：指数、板块、快讯
 - `history/page.tsx`：交易历史筛选页
-- `settings/page.tsx`：刷新频率、本地数据、备份、云同步、账户信息
+- `settings/page.tsx`：刷新频率、演示数据、备份导入导出、手动云同步、账户信息
 - `dashboard/page.tsx`：旧驾驶舱页面，代码保留但不在当前主导航
 
 ## 页面层约束

@@ -8,7 +8,7 @@ import dayjs from "dayjs";
 import { flushSync } from "react-dom";
 
 import { useAppState } from "@/components/app-provider";
-import { fetchFundHistoricalNavSeries } from "@/lib/fund-api";
+import { fetchFundHistoricalNavForDate } from "@/lib/fund-api";
 import { formatCurrency, formatSignedCurrency } from "@/lib/portfolio";
 import { holdingDaysInMarket, isBeforeTradeCutoffInMarket, todayInMarket } from "@/lib/time";
 import type { FundTransaction } from "@/lib/types";
@@ -40,6 +40,7 @@ export function FundSellView({ code }: FundSellViewProps) {
   const [beforeClose, setBeforeClose] = useState(() => isBeforeTradeCutoffInMarket());
   const [selectedTradeNav, setSelectedTradeNav] = useState<number | null>(null);
   const [selectedTradeNavDate, setSelectedTradeNavDate] = useState<string | null>(null);
+  const [tradeNavLoading, setTradeNavLoading] = useState(false);
   const returnToDetail = searchParams.get("from") === "detail";
   const returnToHistory = searchParams.get("from") === "history";
   const editTxId = searchParams.get("editTxId");
@@ -112,6 +113,7 @@ export function FundSellView({ code }: FundSellViewProps) {
       }
       if (!tradeDate || tradeDate >= today) {
         if (active) {
+          setTradeNavLoading(false);
           setSelectedTradeNav(fallbackNav > 0 ? fallbackNav : null);
           setSelectedTradeNavDate(today);
         }
@@ -119,13 +121,11 @@ export function FundSellView({ code }: FundSellViewProps) {
       }
 
       try {
-        const points = await fetchFundHistoricalNavSeries(code, 480);
+        if (active) setTradeNavLoading(true);
+        const point = await fetchFundHistoricalNavForDate(code, tradeDate);
         if (!active) return;
-        const ordered = points.slice().sort((a, b) => a.date.localeCompare(b.date));
-        const exact = ordered.find((item) => item.date === tradeDate);
-        const previous = ordered.filter((item) => item.date <= tradeDate).at(-1);
-        const historicalNav = exact?.nav ?? previous?.nav ?? null;
-        const resolvedDate = exact?.date ?? previous?.date ?? null;
+        const historicalNav = point?.nav ?? null;
+        const resolvedDate = point?.date ?? null;
         setSelectedTradeNav(historicalNav != null && Number.isFinite(historicalNav) && historicalNav > 0 ? historicalNav : (fallbackNav > 0 ? fallbackNav : null));
         setSelectedTradeNavDate(resolvedDate ?? (fallbackNav > 0 ? today : null));
       } catch {
@@ -133,6 +133,8 @@ export function FundSellView({ code }: FundSellViewProps) {
           setSelectedTradeNav(fallbackNav > 0 ? fallbackNav : null);
           setSelectedTradeNavDate(fallbackNav > 0 ? today : null);
         }
+      } finally {
+        if (active) setTradeNavLoading(false);
       }
     };
 
@@ -307,6 +309,12 @@ export function FundSellView({ code }: FundSellViewProps) {
             <Info size={12} />
             <span>{tradeNavHint}</span>
           </div>
+          {tradeNavLoading ? (
+            <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-[#747781]">
+              <Info size={12} />
+              <span>{`正在获取 ${tradeDate} 的历史净值...`}</span>
+            </div>
+          ) : null}
         </section>
 
         <section className="divide-y divide-[#e2e7ff]">
@@ -354,10 +362,10 @@ export function FundSellView({ code }: FundSellViewProps) {
         <button
           type="button"
           onClick={handleConfirm}
-          disabled={!amount || !share || !tradePrice || maxSellAmount <= 0}
+          disabled={!amount || !share || !tradePrice || maxSellAmount <= 0 || tradeNavLoading}
           className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-white px-3 text-sm font-normal text-[#131b2e] disabled:opacity-40"
         >
-          确认修改
+          {tradeNavLoading ? "加载净值中..." : "确认修改"}
         </button>
       </div>
     </div>

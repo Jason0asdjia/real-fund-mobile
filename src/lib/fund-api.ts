@@ -1,5 +1,5 @@
 import type { FundHoldingStock, FundSnapshot, SearchFundResult } from "@/lib/types";
-import { nowInMarket } from "@/lib/time";
+import { nowInMarket, toMarketDay } from "@/lib/time";
 
 const FUND_GZ_TIMEOUT_MS = 8000;
 const OFFICIAL_SOURCE_TIMEOUT_MS = 8000;
@@ -20,6 +20,11 @@ type CachedData<T> = {
   ts: number;
 };
 
+type HistoricalNavCoverageRange = {
+  start: string;
+  end: string;
+};
+
 const holdingsCache = new Map<string, CachedData<{ holdings: FundHoldingStock[]; holdingsReportDate: string | null; holdingsIsLastQuarter: boolean }>>();
 const profileCache = new Map<string, CachedData<Pick<FundSnapshot, "fundType" | "riskLevel" | "fundManager" | "fundCompany" | "fundScale" | "trackingTarget" | "inceptionDate">>>();
 const estimateCache = new Map<string, CachedData<FundSnapshot>>();
@@ -29,7 +34,9 @@ const previewInFlight = new Map<string, Promise<FundSnapshot>>();
 const fullInFlight = new Map<string, Promise<FundSnapshot>>();
 const archiveInFlight = new Map<string, Promise<FundSnapshot>>();
 const historicalNavSeriesSessionCache = new Map<string, CachedData<Array<{ date: string; nav: number }>>>();
+const historicalNavCoverageSessionCache = new Map<string, CachedData<HistoricalNavCoverageRange[]>>();
 const HISTORICAL_NAV_SERIES_SESSION_CACHE_MS = 20 * 60 * 1000;
+const TARGETED_HISTORICAL_NAV_LOOKBACK_WINDOWS = [45, 120, 240] as const;
 
 type RequestMode = "throttled" | "interactive";
 
@@ -340,9 +347,10 @@ const fetchHistoricalNetValues = async (code: string) => {
   return parseNetValuesFromHtml(apidata?.content || "");
 };
 
-const fetchHistoricalNetValuesPage = async (code: string, page: number, per: number, sdate = "") => {
+const fetchHistoricalNetValuesPage = async (code: string, page: number, per: number, sdate = "", edate = "") => {
   const startDate = sdate ? encodeURIComponent(sdate) : "";
-  const url = `https://fundf10.eastmoney.com/F10DataApi.aspx?type=lsjz&code=${code}&page=${page}&per=${per}&sdate=${startDate}&edate=`;
+  const endDate = edate ? encodeURIComponent(edate) : "";
+  const url = `https://fundf10.eastmoney.com/F10DataApi.aspx?type=lsjz&code=${code}&page=${page}&per=${per}&sdate=${startDate}&edate=${endDate}`;
   return runWithSourceInterval(
     "eastmoneyHistory",
     () => withTimeout(loadScript(url), OFFICIAL_SOURCE_TIMEOUT_MS, "Eastmoney history page timeout"),
@@ -409,9 +417,110 @@ export const fetchFundHistoricalNavSeries = async (code: string, maxCount = 240,
       data: merged,
       ts: Date.now(),
     });
+    mergeHistoricalNavCoverageIntoCache(code, [{
+      start: merged[0].date,
+      end: merged[merged.length - 1].date,
+    }]);
   }
 
   return merged.slice(-maxCount);
+};
+
+const mergeHistoricalNavSeriesIntoCache = (code: string, incoming: FundHistoricalNavPoint[]) => {
+  if (incoming.length === 0) return historicalNavSeriesSessionCache.get(code)?.data || [];
+
+  const existing = historicalNavSeriesSessionCache.get(code)?.data || [];
+  const mergedMap = new Map<string, number>();
+  existing.forEach((item) => mergedMap.set(item.date, item.nav));
+  incoming.forEach((item) => mergedMap.set(item.date, item.nav));
+
+  const merged = [...mergedMap.entries()]
+    .map(([date, nav]) => ({ date, nav }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-480);
+
+  historicalNavSeriesSessionCache.set(code, {
+    data: merged,
+    ts: Date.now(),
+  });
+
+  return merged;
+};
+
+const mergeHistoricalNavCoverageIntoCache = (code: string, incoming: HistoricalNavCoverageRange[]) => {
+  if (incoming.length === 0) return historicalNavCoverageSessionCache.get(code)?.data || [];
+
+  const existing = historicalNavCoverageSessionCache.get(code)?.data || [];
+  const normalized = [...existing, ...incoming]
+    .filter((item) => item.start && item.end && item.start <= item.end)
+    .sort((a, b) => a.start.localeCompare(b.start));
+
+  const merged: HistoricalNavCoverageRange[] = [];
+  normalized.forEach((range) => {
+    const previous = merged[merged.length - 1];
+    if (!previous) {
+      merged.push({ ...range });
+      return;
+    }
+
+    const previousEndPlusOne = toMarketDay(`${previous.end}T00:00:00`).add(1, "day").format("YYYY-MM-DD");
+    if (range.start <= previousEndPlusOne) {
+      if (range.end > previous.end) {
+        previous.end = range.end;
+      }
+      return;
+    }
+
+    merged.push({ ...range });
+  });
+
+  historicalNavCoverageSessionCache.set(code, {
+    data: merged,
+    ts: Date.now(),
+  });
+
+  return merged;
+};
+
+const getNearestHistoricalNavOnOrBefore = (series: FundHistoricalNavPoint[], targetDate: string) => {
+  const ordered = series.slice().sort((a, b) => a.date.localeCompare(b.date));
+  return ordered.filter((item) => item.date <= targetDate).at(-1) || null;
+};
+
+const hasHistoricalNavCoverageForDate = (code: string, targetDate: string) => {
+  const coverage = historicalNavCoverageSessionCache.get(code)?.data || [];
+  return coverage.some((range) => range.start <= targetDate && targetDate <= range.end);
+};
+
+export const fetchFundHistoricalNavForDate = async (code: string, targetDate: string): Promise<FundHistoricalNavPoint | null> => {
+  const cachedSeries = historicalNavSeriesSessionCache.get(code)?.data || [];
+  const cachedMatch = getNearestHistoricalNavOnOrBefore(cachedSeries, targetDate);
+  if (cachedMatch && hasHistoricalNavCoverageForDate(code, targetDate)) return cachedMatch;
+
+  let merged = cachedSeries;
+
+  for (const lookbackDays of TARGETED_HISTORICAL_NAV_LOOKBACK_WINDOWS) {
+    const rangeStart = toMarketDay(`${targetDate}T00:00:00`).subtract(lookbackDays, "day").format("YYYY-MM-DD");
+    const page = await fetchHistoricalNetValuesPage(code, 1, 49, rangeStart, targetDate);
+    const nearbyRows = parseNetValuesFromHtml(page?.content || "")
+      .map((item) => ({ date: item.date, nav: item.nav }))
+      .filter((item) => item.date <= targetDate)
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    merged = mergeHistoricalNavSeriesIntoCache(code, nearbyRows);
+    if (nearbyRows.length > 0) {
+      mergeHistoricalNavCoverageIntoCache(code, [{
+        start: nearbyRows[0].date,
+        end: nearbyRows[nearbyRows.length - 1].date,
+      }]);
+    }
+    const matched = getNearestHistoricalNavOnOrBefore(merged, targetDate);
+    if (matched && hasHistoricalNavCoverageForDate(code, targetDate)) {
+      return matched;
+    }
+  }
+
+  return getNearestHistoricalNavOnOrBefore(merged, targetDate);
 };
 
 const requestTencentFundQuote = (code: string, priority: "high" | "normal" | "interactive" = "normal") =>
