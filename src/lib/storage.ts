@@ -181,6 +181,7 @@ const normalizeTransaction = (value: unknown): FundTransaction | null => {
   const price = Number(value.price);
   const fee = value.fee == null ? null : Number(value.fee);
   const note = typeof value.note === "string" ? value.note : null;
+  const settledAt = typeof value.settledAt === "string" ? value.settledAt : null;
   if (!date || !type || !Number.isFinite(share) || !Number.isFinite(price)) return null;
   return {
     id,
@@ -190,6 +191,7 @@ const normalizeTransaction = (value: unknown): FundTransaction | null => {
     price,
     fee: fee != null && Number.isFinite(fee) ? fee : null,
     note,
+    settledAt,
   };
 };
 

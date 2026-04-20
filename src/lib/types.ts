@@ -67,6 +67,7 @@ export type FundTransaction = {
   price: number;
   fee?: number | null;
   note?: string | null;
+  settledAt?: string | null;
 };
 
 export type AppSyncState = {

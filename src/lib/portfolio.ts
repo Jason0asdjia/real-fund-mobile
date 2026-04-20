@@ -36,9 +36,13 @@ const addLikelyTradingDays = (baseDate: string, days: number) => {
 
 const isAfterCloseOrder = (note?: string | null) => (note || "").includes("15:00后");
 
-export const isTransactionConfirmedInMarket = (item: FundTransaction) => {
+export const getTransactionConfirmDateInMarket = (item: FundTransaction) => {
   const confirmOffset = isAfterCloseOrder(item.note) ? 2 : 1;
-  const confirmDate = addLikelyTradingDays(item.date, confirmOffset);
+  return addLikelyTradingDays(item.date, confirmOffset);
+};
+
+export const isTransactionConfirmedInMarket = (item: FundTransaction) => {
+  const confirmDate = getTransactionConfirmDateInMarket(item);
   const today = nowInMarket().startOf("day");
   return today.isSame(confirmDate, "day") || today.isAfter(confirmDate, "day");
 };

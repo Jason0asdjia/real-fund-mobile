@@ -7,7 +7,7 @@ import { ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronRight } from "lucide-r
 
 import { useAppState } from "@/components/app-provider";
 import { TwSelect } from "@/components/ui/tw-select";
-import { formatCurrency, isTransactionConfirmedInMarket } from "@/lib/portfolio";
+import { formatCurrency } from "@/lib/portfolio";
 import { formatMarketDate, nowInMarket, toMarketDay } from "@/lib/time";
 import type { FundTransaction, FundTransactionType } from "@/lib/types";
 
@@ -27,17 +27,17 @@ const txOrderToken = (item: TxItem) => {
 };
 
 const txDisplayTime = (item: TxItem) => {
-  const idPrefix = String(item.id || "").split("-")[0];
-  const idTs = Number(idPrefix);
-  if (Number.isFinite(idTs) && idTs > 0) {
-    return formatMarketDate(idTs, "YYYY-MM-DD HH:mm");
-  }
-
   if (/\d{2}:\d{2}/.test(item.date)) {
     return toMarketDay(item.date).format("YYYY-MM-DD HH:mm");
   }
 
-  return toMarketDay(`${item.date}T00:00:00`).format("YYYY-MM-DD HH:mm");
+  const idPrefix = String(item.id || "").split("-")[0];
+  const idTs = Number(idPrefix);
+  const timeLabel = Number.isFinite(idTs) && idTs > 0
+    ? formatMarketDate(idTs, "HH:mm")
+    : "00:00";
+
+  return `${toMarketDay(`${item.date}T00:00:00`).format("YYYY-MM-DD")} ${timeLabel}`;
 };
 
 const monthLabel = (monthKey: string) => {
@@ -293,7 +293,7 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
                     const iconClass = isBuy ? "bg-[#d7e2ff] text-[#24467c]" : "bg-[#ffdbd0] text-[#8c4f39]";
                     const amountClass = isBuy ? "text-[#005bc0]" : "text-[#8c4f39]";
                     const typeText = isBuy ? "申购" : "赎回";
-                    const confirmed = isTransactionConfirmedInMarket(item);
+                    const confirmed = Boolean(item.settledAt);
                     const currentOffset = draggingSwipeId === item.id ? dragOffset : openSwipeId === item.id ? -SWIPE_ACTION_WIDTH : 0;
                     return (
                       <div

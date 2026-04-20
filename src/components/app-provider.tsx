@@ -5,7 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useAuth } from "@/components/auth-provider";
 import { buildCloudPayloadFromState, createCloudPayload, fetchCloudUserData, fetchCloudUserMeta, hasMeaningfulCloudData, hydrateAppStateFromCloudPayload, mergeCloudPayloads, upsertCloudUserData } from "@/lib/cloud-user-data";
 import { fetchFundArchiveData, fetchFundBaseData, fetchFundHistoricalNavSeries, searchFunds } from "@/lib/fund-api";
-import { applyConfirmedTransactionsToHolding, isTransactionConfirmedInMarket } from "@/lib/portfolio";
+import { applyConfirmedTransactionsToHolding, getTransactionConfirmDateInMarket, isTransactionConfirmedInMarket } from "@/lib/portfolio";
 import { APP_STATE_KEY, bumpAppStateVersion, defaultAppState, loadAppState, markAppStateSynced, normalizeAppState, saveAppState, syncDataVersionFloor } from "@/lib/storage";
 import { isEstimateTimestampUsable, nowInMarket } from "@/lib/time";
 import type { AppState, FundHolding, FundSnapshot, FundTransaction, SearchFundResult, ValuationPoint } from "@/lib/types";
@@ -165,7 +165,7 @@ const rollbackConfirmedTransactionFromHolding = (
   removed: FundTransaction,
   remainingTransactions: FundTransaction[],
 ) => {
-  if (!isTransactionConfirmedInMarket(removed)) {
+  if (!removed.settledAt) {
     return holding || { share: null, cost: null, firstPurchaseDate: null };
   }
 
@@ -218,6 +218,49 @@ const rollbackConfirmedTransactionFromHolding = (
   }
 
   return nextHoldings;
+};
+
+const settleConfirmedTransactions = (current: AppState) => {
+  const today = nowInMarket().startOf("day");
+  let touched = false;
+  const nextHoldings = { ...current.holdings };
+  const nextTransactions = { ...current.transactions };
+
+  Object.entries(current.transactions).forEach(([code, items]) => {
+    const dueTransactions = items
+      .filter((item) => !item.settledAt && isTransactionConfirmedInMarket(item))
+      .filter((item) => getTransactionConfirmDateInMarket(item).isSame(today, "day"))
+      .slice()
+      .sort((a, b) => {
+        const dateCmp = `${a.date}`.localeCompare(`${b.date}`);
+        if (dateCmp !== 0) return dateCmp;
+        return `${a.id}`.localeCompare(`${b.id}`);
+      });
+
+    if (dueTransactions.length === 0) return;
+
+    let nextHolding = nextHoldings[code];
+    const settledIds = new Set(dueTransactions.map((item) => item.id));
+    dueTransactions.forEach((item) => {
+      nextHolding = addConfirmedTransactionToHolding(nextHolding, item);
+    });
+
+    nextHoldings[code] = nextHolding || { share: null, cost: null, firstPurchaseDate: null };
+    nextTransactions[code] = items.map((item) => (
+      settledIds.has(item.id)
+        ? { ...item, settledAt: today.format("YYYY-MM-DD") }
+        : item
+    ));
+    touched = true;
+  });
+
+  if (!touched) return current;
+
+  return {
+    ...current,
+    holdings: nextHoldings,
+    transactions: nextTransactions,
+  };
 };
 
 const dedupeFundsByCode = (funds: FundSnapshot[]) => {
@@ -944,6 +987,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!hydrated) return;
+    applyUserDataMutation((current) => settleConfirmedTransactions(current));
+  }, [applyUserDataMutation, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+
+    const settlePendingOnForeground = () => {
+      applyUserDataMutation((current) => settleConfirmedTransactions(current));
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        settlePendingOnForeground();
+      }
+    };
+
+    window.addEventListener("focus", settlePendingOnForeground);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", settlePendingOnForeground);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [applyUserDataMutation, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
     if (state.refreshMs < 5000) return;
     if (state.funds.length === 0) return;
 
@@ -1184,6 +1254,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const tx: FundTransaction = {
         ...next,
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        settledAt: null,
       };
       const nextTransactions = [tx, ...(current.transactions[code] || [])].sort((a, b) => b.date.localeCompare(a.date));
       const nextHoldings = { ...current.holdings };
@@ -1206,6 +1277,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             cost: nextShare > 0 ? nextTotalCost / nextShare : null,
             firstPurchaseDate,
           };
+          tx.settledAt = nowInMarket().format("YYYY-MM-DD");
         } else if (tx.type === "sell" && txShare > 0 && currentShare > 0) {
           const soldShare = Math.min(txShare, currentShare);
           const avgCost = currentShare > 0 ? currentTotalCost / currentShare : 0;
@@ -1222,6 +1294,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 cost: null,
                 firstPurchaseDate: null,
               };
+          tx.settledAt = nowInMarket().format("YYYY-MM-DD");
         }
       }
 
@@ -1245,6 +1318,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const updatedTx: FundTransaction = {
         ...next,
         id,
+        settledAt: null,
       };
       const nextTransactions = previousTransactions
         .map((item) => (item.id === id ? updatedTx : item))
@@ -1252,6 +1326,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const nextHoldings = { ...current.holdings };
       const afterRollback = rollbackConfirmedTransactionFromHolding(current.holdings[code], previous, nextTransactions);
       const finalHolding = addConfirmedTransactionToHolding(afterRollback, updatedTx);
+
+      if (isTransactionConfirmedInMarket(updatedTx)) {
+        updatedTx.settledAt = nowInMarket().format("YYYY-MM-DD");
+      }
 
       nextHoldings[code] = finalHolding;
 
@@ -1272,7 +1350,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const removed = previousTransactions.find((item) => item.id === id);
       const nextTransactions = previousTransactions.filter((item) => item.id !== id);
 
-      if (!removed || !isTransactionConfirmedInMarket(removed)) {
+      if (!removed || !removed.settledAt) {
         return {
           ...current,
           transactions: {
