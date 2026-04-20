@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, Info, Repeat2 } from "lucide-react";
 import { DatePicker } from "antd";
 import dayjs from "dayjs";
+import { flushSync } from "react-dom";
 
 import { useAppState } from "@/components/app-provider";
 import { fetchFundHistoricalNavSeries } from "@/lib/fund-api";
@@ -186,11 +187,13 @@ export function FundSellView({ code }: FundSellViewProps) {
       fee: estimatedFee,
       note: beforeClose ? "15:00前下单" : "15:00后下单",
     };
-    if (editingTransaction && editTxId) {
-      updateTransaction(fund.code, editTxId, payload);
-    } else {
-      addTransaction(fund.code, payload);
-    }
+    flushSync(() => {
+      if (editingTransaction && editTxId) {
+        updateTransaction(fund.code, editTxId, payload);
+      } else {
+        addTransaction(fund.code, payload);
+      }
+    });
     handleBack();
   };
 
