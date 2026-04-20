@@ -87,9 +87,11 @@ export function FundBuyView({ code }: FundBuyViewProps) {
   const today = todayInMarket();
   const officialNavRaw = Number(fund?.dwjz ?? 0);
   const officialNav = Number.isFinite(officialNavRaw) && officialNavRaw > 0 ? officialNavRaw : 0;
+  const lastNavRaw = Number(fund?.lastNav ?? 0);
+  const lastOfficialNav = Number.isFinite(lastNavRaw) && lastNavRaw > 0 ? lastNavRaw : 0;
   const estimateNavRaw = Number(fund?.gsz ?? 0);
   const estimateNav = Number.isFinite(estimateNavRaw) && estimateNavRaw > 0 ? estimateNavRaw : 0;
-  const latestNav = officialNav || estimateNav;
+  const latestNav = estimateNav || officialNav || lastOfficialNav;
   const fallbackNav = latestNav > 0
     ? latestNav
     : editingTransaction && Number.isFinite(Number(editingTransaction.price)) && Number(editingTransaction.price) > 0
@@ -170,10 +172,17 @@ export function FundBuyView({ code }: FundBuyViewProps) {
   const amount = Math.max(amountRaw, 0);
   const share = Math.max(shareRaw, 0);
   const estimatedFee = amount * FEE_RATE;
+  const usingHistoricalNav = tradeDate < today && selectedTradeNavDate && selectedTradeNavDate !== today;
+  const usingLatestOfficialFallback = tradeDate >= today && estimateNav <= 0 && (officialNav > 0 || lastOfficialNav > 0);
+  const latestOfficialDate = fund?.jzrq || null;
   const tradeNavHint = tradePrice > 0
-    ? tradeDate < today && selectedTradeNavDate && selectedTradeNavDate !== tradeDate
-      ? `换算净值 ${tradePrice.toFixed(4)}（${selectedTradeNavDate} 最近交易日）`
-      : `换算净值 ${tradePrice.toFixed(4)}（按 ${selectedTradeNavDate || tradeDate || today}）`
+    ? usingHistoricalNav
+      ? selectedTradeNavDate !== tradeDate
+        ? `换算净值 ${tradePrice.toFixed(4)}（${selectedTradeNavDate} 最近交易日）`
+        : `换算净值 ${tradePrice.toFixed(4)}（按 ${selectedTradeNavDate}）`
+      : usingLatestOfficialFallback
+        ? `今日暂无估值，按最新净值 ${tradePrice.toFixed(4)}${latestOfficialDate ? `（${latestOfficialDate}）` : ""}计算`
+        : `换算净值 ${tradePrice.toFixed(4)}（按 ${selectedTradeNavDate || tradeDate || today}）`
     : "暂无可用净值，无法换算";
 
   const handleConfirm = () => {

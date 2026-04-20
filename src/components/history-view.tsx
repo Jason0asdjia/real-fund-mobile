@@ -26,6 +26,17 @@ const txOrderToken = (item: TxItem) => {
   return toMarketDay(`${item.date}T00:00:00`).valueOf();
 };
 
+const txSortToken = (item: TxItem) => {
+  if (/\d{2}:\d{2}/.test(item.date)) {
+    return toMarketDay(item.date).valueOf();
+  }
+
+  const baseDay = toMarketDay(`${item.date}T00:00:00`).valueOf();
+  const idToken = txOrderToken(item);
+  const sameDayOffset = Math.max(0, idToken - baseDay);
+  return baseDay + sameDayOffset;
+};
+
 const txDisplayTime = (item: TxItem) => {
   if (/\d{2}:\d{2}/.test(item.date)) {
     return toMarketDay(item.date).format("YYYY-MM-DD HH:mm");
@@ -115,6 +126,8 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
       .filter((item) => (normalizedFundFilter === "all" ? true : item.code === normalizedFundFilter))
       .filter((item) => (filter === "all" ? true : item.type === filter))
       .sort((a, b) => {
+        const timeCmp = txSortToken(b) - txSortToken(a);
+        if (timeCmp !== 0) return timeCmp;
         const dateCmp = `${b.date}`.localeCompare(`${a.date}`);
         if (dateCmp !== 0) return dateCmp;
         return txOrderToken(b) - txOrderToken(a);
@@ -139,9 +152,11 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
     const monthKeys = grouped.map(([month]) => month);
     setExpandedMonths((prev) => {
       const next = new Set(Array.from(prev).filter((month) => monthKeys.includes(month)));
-      if (next.size > 0) return next;
       const currentMonth = nowInMarket().format("YYYY-MM");
-      if (monthKeys.includes(currentMonth)) return new Set([currentMonth]);
+      if (monthKeys.includes(currentMonth)) {
+        next.add(currentMonth);
+      }
+      if (next.size > 0) return next;
       if (monthKeys.length > 0) return new Set([monthKeys[0]]);
       return new Set<string>();
     });
