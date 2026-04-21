@@ -395,7 +395,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const applyUserDataMutation = useCallback((updater: (current: AppState) => AppState) => {
-    setState((current) => bumpAppStateVersion(updater(current)));
+    setState((current) => {
+      const next = bumpAppStateVersion(updater(current));
+      stateRef.current = next;
+      return next;
+    });
   }, []);
 
   const showCloudSyncStatus = useCallback((title: string, message: string) => {
