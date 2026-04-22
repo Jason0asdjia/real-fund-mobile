@@ -11,9 +11,11 @@
     --type-body-size: 0.875rem;
     --type-compact-size: 0.75rem;
     --type-meta-size: 0.625rem;
-    --bottom-nav-content-height: 4.5rem;
+    --bottom-nav-content-height: 4rem;
     --bottom-nav-safe-area: env(safe-area-inset-bottom, 0px);
-    --bottom-nav-total-height: calc(var(--bottom-nav-content-height) + var(--bottom-nav-safe-area));
+    --bottom-nav-safe-factor: 0.45;
+    --bottom-nav-effective-safe: calc(var(--bottom-nav-safe-area) * var(--bottom-nav-safe-factor));
+    --bottom-nav-total-height: calc(var(--bottom-nav-content-height) + var(--bottom-nav-effective-safe));
   }
 
   * {
@@ -491,7 +493,7 @@
     height: var(--bottom-nav-total-height);
     border-bottom-left-radius: 1.25rem;
     border-bottom-right-radius: 1.25rem;
-    padding: 0 0.5rem var(--bottom-nav-safe-area);
+    padding: 0 0.5rem var(--bottom-nav-effective-safe);
     overflow: hidden;
     isolation: isolate;
     --bottom-nav-progress: 0;
