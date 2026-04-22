@@ -653,19 +653,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        const bootState = shouldUseLocalForBootstrap
-          ? localState
-          : shouldKeepRuntimeState
-            ? stateRef.current
-            : defaultAppState;
-        const bootPayload = buildCloudPayloadFromState(bootState);
-        await withCloudSyncOverlay("上传本地数据", "正在将当前本地配置写入云端...", () => upsertCloudUserData(userId, bootPayload));
+        const latestBootPayload = getLatestLocalPayload();
+        await withCloudSyncOverlay("上传本地数据", "正在将当前本地配置写入云端...", () => upsertCloudUserData(userId, latestBootPayload));
         if (!active) return;
 
-        lastCloudPayloadRef.current = JSON.stringify(bootPayload);
+        lastCloudPayloadRef.current = JSON.stringify(latestBootPayload);
         setPreferenceSignature(JSON.stringify(readImportantPreferences()));
-        applySyncedState(bootState, bootPayload.sync.dataVersion, bootPayload.sync.updatedAt);
-        setValuationSeries(bootstrapSeries);
+        applySyncedState(stateRef.current, latestBootPayload.sync.dataVersion, latestBootPayload.sync.updatedAt);
+        if (!hasRuntimeChangedSinceBootstrap()) {
+          setValuationSeries(bootstrapSeries);
+        }
         setLocalOwnerUser(userId);
       } catch {
         if (!active) return;
