@@ -85,9 +85,17 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
   }, [deleteTarget]);
 
   const fundFilterOptions = useMemo(() => {
-    const holdingFunds = state.funds.filter((fund) => state.holdings[fund.code]?.share && Number(state.holdings[fund.code]?.share) > 0);
-    return [{ value: "all", label: "全部基金" }, ...holdingFunds.map((fund) => ({ value: fund.code, label: fund.name }))];
-  }, [state.funds, state.holdings]);
+    const transactionCodes = new Set(
+      Object.entries(state.transactions)
+        .filter(([, items]) => Array.isArray(items) && items.length > 0)
+        .map(([code]) => code),
+    );
+    const visibleFunds = state.funds.filter((fund) => {
+      const hasHolding = state.holdings[fund.code]?.share && Number(state.holdings[fund.code]?.share) > 0;
+      return Boolean(hasHolding || transactionCodes.has(fund.code));
+    });
+    return [{ value: "all", label: "全部基金" }, ...visibleFunds.map((fund) => ({ value: fund.code, label: fund.name }))];
+  }, [state.funds, state.holdings, state.transactions]);
 
   const normalizedFundFilter = fundFilterOptions.some((item) => item.value === fundFilter) ? fundFilter : "all";
 

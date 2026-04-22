@@ -147,7 +147,7 @@ export function PortfolioOverviewTable({
       <Table className="w-max min-w-full border-separate border-spacing-0 text-left">
         <TableHeader>
           <TableRow className="bg-slate-50 hover:bg-slate-50">
-            <TableHead data-sticky-fund-cell="true" className="sticky left-0 top-0 z-20 w-[160px] min-w-[160px] max-w-[160px] border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-600 shadow-[1px_0_0_0_theme(colors.slate.200)]">
+            <TableHead data-sticky-fund-cell="true" className="sticky left-0 top-0 z-20 w-[160px] min-w-[160px] max-w-[160px] border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-600 shadow-[1px_0_0_0_theme(colors.slate.200)] [touch-action:pan-y]">
               <div className="flex items-center gap-1">
                 <button
                   type="button"
@@ -170,7 +170,7 @@ export function PortfolioOverviewTable({
         <TableBody>
           {rows.map((row) => (
             <TableRow key={row.code} className="bg-white">
-              <TableCell data-sticky-fund-cell="true" className="sticky left-0 z-[1] w-[160px] min-w-[160px] max-w-[160px] border-b border-slate-200 bg-white px-3 py-2 shadow-[1px_0_0_0_theme(colors.slate.200)]">
+              <TableCell data-sticky-fund-cell="true" className="sticky left-0 z-[1] w-[160px] min-w-[160px] max-w-[160px] border-b border-slate-200 bg-white px-3 py-2 shadow-[1px_0_0_0_theme(colors.slate.200)] [touch-action:pan-y]">
                 <Link href={`/portfolio/${row.code}`} className="block rounded-sm outline-none transition-colors hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-300" onClick={onBeforeNavigate}>
                   <div className="max-w-[160px] truncate text-sm font-semibold text-slate-900">{row.fundName}</div>
                   <div className="mt-1 max-w-[160px] truncate text-[11px] tabular-nums text-slate-500">

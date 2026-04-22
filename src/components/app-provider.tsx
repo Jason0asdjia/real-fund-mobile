@@ -537,17 +537,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         : shouldKeepRuntimeState
           ? valuationSeriesRef.current
           : {};
+      const bootstrapVersion = bootstrapState.sync.dataVersion;
+      const bootstrapPreferenceSignature = JSON.stringify(localPreferences);
+      const hasRuntimeChangedSinceBootstrap = () => (
+        stateRef.current.sync.dataVersion !== bootstrapVersion
+        || JSON.stringify(readImportantPreferences()) !== bootstrapPreferenceSignature
+      );
+      const getLatestLocalPreferences = () => readImportantPreferences();
+      const getLatestLocalPayload = () => createCloudPayload(stateRef.current, getLatestLocalPreferences());
 
       // Local-first bootstrap: keep route switches responsive on mobile,
       // then reconcile cloud payload in background.
       setState(bootstrapState);
+      stateRef.current = bootstrapState;
       setValuationSeries(bootstrapSeries);
       fundsRef.current = bootstrapState.funds;
       setPreferenceSignature(JSON.stringify(localPreferences));
       setHydrated(true);
 
       try {
-        const localPayload = createCloudPayload(bootstrapState, localPreferences);
+        const localPayload = getLatestLocalPayload();
         showCloudSyncStatus("检查云端版本", "正在比对本地与云端数据版本...");
         const cloudMeta = await fetchCloudUserMeta(userId);
         if (!active) return;
@@ -555,34 +564,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           syncDataVersionFloor(cloudMeta.dataVersion);
         }
 
+        const latestLocalPayload = getLatestLocalPayload();
+
         if (!cloudMeta) {
-          if (hasMeaningfulCloudData(localPayload)) {
-            await withCloudSyncOverlay("上传本地数据", "云端暂无数据，正在上传当前设备内容...", () => upsertCloudUserData(userId, localPayload));
+          if (hasMeaningfulCloudData(latestLocalPayload)) {
+            await withCloudSyncOverlay("上传本地数据", "云端暂无数据，正在上传当前设备内容...", () => upsertCloudUserData(userId, latestLocalPayload));
             if (!active) return;
-            lastCloudPayloadRef.current = JSON.stringify(localPayload);
-            applySyncedState(stateRef.current, localPayload.sync.dataVersion, localPayload.sync.updatedAt);
+            lastCloudPayloadRef.current = JSON.stringify(latestLocalPayload);
+            applySyncedState(stateRef.current, latestLocalPayload.sync.dataVersion, latestLocalPayload.sync.updatedAt);
           }
           hideCloudSyncStatus();
           setLocalOwnerUser(userId);
           return;
         }
 
-        const sameVersion = cloudMeta.dataVersion === localPayload.sync.dataVersion;
-        const sameHash = cloudMeta.contentHash === localPayload.sync.contentHash;
+        const sameVersion = cloudMeta.dataVersion === latestLocalPayload.sync.dataVersion;
+        const sameHash = cloudMeta.contentHash === latestLocalPayload.sync.contentHash;
 
         if (sameVersion && sameHash) {
-          lastCloudPayloadRef.current = JSON.stringify(localPayload);
-          applySyncedState(stateRef.current, localPayload.sync.dataVersion, cloudMeta.updatedAt);
+          lastCloudPayloadRef.current = JSON.stringify(latestLocalPayload);
+          applySyncedState(stateRef.current, latestLocalPayload.sync.dataVersion, cloudMeta.updatedAt);
           hideCloudSyncStatus();
           setLocalOwnerUser(userId);
           return;
         }
 
-        if (localPayload.sync.dataVersion > cloudMeta.dataVersion || (sameVersion && !sameHash && cloudMeta.deviceId === localPayload.sync.deviceId)) {
-          await withCloudSyncOverlay("上传本地数据", "本地数据版本更新，正在同步到云端...", () => upsertCloudUserData(userId, localPayload));
+        if (latestLocalPayload.sync.dataVersion > cloudMeta.dataVersion || (sameVersion && !sameHash && cloudMeta.deviceId === latestLocalPayload.sync.deviceId)) {
+          await withCloudSyncOverlay("上传本地数据", "本地数据版本更新，正在同步到云端...", () => upsertCloudUserData(userId, latestLocalPayload));
           if (!active) return;
-          lastCloudPayloadRef.current = JSON.stringify(localPayload);
-          applySyncedState(stateRef.current, localPayload.sync.dataVersion, localPayload.sync.updatedAt);
+          lastCloudPayloadRef.current = JSON.stringify(latestLocalPayload);
+          applySyncedState(stateRef.current, latestLocalPayload.sync.dataVersion, latestLocalPayload.sync.updatedAt);
           setLocalOwnerUser(userId);
           return;
         }
@@ -598,31 +609,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             lastUpdatedAt: refreshedCount > 0 ? nowInMarket().format("YYYY-MM-DD HH:mm:ss") : cloudState.lastUpdatedAt,
           };
           const cloudPayload = createCloudPayload(cloudStateForRuntime, cloud.preferences);
-          const shouldAskConflict = hasMeaningfulCloudData(localPayload) && hasMeaningfulCloudData(cloudPayload)
+          const latestRuntimeState = stateRef.current;
+          const latestRuntimePayload = getLatestLocalPayload();
+          const shouldAskConflict = hasMeaningfulCloudData(latestRuntimePayload) && hasMeaningfulCloudData(cloudPayload)
             && localOwnerUserId !== userId
-            && JSON.stringify(localPayload) !== JSON.stringify(cloudPayload);
+            && JSON.stringify(latestRuntimePayload) !== JSON.stringify(cloudPayload);
 
           if (shouldAskConflict) {
             pendingConflictRef.current = {
-              localState,
+              localState: latestRuntimeState,
               cloudState: cloudStateForRuntime,
-              localPayload,
+              localPayload: latestRuntimePayload,
               cloudPayload: createCloudPayload(cloudStateForRuntime, cloud.preferences),
             };
             setConflictResolution({
               open: true,
-              localSummary: getStateSummary(localState),
+              localSummary: getStateSummary(latestRuntimeState),
               cloudSummary: getStateSummary(cloudStateForRuntime),
               resolving: false,
             });
-            setState(bootstrapState);
-            setPreferenceSignature(JSON.stringify(localPreferences));
+            setPreferenceSignature(JSON.stringify(getLatestLocalPreferences()));
           } else {
             const mergedPayload = sameVersion && !sameHash
-              ? mergeCloudPayloads(localPayload, cloudPayload)
+              ? mergeCloudPayloads(latestRuntimePayload, cloudPayload)
               : cloudPayload;
             skipNextInitialRefreshRef.current = refreshedCount > 0;
-            applyPayloadAsRuntime(mergedPayload);
+            if (!hasRuntimeChangedSinceBootstrap()) {
+              applyPayloadAsRuntime(mergedPayload);
+            }
             if (mergedPayload.sync.dataVersion > cloudPayload.sync.dataVersion || mergedPayload.sync.contentHash !== cloudPayload.sync.contentHash) {
               await withCloudSyncOverlay("写回合并结果", "已合并本地与云端差异，正在保存...", () => upsertCloudUserData(userId, mergedPayload));
               if (!active) return;
@@ -652,9 +666,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } catch {
         if (!active) return;
         hideCloudSyncStatus();
-        setState(bootstrapState);
-        setValuationSeries(bootstrapSeries);
-        fundsRef.current = bootstrapState.funds;
+        if (!hasRuntimeChangedSinceBootstrap()) {
+          setState(bootstrapState);
+          stateRef.current = bootstrapState;
+          setValuationSeries(bootstrapSeries);
+          fundsRef.current = bootstrapState.funds;
+        }
       }
     };
 
@@ -720,6 +737,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (cloudSyncInFlightRef.current) return;
 
     const payload = buildCloudPayloadFromState(state);
+    const payloadVersion = payload.sync.dataVersion;
+    const payloadContentHash = payload.sync.contentHash;
+    const getLatestRuntimePayload = () => buildCloudPayloadFromState(stateRef.current);
+    const isStalePayload = () => {
+      const latestPayload = getLatestRuntimePayload();
+      return latestPayload.sync.dataVersion !== payloadVersion || latestPayload.sync.contentHash !== payloadContentHash;
+    };
     const isMeaningfulPayload = hasMeaningfulCloudData(payload);
     if (suppressEmptyCloudSyncRef.current && !isMeaningfulPayload) {
       return;
@@ -736,11 +760,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const timer = window.setTimeout(() => {
       void fetchCloudUserMeta(userId)
         .then(async (cloudMeta) => {
+          if (isStalePayload()) return;
           if (cloudMeta) {
             syncDataVersionFloor(cloudMeta.dataVersion);
           }
           if (!cloudMeta || cloudMeta.dataVersion < payload.sync.dataVersion) {
+            if (isStalePayload()) return;
             await withCloudSyncOverlay("上传本地数据", "检测到本地改动，正在同步到云端...", () => upsertCloudUserData(userId, payload));
+            if (isStalePayload()) return;
             lastCloudPayloadRef.current = signature;
             setLocalOwnerUser(userId);
             setState((current) => (
@@ -752,6 +779,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
 
           if (cloudMeta.dataVersion === payload.sync.dataVersion && cloudMeta.contentHash === payload.sync.contentHash) {
+            if (isStalePayload()) return;
             lastCloudPayloadRef.current = signature;
             setLocalOwnerUser(userId);
             setState((current) => (
@@ -763,8 +791,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
 
           const cloud = await fetchCloudUserData(userId);
+          if (isStalePayload()) return;
           if (!cloud) {
             await withCloudSyncOverlay("上传本地数据", "云端记录缺失，正在补写当前数据...", () => upsertCloudUserData(userId, payload));
+            if (isStalePayload()) return;
             lastCloudPayloadRef.current = signature;
             setLocalOwnerUser(userId);
             setState((current) => (
@@ -775,9 +805,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             return;
           }
 
-          const mergedPayload = mergeCloudPayloads(payload, cloud);
+          if (isStalePayload()) return;
+          const mergedPayload = mergeCloudPayloads(getLatestRuntimePayload(), cloud);
           applyPayloadAsRuntime(mergedPayload);
           await withCloudSyncOverlay("写回合并结果", "发现云端差异，正在合并并保存...", () => upsertCloudUserData(userId, mergedPayload));
+          if (isStalePayload()) return;
           lastCloudPayloadRef.current = JSON.stringify(mergedPayload);
           setLocalOwnerUser(userId);
         })
@@ -790,7 +822,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }, 420);
 
     return () => window.clearTimeout(timer);
-  }, [conflictResolution.open, hydrated, state, userId, withCloudSyncOverlay]);
+  }, [conflictResolution.open, hydrated, preferenceSignature, state, userId, withCloudSyncOverlay]);
 
   const resolveDataConflict = useCallback(async (strategy: "keep_local" | "keep_cloud" | "merge") => {
     if (!userId || !pendingConflictRef.current) return;
