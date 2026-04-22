@@ -2,11 +2,11 @@
 
 import clsx from "clsx";
 import { BarChart3, History, Settings2, TrendingUp } from "lucide-react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { useAppState } from "@/components/app-provider";
+import { Tabs05 } from "@/components/ui/tabs-05";
 
 const items = [
   { href: "/portfolio", label: "持仓总览", icon: BarChart3 },
@@ -25,15 +25,13 @@ export function BottomNav() {
 
   useEffect(() => {
     if (!passiveRefreshAt) return;
-    const isNewPassiveRefresh = lastPassiveRefreshRef.current !== null && lastPassiveRefreshRef.current !== passiveRefreshAt;
 
+    const isNewPassiveRefresh = lastPassiveRefreshRef.current !== null && lastPassiveRefreshRef.current !== passiveRefreshAt;
     lastPassiveRefreshRef.current = passiveRefreshAt;
     cycleStartRef.current = passiveRefreshAt;
     setProgress(Math.min(Math.max((Date.now() - passiveRefreshAt) / Math.max(state.refreshMs, 1), 0), 1));
 
-    if (!isNewPassiveRefresh) {
-      return;
-    }
+    if (!isNewPassiveRefresh) return;
 
     setFlashActive(true);
     const timer = window.setTimeout(() => setFlashActive(false), 900);
@@ -61,27 +59,13 @@ export function BottomNav() {
   }, [passiveRefreshAt, state.refreshMs]);
 
   return (
-    <nav
-      className={clsx("bottom-nav", flashActive && "bottom-nav--flash")}
-      aria-label="主导航"
+    <Tabs05
+      items={items}
+      pathname={pathname}
+      className={clsx(flashActive && "bottom-nav--flash")}
       style={{
         ["--bottom-nav-progress" as string]: progress.toString(),
-        ["--bottom-nav-progress-angle" as string]: `${Math.max(0, Math.min(progress, 1)) * 360}deg`,
-        ["--bottom-nav-progress-mid-angle" as string]: `${Math.max(0, Math.min(progress, 1)) * 208.8}deg`,
-        ["--refresh-cycle" as string]: `${state.refreshMs}ms`,
       }}
-    >
-      {items.map((item) => {
-        const Icon = item.icon;
-        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-
-        return (
-          <Link key={item.href} href={item.href} className={clsx("bottom-nav__item", active && "bottom-nav__item--active")}>
-            <Icon size={18} strokeWidth={2} />
-            <span>{item.label}</span>
-          </Link>
-        );
-      })}
-    </nav>
+    />
   );
 }

@@ -1,12 +1,6 @@
 @config "../../tailwind.config.ts";
 @import "tailwindcss";
 
-@property --bottom-nav-progress {
-  syntax: "<number>";
-  inherits: false;
-  initial-value: 0;
-}
-
 @layer base {
   :root {
     --type-page-title-size: 1.5rem;
@@ -17,6 +11,9 @@
     --type-body-size: 0.875rem;
     --type-compact-size: 0.75rem;
     --type-meta-size: 0.625rem;
+    --bottom-nav-height: 4.9rem;
+    --bottom-nav-safe-area: env(safe-area-inset-bottom, 0px);
+    --bottom-nav-total-height: calc(var(--bottom-nav-height) + var(--bottom-nav-safe-area));
   }
 
   * {
@@ -75,8 +72,9 @@
   }
 
   .app-main {
-    @apply relative z-10 min-h-[100dvh] bg-white px-3 pt-4 md:px-4;
-    padding-bottom: calc(env(safe-area-inset-bottom) + 5.6rem);
+    @apply relative z-10 bg-white px-3 pt-4 md:px-4;
+    min-height: calc(100dvh - var(--bottom-nav-total-height));
+    padding-bottom: 0.5rem;
   }
 
   .screen {
@@ -488,79 +486,37 @@
   }
 
   .bottom-nav {
-    @apply fixed left-7 right-7 z-20 grid grid-cols-4 gap-1.5 border border-slate-200 bg-white p-2 shadow-[0_3px_10px_rgba(15,23,42,0.12)] md:left-1/2 md:right-auto md:w-[400px] md:-translate-x-1/2;
+    @apply fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 backdrop-blur;
+    height: var(--bottom-nav-total-height);
+    border-bottom-left-radius: 1.25rem;
+    border-bottom-right-radius: 1.25rem;
+    padding: 0.5rem 0.5rem calc(var(--bottom-nav-safe-area) + 0.5rem);
     overflow: hidden;
-    position: fixed;
     isolation: isolate;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.05rem);
-    border-radius: 1.45rem;
-    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px) * 0.22);
     --bottom-nav-progress: 0;
-    --bottom-nav-progress-angle: 0deg;
-    --bottom-nav-progress-mid-angle: 0deg;
-    --bottom-nav-progress-color: #005bc0;
-    --bottom-nav-progress-color-2: #2563eb;
-    --bottom-nav-progress-color-3: #38bdf8;
-    --bottom-nav-progress-track: transparent;
-    --bottom-nav-border-width: 2.5px;
-    border-color: transparent;
   }
 
   .bottom-nav::before {
     content: "";
     position: absolute;
-    inset: 0;
-    padding: var(--bottom-nav-border-width);
-    border-radius: inherit;
-    background: conic-gradient(
-      from -90deg,
-      var(--bottom-nav-progress-color) 0deg,
-      var(--bottom-nav-progress-color-2) var(--bottom-nav-progress-mid-angle),
-      var(--bottom-nav-progress-color-3) var(--bottom-nav-progress-angle),
-      var(--bottom-nav-progress-track) var(--bottom-nav-progress-angle) 360deg
-    );
+    top: 0;
+    left: 0;
+    width: calc(var(--bottom-nav-progress) * 100%);
+    height: 2px;
+    background: linear-gradient(90deg, #005bc0 0%, #2563eb 50%, #38bdf8 100%);
+    transition: width 90ms linear, filter 180ms ease-out;
     pointer-events: none;
     z-index: 0;
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    mask-composite: exclude;
-    filter: drop-shadow(0 0 2px rgba(37, 99, 235, 0.18));
-    transition: filter 180ms ease-out, background 180ms ease-out;
-  }
-
-  .bottom-nav::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: 0;
-    background: conic-gradient(
-      from -90deg,
-      transparent 0deg,
-      transparent calc(var(--bottom-nav-progress-angle) - 2deg),
-      rgba(255, 255, 255, 0.95) calc(var(--bottom-nav-progress-angle) - 1deg),
-      #dbeafe var(--bottom-nav-progress-angle),
-      transparent calc(var(--bottom-nav-progress-angle) + 1deg),
-      transparent 360deg
-    );
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    mask-composite: exclude;
-    padding: var(--bottom-nav-border-width);
-    filter: drop-shadow(0 0 2px rgba(96, 165, 250, 0.24));
-  }
-
-  .bottom-nav--flash {
-    --bottom-nav-progress-color: #2563eb;
-    --bottom-nav-progress-color-2: #3b82f6;
-    --bottom-nav-progress-color-3: #93c5fd;
   }
 
   .bottom-nav--flash::before {
-    animation: bottom-nav-border-flash 900ms ease-out 1;
+    filter: brightness(1.15) drop-shadow(0 0 3px rgba(37, 99, 235, 0.45));
+  }
+
+  .bottom-nav__list {
+    @apply mx-auto grid w-full max-w-3xl grid-cols-4 gap-1;
+    position: relative;
+    z-index: 1;
   }
 
   .app-modal-open .bottom-nav {
@@ -601,11 +557,15 @@
   }
 
   .bottom-nav__item {
-    @apply relative z-[1] flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-500;
+    @apply flex min-h-11 w-full flex-col items-center justify-center gap-1 rounded-xl border border-transparent text-slate-500 transition-colors;
   }
 
   .bottom-nav__item span {
-    @apply text-[11px];
+    @apply text-[11px] font-medium;
+  }
+
+  .bottom-nav__item--active {
+    @apply border-brand-100 bg-brand-50 text-brand-700;
   }
 
   .is-up {
@@ -641,20 +601,3 @@
   }
 }
 
-@keyframes bottom-nav-refresh-cycle {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes bottom-nav-border-flash {
-  0% {
-    filter: drop-shadow(0 0 4px rgba(0, 91, 192, 0.2)) brightness(1);
-  }
-  35% {
-    filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.78)) brightness(1.18);
-  }
-  100% {
-    filter: drop-shadow(0 0 4px rgba(0, 91, 192, 0.2)) brightness(1);
-  }
-}

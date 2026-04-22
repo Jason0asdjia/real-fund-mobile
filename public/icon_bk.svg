@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGlow" x1="180" y1="140" x2="860" y2="900" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF8F2"/>
+      <stop offset="1" stop-color="#F8FAFF"/>
+    </linearGradient>
+
+    <radialGradient id="coinShine" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(0 -30) rotate(90) scale(140 140)">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="arrowGrad" x1="150" y1="760" x2="900" y2="240" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FF4B3E"/>
+      <stop offset="1" stop-color="#FF6A45"/>
+    </linearGradient>
+
+    <linearGradient id="bar1" x1="0" y1="860" x2="0" y2="680" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FF403D"/>
+      <stop offset="1" stop-color="#FF5D48"/>
+    </linearGradient>
+    <linearGradient id="bar2" x1="0" y1="860" x2="0" y2="600" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FF862F"/>
+      <stop offset="1" stop-color="#FFA33B"/>
+    </linearGradient>
+    <linearGradient id="bar3" x1="0" y1="860" x2="0" y2="510" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F4A625"/>
+      <stop offset="1" stop-color="#F8BB3C"/>
+    </linearGradient>
+    <linearGradient id="bar4" x1="0" y1="860" x2="0" y2="360" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#EEA329"/>
+      <stop offset="1" stop-color="#F5BE42"/>
+    </linearGradient>
+
+    <linearGradient id="btcGrad" x1="0" y1="-120" x2="0" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFBF42"/>
+      <stop offset="1" stop-color="#F7931A"/>
+    </linearGradient>
+    <linearGradient id="ethGrad" x1="0" y1="-112" x2="0" y2="112" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7C78F7"/>
+      <stop offset="1" stop-color="#4F46E5"/>
+    </linearGradient>
+    <linearGradient id="usdtGrad" x1="0" y1="-96" x2="0" y2="96" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#38C88B"/>
+      <stop offset="1" stop-color="#16A56C"/>
+    </linearGradient>
+    <linearGradient id="usdcGrad" x1="0" y1="-90" x2="0" y2="90" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4A95FF"/>
+      <stop offset="1" stop-color="#2B67DE"/>
+    </linearGradient>
+
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#1A1A1A" flood-opacity="0.12"/>
+    </filter>
+    <filter id="coinShadow" x="-40%" y="-40%" width="200%" height="220%">
+      <feDropShadow dx="0" dy="18" stdDeviation="14" flood-color="#1A1A1A" flood-opacity="0.18"/>
+    </filter>
+
+    <style>
+      .cn { font-family: "SF Pro Display","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif; }
+      .sans { font-family: "SF Pro Display","Inter","Arial",sans-serif; }
+    </style>
+  </defs>
+
+  <!-- background -->
+  <rect width="1024" height="1024" rx="0" fill="#FFFFFF"/>
+  <circle cx="790" cy="785" r="220" fill="url(#bgGlow)" opacity="0.95"/>
+
+  <!-- A股 -->
+  <g transform="translate(92 110)">
+    <text x="0" y="108" class="cn" font-size="126" font-weight="800" fill="#FF4A3A" letter-spacing="-4">A</text>
+    <text x="128" y="94" class="cn" font-size="82" font-weight="800" fill="#FF4A3A">股</text>
+    <path d="M10 134C86 94 185 94 296 112C212 116 111 141 24 176C2 183 -9 147 10 134Z" fill="#FF4A3A"/>
+  </g>
+
+  <!-- candle sticks -->
+  <g opacity="0.96">
+    <g transform="translate(175 392)">
+      <rect x="26" y="0" width="8" height="258" rx="4" fill="#FF816D"/>
+      <rect x="0" y="55" width="60" height="150" rx="10" fill="#FF856F"/>
+    </g>
+    <g transform="translate(292 320)">
+      <rect x="28" y="0" width="8" height="256" rx="4" fill="#FF7B68"/>
+      <rect x="0" y="62" width="64" height="148" rx="10" fill="#FF7860"/>
+    </g>
+    <g transform="translate(408 262)">
+      <rect x="28" y="0" width="8" height="252" rx="4" fill="#FF4F45"/>
+      <rect x="0" y="56" width="64" height="148" rx="10" fill="#FF4138"/>
+    </g>
+    <g transform="translate(522 212)">
+      <rect x="28" y="0" width="8" height="248" rx="4" fill="#FF3931"/>
+      <rect x="0" y="52" width="64" height="146" rx="10" fill="#FF2626"/>
+    </g>
+  </g>
+
+  <!-- bars -->
+  <g filter="url(#softShadow)">
+    <rect x="242" y="678" width="136" height="236" rx="26" fill="url(#bar1)"/>
+    <rect x="420" y="582" width="142" height="332" rx="26" fill="url(#bar2)"/>
+    <path d="M608 914V628C608 613 620 601 635 601H744C759 601 771 613 771 628V914H608Z" fill="url(#bar3)"/>
+    <path d="M835 914V450C835 435 847 423 862 423H952C967 423 979 435 979 450V914H835Z" fill="url(#bar4)"/>
+  </g>
+
+  <!-- arrow -->
+  <path d="M148 725L470 466C485 454 506 453 521 463L626 536L880 246L846 235L998 176L944 329L905 292L668 572C655 588 631 591 614 578L513 504L172 757C159 768 139 767 129 754C119 741 126 724 148 725Z" fill="url(#arrowGrad)"/>
+
+  <!-- coins back first -->
+  <g filter="url(#coinShadow)">
+    <!-- USDT back -->
+    <g transform="translate(690 855)">
+      <circle r="86" fill="url(#usdtGrad)" stroke="white" stroke-width="8"/>
+      <circle r="86" fill="url(#coinShine)" opacity="0.6"/>
+      <rect x="-34" y="-36" width="68" height="16" rx="4" fill="white" opacity="0.95"/>
+      <rect x="-10" y="-20" width="20" height="54" rx="4" fill="white" opacity="0.95"/>
+      <ellipse cx="0" cy="-1" rx="48" ry="11" fill="none" stroke="white" stroke-width="6" opacity="0.95"/>
+    </g>
+
+    <!-- USDC back -->
+    <g transform="translate(840 865)">
+      <circle r="82" fill="url(#usdcGrad)" stroke="white" stroke-width="8"/>
+      <circle r="82" fill="url(#coinShine)" opacity="0.6"/>
+      <text x="0" y="22" text-anchor="middle" class="sans" font-size="74" font-weight="800" fill="white">$</text>
+      <path d="M-49 -35C-65 -22 -74 -2 -74 8C-74 33 -64 53 -50 66" stroke="white" stroke-width="6" stroke-linecap="round"/>
+      <path d="M49 -35C65 -22 74 -2 74 8C74 33 64 53 50 66" stroke="white" stroke-width="6" stroke-linecap="round"/>
+    </g>
+  </g>
+
+  <!-- coins front -->
+  <g filter="url(#coinShadow)">
+    <!-- BTC front -->
+    <g transform="translate(720 690)">
+      <circle r="122" fill="url(#btcGrad)" stroke="white" stroke-width="10"/>
+      <circle r="122" fill="url(#coinShine)" opacity="0.75"/>
+      <text x="0" y="44" text-anchor="middle" class="sans" font-size="132" font-weight="900" fill="white">₿</text>
+    </g>
+
+    <!-- ETH front -->
+    <g transform="translate(895 715)">
+      <circle r="108" fill="url(#ethGrad)" stroke="white" stroke-width="10"/>
+      <circle r="108" fill="url(#coinShine)" opacity="0.7"/>
+      <path d="M0 -58L-34 -3L0 17L34 -3L0 -58Z" fill="#F5F3FF"/>
+      <path d="M0 62L-34 11L0 30L34 11L0 62Z" fill="#DDD6FE"/>
+      <path d="M-34 -3L0 17V-58L-34 -3Z" fill="#C4B5FD"/>
+      <path d="M34 -3L0 17V-58L34 -3Z" fill="#A78BFA"/>
+      <path d="M-34 11L0 62V30L-34 11Z" fill="#8B7CF4"/>
+      <path d="M34 11L0 62V30L34 11Z" fill="#665EF0"/>
+    </g>
+  </g>
+</svg>
