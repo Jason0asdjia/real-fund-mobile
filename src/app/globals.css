@@ -11,9 +11,9 @@
     --type-body-size: 0.875rem;
     --type-compact-size: 0.75rem;
     --type-meta-size: 0.625rem;
-    --bottom-nav-height: 4.9rem;
+    --bottom-nav-content-height: 4.5rem;
     --bottom-nav-safe-area: env(safe-area-inset-bottom, 0px);
-    --bottom-nav-total-height: calc(var(--bottom-nav-height) + var(--bottom-nav-safe-area));
+    --bottom-nav-total-height: calc(var(--bottom-nav-content-height) + var(--bottom-nav-safe-area));
   }
 
   * {
@@ -23,6 +23,7 @@
   html,
   body {
     @apply m-0 min-h-screen bg-slate-50 text-slate-900 antialiased;
+    height: 100%;
   }
 
   html {
@@ -56,7 +57,7 @@
 
 @layer components {
   .app-frame {
-    @apply relative min-h-[100dvh] overflow-x-hidden bg-white;
+    @apply relative min-h-[100svh] overflow-x-hidden bg-white;
   }
 
   .ambient {
@@ -73,8 +74,8 @@
 
   .app-main {
     @apply relative z-10 bg-white px-3 pt-4 md:px-4;
-    min-height: calc(100dvh - var(--bottom-nav-total-height));
-    padding-bottom: 0.5rem;
+    min-height: 100svh;
+    padding-bottom: calc(var(--bottom-nav-total-height) + 0.5rem);
   }
 
   .screen {
@@ -490,7 +491,7 @@
     height: var(--bottom-nav-total-height);
     border-bottom-left-radius: 1.25rem;
     border-bottom-right-radius: 1.25rem;
-    padding: 0.5rem 0.5rem calc(var(--bottom-nav-safe-area) + 0.5rem);
+    padding: 0 0.5rem var(--bottom-nav-safe-area);
     overflow: hidden;
     isolation: isolate;
     --bottom-nav-progress: 0;
@@ -515,6 +516,8 @@
 
   .bottom-nav__list {
     @apply mx-auto grid w-full max-w-3xl grid-cols-4 gap-1;
+    height: var(--bottom-nav-content-height);
+    align-items: center;
     position: relative;
     z-index: 1;
   }

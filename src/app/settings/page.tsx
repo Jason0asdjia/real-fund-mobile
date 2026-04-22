@@ -327,7 +327,7 @@ export default function SettingsPage() {
         </section>
       </div>
 
-      <main className="px-0 pb-20 pt-3">
+      <main className="px-0 pb-3 pt-3">
 
       <section className="mb-5">
         <h2 className="px-1 text-[11px] font-bold tracking-[0.15em] text-[#747781]">资产与交易</h2>

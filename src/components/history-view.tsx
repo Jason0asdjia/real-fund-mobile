@@ -285,7 +285,7 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
           </div>
       </section>
 
-      <main className="pb-[calc(env(safe-area-inset-bottom)+6.8rem)]" onScroll={() => setOpenSwipeId(null)}>
+      <main className="pb-[calc(var(--bottom-nav-total-height)+0.7rem)]" onScroll={() => setOpenSwipeId(null)}>
           {grouped.length === 0 ? (
             <div className="px-3 py-8 text-center text-sm text-[#747781]">暂无交易记录，先去持仓页录入交易。</div>
           ) : (

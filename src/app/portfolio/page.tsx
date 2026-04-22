@@ -586,7 +586,7 @@ export default function PortfolioPage() {
   const getProfitTextClass = (value: number) => getSignedValueTextClass(value);
 
   return (
-    <div className="-mx-3 flex h-[calc(100dvh-var(--bottom-nav-total-height)-0.4rem)] w-[calc(100%+1.5rem)] max-w-none flex-col gap-0 overflow-hidden bg-white md:-mx-4 md:w-[calc(100%+2rem)]">
+    <div className="-mx-3 -mt-4 flex h-[calc(100svh-var(--bottom-nav-total-height)-0.4rem)] w-[calc(100%+1.5rem)] max-w-none flex-col gap-0 overflow-hidden bg-white md:-mx-4 md:-mt-4 md:w-[calc(100%+2rem)]">
       <section className="border-b border-slate-200 bg-slate-50 px-3 pb-2 pt-2 text-slate-900">
         <header className="flex items-start justify-between gap-3 py-1">
           <div>
