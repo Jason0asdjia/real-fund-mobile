@@ -6,7 +6,7 @@ import { useAuth } from "@/components/auth-provider";
 import { buildCloudPayloadFromState, createCloudPayload, fetchCloudUserData, fetchCloudUserMeta, hasMeaningfulCloudData, hydrateAppStateFromCloudPayload, mergeCloudPayloads, upsertCloudUserData } from "@/lib/cloud-user-data";
 import { fetchFundArchiveData, fetchFundBaseData, fetchFundHistoricalNavSeries, searchFunds } from "@/lib/fund-api";
 import { applyConfirmedTransactionsToHolding, getTransactionConfirmDateInMarket, isTransactionConfirmedInMarket } from "@/lib/portfolio";
-import { APP_STATE_KEY, bumpAppStateVersion, defaultAppState, loadAppState, markAppStateSynced, normalizeAppState, saveAppState, syncDataVersionFloor } from "@/lib/storage";
+import { APP_STATE_KEY, bumpAppStateVersion, computeAppStateContentHash, defaultAppState, loadAppState, markAppStateSynced, normalizeAppState, saveAppState, syncDataVersionFloor } from "@/lib/storage";
 import { isEstimateTimestampUsable, MARKET_OPEN_MINUTES, nowInMarket } from "@/lib/time";
 import type { AppState, FundHolding, FundSnapshot, FundTransaction, SearchFundResult, ValuationPoint } from "@/lib/types";
 import { IMPORTANT_UI_PREFERENCE_KEYS, applyImportantPreferences, readImportantPreferences } from "@/lib/user-preferences";
@@ -35,6 +35,7 @@ type AppContextValue = {
   setRefreshMs: (value: number) => void;
   clearSearchHistory: () => void;
   touchState: () => void;
+  refreshFromLocalState: () => void;
   clearAll: () => void;
   clearLocalOnly: () => void;
   seedDemoData: () => Promise<void>;
@@ -1528,6 +1529,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  const refreshFromLocalState = useCallback(() => {
+    if (!hydratedRef.current) return;
+    const localState = loadAppState();
+    const currentState = stateRef.current;
+    const localVersion = localState.sync.dataVersion;
+    const currentVersion = currentState.sync.dataVersion;
+    const localHash = computeAppStateContentHash(localState);
+    const currentHash = computeAppStateContentHash(currentState);
+
+    if (localVersion < currentVersion) return;
+    if (localVersion === currentVersion && localHash === currentHash) {
+      touchState();
+      return;
+    }
+
+    setState(localState);
+    stateRef.current = localState;
+    fundsRef.current = localState.funds;
+  }, [touchState]);
+
   const clearAll = useCallback(() => {
     refreshTokenRef.current += 1;
     refreshingRef.current = false;
@@ -1642,6 +1663,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setRefreshMs,
       clearSearchHistory,
       touchState,
+      refreshFromLocalState,
       clearAll,
       clearLocalOnly,
       seedDemoData,
@@ -1680,6 +1702,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setRefreshMs,
       state,
       touchState,
+      refreshFromLocalState,
       toggleFavorite,
       updateHolding,
       valuationSeries,

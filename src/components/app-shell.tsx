@@ -24,7 +24,7 @@ const getRouteIndex = (pathname: string) => {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const isDevNoAuth = process.env.NODE_ENV !== "production";
   const pathname = usePathname();
-  const { conflictResolution, resolveDataConflict, hydrated, state, cloudSyncStatus, touchState } = useAppState();
+  const { conflictResolution, resolveDataConflict, hydrated, state, cloudSyncStatus, refreshFromLocalState } = useAppState();
   const { user, authLoading, authError, isConfigured, signInWithGitHub } = useAuth();
   const sectionPath = getSectionPath(pathname);
   const previousIndexRef = useRef(getRouteIndex(pathname));
@@ -43,8 +43,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (pathname !== "/portfolio") return;
-    touchState();
-  }, [pathname, touchState]);
+    refreshFromLocalState();
+
+    const refreshPortfolioSnapshot = () => {
+      if (window.location.pathname === "/portfolio") {
+        refreshFromLocalState();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        refreshPortfolioSnapshot();
+      }
+    };
+
+    window.addEventListener("pageshow", refreshPortfolioSnapshot);
+    window.addEventListener("popstate", refreshPortfolioSnapshot);
+    window.addEventListener("focus", refreshPortfolioSnapshot);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("pageshow", refreshPortfolioSnapshot);
+      window.removeEventListener("popstate", refreshPortfolioSnapshot);
+      window.removeEventListener("focus", refreshPortfolioSnapshot);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [pathname, refreshFromLocalState]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
