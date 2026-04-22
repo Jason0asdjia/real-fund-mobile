@@ -130,7 +130,7 @@ export function PortfolioOverviewTable({
   return (
     <div
       ref={scrollContainerRef}
-      className="h-full overflow-auto border border-slate-200 bg-white shadow-sm overscroll-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="h-full overflow-auto border border-b-0 border-slate-200 bg-white shadow-sm overscroll-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       role="region"
       aria-label="持仓总览表格"
       onTouchStart={handleTouchStart}
