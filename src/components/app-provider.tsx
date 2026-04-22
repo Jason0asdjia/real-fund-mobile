@@ -394,12 +394,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const applyUserDataMutation = useCallback((updater: (current: AppState) => AppState) => {
-    setState((current) => {
-      const next = bumpAppStateVersion(updater(current));
-      stateRef.current = next;
-      return next;
-    });
+    const next = bumpAppStateVersion(updater(stateRef.current));
+    stateRef.current = next;
+    setState(next);
+    return next;
   }, []);
+
+  const persistRuntimeState = useCallback((next: AppState) => {
+    if (!hydratedRef.current || (!userId && !isDevNoAuth)) return;
+    saveAppState(next);
+  }, [isDevNoAuth, userId]);
 
   const showCloudSyncStatus = useCallback((title: string, message: string) => {
     setCloudSyncStatus({ open: true, title, message });
@@ -1287,17 +1291,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [applyUserDataMutation]);
 
   const updateHolding = useCallback((code: string, next: FundHolding) => {
-    applyUserDataMutation((current) => ({
+    const nextState = applyUserDataMutation((current) => ({
       ...current,
       holdings: {
         ...current.holdings,
         [code]: next,
       },
     }));
-  }, [applyUserDataMutation]);
+    persistRuntimeState(nextState);
+  }, [applyUserDataMutation, persistRuntimeState]);
 
   const clearHolding = useCallback((code: string) => {
-    applyUserDataMutation((current) => ({
+    const nextState = applyUserDataMutation((current) => ({
       ...current,
       holdings: {
         ...current.holdings,
@@ -1312,10 +1317,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         [code]: [],
       },
     }));
-  }, [applyUserDataMutation]);
+    persistRuntimeState(nextState);
+  }, [applyUserDataMutation, persistRuntimeState]);
 
   const addTransaction = useCallback((code: string, next: Omit<FundTransaction, "id">) => {
-    applyUserDataMutation((current) => {
+    const nextState = applyUserDataMutation((current) => {
       const tx: FundTransaction = {
         ...next,
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -1372,10 +1378,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         holdings: nextHoldings,
       };
     });
-  }, [applyUserDataMutation]);
+    persistRuntimeState(nextState);
+  }, [applyUserDataMutation, persistRuntimeState]);
 
   const updateTransaction = useCallback((code: string, id: string, next: Omit<FundTransaction, "id">) => {
-    applyUserDataMutation((current) => {
+    const nextState = applyUserDataMutation((current) => {
       const previousTransactions = current.transactions[code] || [];
       const previous = previousTransactions.find((item) => item.id === id);
       if (!previous) return current;
@@ -1407,10 +1414,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         holdings: nextHoldings,
       };
     });
-  }, [applyUserDataMutation]);
+    persistRuntimeState(nextState);
+  }, [applyUserDataMutation, persistRuntimeState]);
 
   const removeTransaction = useCallback((code: string, id: string) => {
-    applyUserDataMutation((current) => {
+    const nextState = applyUserDataMutation((current) => {
       const previousTransactions = current.transactions[code] || [];
       const removed = previousTransactions.find((item) => item.id === id);
       const nextTransactions = previousTransactions.filter((item) => item.id !== id);
@@ -1489,7 +1497,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         holdings: nextHoldings,
       };
     });
-  }, [applyUserDataMutation]);
+    persistRuntimeState(nextState);
+  }, [applyUserDataMutation, persistRuntimeState]);
 
   const toggleFavorite = useCallback((code: string) => {
     applyUserDataMutation((current) => ({
