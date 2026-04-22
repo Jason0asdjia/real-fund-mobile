@@ -225,8 +225,7 @@
 
   .chip--active,
   .period-switcher__item.is-active,
-  .chart-mode-switch__item.is-active,
-  .bottom-nav__item--active {
+  .chart-mode-switch__item.is-active {
     @apply border-brand-100 bg-brand-50 text-brand-700;
   }
 
@@ -570,7 +569,7 @@
   }
 
   .bottom-nav__item--active {
-    @apply border-brand-100 bg-brand-50 text-brand-700;
+    color: #2563eb;
   }
 
   .is-up {

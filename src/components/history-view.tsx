@@ -18,6 +18,8 @@ type TxItem = FundTransaction & {
 };
 
 const SWIPE_ACTION_WIDTH = 128;
+const SWIPE_LOCK_THRESHOLD = 8;
+const SWIPE_AXIS_BIAS = 4;
 
 const txOrderToken = (item: TxItem) => {
   const idPrefix = String(item.id || "").split("-")[0];
@@ -191,12 +193,20 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
     const touch = event.touches[0];
     const deltaX = touch.clientX - swipeRef.current.startX;
     const deltaY = touch.clientY - swipeRef.current.startY;
+    const absX = Math.abs(deltaX);
+    const absY = Math.abs(deltaY);
 
     if (!swipeRef.current.lockedAxis) {
-      swipeRef.current.lockedAxis = Math.abs(deltaX) >= Math.abs(deltaY) ? "x" : "y";
+      if (absX < SWIPE_LOCK_THRESHOLD && absY < SWIPE_LOCK_THRESHOLD) {
+        return;
+      }
+
+      swipeRef.current.lockedAxis = absX > absY + SWIPE_AXIS_BIAS ? "x" : "y";
     }
 
     if (swipeRef.current.lockedAxis !== "x") return;
+
+    event.preventDefault();
 
     const nextOffset = Math.max(-SWIPE_ACTION_WIDTH, Math.min(0, swipeRef.current.initialOffset + deltaX));
     setDragOffset(nextOffset);
@@ -321,7 +331,7 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
                     return (
                       <div
                         key={item.id}
-                        className="relative overflow-hidden bg-white"
+                        className="relative overflow-hidden bg-white touch-pan-y"
                         onTouchStart={(event) => handleTouchStart(item.id, event)}
                         onTouchMove={handleTouchMove}
                         onTouchEnd={finishSwipe}
