@@ -59,7 +59,7 @@
 
 @layer components {
   .app-frame {
-    @apply relative min-h-[100svh] overflow-x-hidden bg-white;
+    @apply relative h-[100svh] overflow-hidden bg-white;
   }
 
   .ambient {
@@ -76,7 +76,11 @@
 
   .app-main {
     @apply relative z-10 bg-white px-3 pt-4 md:px-4;
-    min-height: 100svh;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
     padding-bottom: calc(var(--bottom-nav-total-height) + 0.5rem);
   }
 

@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronRight } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 import { TwSelect } from "@/components/ui/tw-select";
+import { useSwipeReveal } from "@/hooks/use-swipe-reveal";
 import { formatCurrency } from "@/lib/portfolio";
 import { formatMarketDate, nowInMarket, toMarketDay } from "@/lib/time";
 import type { FundTransaction, FundTransactionType } from "@/lib/types";
@@ -20,6 +21,7 @@ type TxItem = FundTransaction & {
 const SWIPE_ACTION_WIDTH = 128;
 const SWIPE_LOCK_THRESHOLD = 8;
 const SWIPE_AXIS_BIAS = 4;
+const SWIPE_EDGE_TRIGGER_WIDTH = 72;
 
 const txOrderToken = (item: TxItem) => {
   const idPrefix = String(item.id || "").split("-")[0];
@@ -65,18 +67,15 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
   const [filter, setFilter] = useState<"all" | FundTransactionType>("all");
   const [timeRange, setTimeRange] = useState<"3m" | "6m" | "12m" | "all">("3m");
   const [fundFilter, setFundFilter] = useState<string>(initialFundFilter || "all");
-  const [openSwipeId, setOpenSwipeId] = useState<string | null>(null);
-  const [draggingSwipeId, setDraggingSwipeId] = useState<string | null>(null);
-  const [dragOffset, setDragOffset] = useState(0);
   const [deleteTarget, setDeleteTarget] = useState<TxItem | null>(null);
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(() => new Set([nowInMarket().format("YYYY-MM")]));
-  const swipeRef = useRef<{
-    id: string;
-    startX: number;
-    startY: number;
-    initialOffset: number;
-    lockedAxis: "x" | "y" | null;
-  } | null>(null);
+  const swipe = useSwipeReveal({
+    actionWidth: SWIPE_ACTION_WIDTH,
+    edgeTriggerWidth: SWIPE_EDGE_TRIGGER_WIDTH,
+    lockThreshold: SWIPE_LOCK_THRESHOLD,
+    axisBias: SWIPE_AXIS_BIAS,
+    openRatio: 0.5,
+  });
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -175,54 +174,8 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
   const periodLabel = timeRange === "3m" ? "近三个月" : timeRange === "6m" ? "近六个月" : timeRange === "12m" ? "近一年" : "全部时间";
   const periodVolume = transactions.reduce((acc, item) => acc + Math.abs(item.amount), 0);
 
-  const handleTouchStart = (id: string, event: TouchEvent<HTMLElement>) => {
-    const touch = event.touches[0];
-    swipeRef.current = {
-      id,
-      startX: touch.clientX,
-      startY: touch.clientY,
-      initialOffset: openSwipeId === id ? -SWIPE_ACTION_WIDTH : 0,
-      lockedAxis: null,
-    };
-    setDraggingSwipeId(id);
-    setDragOffset(openSwipeId === id ? -SWIPE_ACTION_WIDTH : 0);
-  };
-
-  const handleTouchMove = (event: TouchEvent<HTMLElement>) => {
-    if (!swipeRef.current) return;
-    const touch = event.touches[0];
-    const deltaX = touch.clientX - swipeRef.current.startX;
-    const deltaY = touch.clientY - swipeRef.current.startY;
-    const absX = Math.abs(deltaX);
-    const absY = Math.abs(deltaY);
-
-    if (!swipeRef.current.lockedAxis) {
-      if (absX < SWIPE_LOCK_THRESHOLD && absY < SWIPE_LOCK_THRESHOLD) {
-        return;
-      }
-
-      swipeRef.current.lockedAxis = absX > absY + SWIPE_AXIS_BIAS ? "x" : "y";
-    }
-
-    if (swipeRef.current.lockedAxis !== "x") return;
-
-    event.preventDefault();
-
-    const nextOffset = Math.max(-SWIPE_ACTION_WIDTH, Math.min(0, swipeRef.current.initialOffset + deltaX));
-    setDragOffset(nextOffset);
-  };
-
-  const finishSwipe = () => {
-    if (!swipeRef.current) return;
-    const shouldOpen = dragOffset <= -SWIPE_ACTION_WIDTH / 2;
-    setOpenSwipeId(shouldOpen ? swipeRef.current.id : null);
-    setDraggingSwipeId(null);
-    setDragOffset(0);
-    swipeRef.current = null;
-  };
-
   const handleEdit = (item: TxItem) => {
-    setOpenSwipeId(null);
+    swipe.closeSwipe();
     const route = item.type === "buy" ? "buy" : "sell";
     router.push(`/portfolio/${item.code}/${route}?from=history&editTxId=${encodeURIComponent(item.id)}`);
   };
@@ -230,12 +183,15 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
   const handleDeleteConfirm = () => {
     if (!deleteTarget) return;
     removeTransaction(deleteTarget.code, deleteTarget.id);
-    setOpenSwipeId((current) => (current === deleteTarget.id ? null : current));
+    swipe.closeSwipe();
     setDeleteTarget(null);
   };
 
   return (
-    <div className="-mx-3 -mb-24 -mt-4 bg-white text-[#131b2e] md:-mx-4 md:-mb-24 md:-mt-4">
+    <div
+      className="-mx-3 -mb-24 -mt-4 bg-white text-[#131b2e] md:-mx-4 md:-mb-24 md:-mt-4"
+      onClick={swipe.handleContainerClick}
+    >
       <header className="border-b border-[#e2e7ff] bg-white">
         <div className="flex h-12 items-center justify-between px-3">
           <h1 className="typo-page-title">交易历史</h1>
@@ -295,7 +251,7 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
           </div>
       </section>
 
-      <main className="pb-[calc(var(--bottom-nav-total-height)+0.7rem)]" onScroll={() => setOpenSwipeId(null)}>
+      <main className="pb-[calc(var(--bottom-nav-total-height)+0.7rem)]" onScroll={swipe.handleContainerScroll}>
           {grouped.length === 0 ? (
             <div className="px-3 py-8 text-center text-sm text-[#747781]">暂无交易记录，先去持仓页录入交易。</div>
           ) : (
@@ -327,19 +283,21 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
                     const amountClass = isBuy ? "text-[#005bc0]" : "text-[#8c4f39]";
                     const typeText = isBuy ? "申购" : "赎回";
                     const confirmed = Boolean(item.settledAt);
-                    const currentOffset = draggingSwipeId === item.id ? dragOffset : openSwipeId === item.id ? -SWIPE_ACTION_WIDTH : 0;
+                    const currentOffset = swipe.getItemOffset(item.id);
                     return (
                       <div
                         key={item.id}
                         className="relative overflow-hidden bg-white touch-pan-y"
-                        onTouchStart={(event) => handleTouchStart(item.id, event)}
-                        onTouchMove={handleTouchMove}
-                        onTouchEnd={finishSwipe}
-                        onTouchCancel={finishSwipe}
+                        onClick={swipe.handleItemClick}
+                        onTouchStart={(event) => swipe.handleItemTouchStart(item.id, event)}
+                        onTouchMove={swipe.handleItemTouchMove}
+                        onTouchEnd={swipe.handleItemTouchEnd}
+                        onTouchCancel={swipe.handleItemTouchEnd}
                       >
                         <div className="absolute inset-y-0 right-0 z-[1] flex w-32 items-stretch">
                           <button
                             type="button"
+                            data-swipe-action="true"
                             className="inline-flex h-full flex-1 items-center justify-center bg-blue-100 text-xs font-semibold text-blue-800"
                             onClick={() => handleEdit(item)}
                           >
@@ -347,9 +305,10 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
                           </button>
                           <button
                             type="button"
+                            data-swipe-action="true"
                             className="inline-flex h-full flex-1 items-center justify-center bg-red-100 text-xs font-semibold text-red-700"
                             onClick={() => {
-                              setOpenSwipeId(null);
+                              swipe.closeSwipe();
                               setDeleteTarget(item);
                             }}
                           >
