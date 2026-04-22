@@ -7,6 +7,7 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 export const MARKET_TIMEZONE = "Asia/Shanghai";
+export const MARKET_OPEN_MINUTES = 9 * 60 + 30;
 export const MARKET_ESTIMATE_START_MINUTES = 9 * 60 + 15;
 export const MARKET_TRADE_CUTOFF_MINUTES = 15 * 60;
 

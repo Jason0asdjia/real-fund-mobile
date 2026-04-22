@@ -1,4 +1,4 @@
-import { isEstimateTimestampUsable, nowInMarket, toMarketDay, todayInMarket } from "@/lib/time";
+import { isEstimateTimestampUsable, MARKET_OPEN_MINUTES, nowInMarket, toMarketDay, todayInMarket } from "@/lib/time";
 import type { FundHolding, FundSnapshot, FundTransaction } from "@/lib/types";
 
 export type HoldingMetrics = {
@@ -43,8 +43,8 @@ export const getTransactionConfirmDateInMarket = (item: FundTransaction) => {
 
 export const isTransactionConfirmedInMarket = (item: FundTransaction) => {
   const confirmDate = getTransactionConfirmDateInMarket(item);
-  const today = nowInMarket().startOf("day");
-  return today.isSame(confirmDate, "day") || today.isAfter(confirmDate, "day");
+  const confirmAtOpen = confirmDate.startOf("day").add(MARKET_OPEN_MINUTES, "minute");
+  return nowInMarket().isSame(confirmAtOpen) || nowInMarket().isAfter(confirmAtOpen);
 };
 
 export const applyConfirmedTransactionsToHolding = (holding: FundHolding | undefined, transactions: FundTransaction[] = []): FundHolding => {

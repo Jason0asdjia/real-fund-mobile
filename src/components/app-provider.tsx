@@ -7,7 +7,7 @@ import { buildCloudPayloadFromState, createCloudPayload, fetchCloudUserData, fet
 import { fetchFundArchiveData, fetchFundBaseData, fetchFundHistoricalNavSeries, searchFunds } from "@/lib/fund-api";
 import { applyConfirmedTransactionsToHolding, getTransactionConfirmDateInMarket, isTransactionConfirmedInMarket } from "@/lib/portfolio";
 import { APP_STATE_KEY, bumpAppStateVersion, defaultAppState, loadAppState, markAppStateSynced, normalizeAppState, saveAppState, syncDataVersionFloor } from "@/lib/storage";
-import { isEstimateTimestampUsable, nowInMarket } from "@/lib/time";
+import { isEstimateTimestampUsable, MARKET_OPEN_MINUTES, nowInMarket } from "@/lib/time";
 import type { AppState, FundHolding, FundSnapshot, FundTransaction, SearchFundResult, ValuationPoint } from "@/lib/types";
 import { IMPORTANT_UI_PREFERENCE_KEYS, applyImportantPreferences, readImportantPreferences } from "@/lib/user-preferences";
 import { clearValuationSeries, getAllValuationSeries, normalizeValuationSeries, recordValuation, setAllValuationSeries, VALUATION_TIMESERIES_KEY } from "@/lib/valuation-timeseries";
@@ -221,7 +221,7 @@ const rollbackConfirmedTransactionFromHolding = (
 };
 
 const settleConfirmedTransactions = (current: AppState) => {
-  const today = nowInMarket().startOf("day");
+  const now = nowInMarket();
   let touched = false;
   const nextHoldings = { ...current.holdings };
   const nextTransactions = { ...current.transactions };
@@ -229,7 +229,6 @@ const settleConfirmedTransactions = (current: AppState) => {
   Object.entries(current.transactions).forEach(([code, items]) => {
     const dueTransactions = items
       .filter((item) => !item.settledAt && isTransactionConfirmedInMarket(item))
-      .filter((item) => getTransactionConfirmDateInMarket(item).isSame(today, "day"))
       .slice()
       .sort((a, b) => {
         const dateCmp = `${a.date}`.localeCompare(`${b.date}`);
@@ -248,7 +247,7 @@ const settleConfirmedTransactions = (current: AppState) => {
     nextHoldings[code] = nextHolding || { share: null, cost: null, firstPurchaseDate: null };
     nextTransactions[code] = items.map((item) => (
       settledIds.has(item.id)
-        ? { ...item, settledAt: today.format("YYYY-MM-DD") }
+        ? { ...item, settledAt: now.format("YYYY-MM-DD") }
         : item
     ));
     touched = true;
@@ -1013,6 +1012,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => {
       window.removeEventListener("focus", settlePendingOnForeground);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [applyUserDataMutation, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+
+    let active = true;
+    let timer: number | null = null;
+
+    const runSettlementCheck = () => {
+      applyUserDataMutation((current) => settleConfirmedTransactions(current));
+    };
+
+    const scheduleNextOpenCheck = () => {
+      if (!active) return;
+      const now = nowInMarket();
+      const todayOpen = now.startOf("day").add(MARKET_OPEN_MINUTES, "minute");
+      const nextCheckAt = now.isBefore(todayOpen) ? todayOpen : todayOpen.add(1, "day");
+      const delay = Math.max(1000, nextCheckAt.diff(now, "millisecond"));
+      timer = window.setTimeout(() => {
+        if (!active) return;
+        runSettlementCheck();
+        scheduleNextOpenCheck();
+      }, delay);
+    };
+
+    scheduleNextOpenCheck();
+    return () => {
+      active = false;
+      if (timer != null) window.clearTimeout(timer);
     };
   }, [applyUserDataMutation, hydrated]);
 
