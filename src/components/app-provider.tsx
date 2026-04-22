@@ -1521,7 +1521,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [applyUserDataMutation]);
 
   const touchState = useCallback(() => {
-    setState((current) => ({ ...current }));
+    setState((current) => ({
+      ...current,
+      holdings: { ...current.holdings },
+      transactions: { ...current.transactions },
+    }));
   }, []);
 
   const clearAll = useCallback(() => {
