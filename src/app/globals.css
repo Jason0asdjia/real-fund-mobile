@@ -527,11 +527,11 @@
     z-index: 1;
   }
 
-  .app-modal-open .bottom-nav {
+  .app-modal-open .app-primary-bottom-nav {
     @apply hidden;
   }
 
-  .app-detail-open .bottom-nav {
+  .app-detail-open .app-primary-bottom-nav {
     @apply hidden;
   }
 

@@ -429,7 +429,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
         </div>
       </header>
 
-      <main className="pb-[calc(env(safe-area-inset-bottom)+6.6rem)]">
+      <main className="pb-[calc(var(--bottom-nav-total-height)+0.7rem)]">
         {holding ? (
           <section className="border-b border-[#e2e7ff] bg-[#d7e2ff] px-3 py-1.5 text-[#001b3f]">
             <div className="flex items-center justify-between gap-2">
@@ -547,13 +547,14 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
 
       </main>
 
-      <nav className="fixed bottom-[calc(env(safe-area-inset-bottom)+0.5rem)] left-3 right-3 z-30 grid grid-cols-4 gap-1.5 rounded-[1.45rem] border border-slate-200 bg-white p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom)*0.22)] shadow-[0_3px_10px_rgba(15,23,42,0.12)] md:left-1/2 md:right-auto md:w-[560px] md:-translate-x-1/2">
+      <nav className="bottom-nav">
+        <div className="bottom-nav__list">
         <Link
           href={`/portfolio/${fund.code}/buy?from=detail`}
           onClick={(event) => {
             void handleNavigateWithEnsure(`/portfolio/${fund.code}/buy?from=detail`, event);
           }}
-          className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-600"
+          className="bottom-nav__item text-slate-600"
         >
           <CirclePlus size={18} />
           <span className="text-[11px]">加仓</span>
@@ -567,24 +568,23 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
             }
             void handleNavigateWithEnsure(`/portfolio/${fund.code}/sell?from=detail`, event);
           }}
-          className={`flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-600 ${!hasHolding ? "pointer-events-none opacity-40" : ""}`}
+          className={`bottom-nav__item text-slate-600 ${!hasHolding ? "pointer-events-none opacity-40" : ""}`}
         >
           <CircleMinus size={18} />
           <span className="text-[11px]">减仓</span>
-          {!hasHolding ? <span className="text-[9px] text-[#9aa5bb]">暂无可减份额</span> : null}
         </Link>
         <Link
           href={`/portfolio/${fund.code}/manage`}
           onClick={(event) => {
             void handleNavigateWithEnsure(`/portfolio/${fund.code}/manage`, event);
           }}
-          className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-600"
+          className="bottom-nav__item text-slate-600"
         >
           <PenSquare size={18} />
           <span className="text-[11px]">编辑持仓</span>
         </Link>
         {hasHolding ? (
-          <button type="button" className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-600" onClick={() => setClearModalOpen(true)}>
+          <button type="button" className="bottom-nav__item text-slate-600" onClick={() => setClearModalOpen(true)}>
             <Trash2 size={18} />
             <span className="text-[11px]">清空持仓</span>
           </button>
@@ -592,7 +592,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
           <button
             type="button"
             disabled={navActionLoading}
-            className="flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl text-slate-600"
+            className="bottom-nav__item text-slate-600"
             onClick={() => {
               void handleToggleListMembership();
             }}
@@ -601,6 +601,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
             <span className="text-[11px]">{isInList ? "移除持仓列表" : "添加到持仓列表"}</span>
           </button>
         )}
+        </div>
       </nav>
 
       {clearModalOpen ? (

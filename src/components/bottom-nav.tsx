@@ -15,7 +15,7 @@ const items = [
   { href: "/settings", label: "个人中心", icon: Settings2 },
 ];
 
-export function BottomNav() {
+export function BottomNav({ className }: { className?: string }) {
   const pathname = usePathname();
   const { state, passiveRefreshAt } = useAppState();
   const [flashActive, setFlashActive] = useState(false);
@@ -62,7 +62,7 @@ export function BottomNav() {
     <Tabs05
       items={items}
       pathname={pathname}
-      className={clsx(flashActive && "bottom-nav--flash")}
+      className={clsx(className, flashActive && "bottom-nav--flash")}
       style={{
         ["--bottom-nav-progress" as string]: progress.toString(),
       }}

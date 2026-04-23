@@ -157,7 +157,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </motion.main>
       </AnimatePresence>
 
-      <BottomNav />
+      <BottomNav className="app-primary-bottom-nav" />
 
       {conflictResolution.open ? (
         <div className="app-modal-backdrop">

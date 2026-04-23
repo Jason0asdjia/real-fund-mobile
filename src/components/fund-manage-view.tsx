@@ -250,7 +250,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
         </div>
       </header>
 
-      <main className="pb-[calc(env(safe-area-inset-bottom)+6.6rem)]">
+      <main className="pb-[calc(var(--bottom-nav-total-height)+0.7rem)]">
         <section className="border-b border-[#e2e7ff] px-3 py-4">
             <div className="mb-2 flex items-center justify-between">
               <span className="block text-[length:var(--type-body-size)] font-medium tracking-[0.12em] text-[#747781]">{mode === "amount" ? "当前持仓" : "当前份额"}</span>
@@ -347,14 +347,16 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
 
       </main>
 
-      <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+0.5rem)] left-3 right-3 z-30 rounded-[1.45rem] border border-slate-200 bg-white p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom)*0.22)] shadow-[0_3px_10px_rgba(15,23,42,0.12)] md:left-1/2 md:right-auto md:w-[560px] md:-translate-x-1/2">
-        <button
-          type="button"
-          onClick={handleConfirm}
-          className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-white px-3 typo-body-strong"
-        >
-          确认修改
-        </button>
+      <div className="bottom-nav">
+        <div className="bottom-nav__list grid-cols-1">
+          <button
+            type="button"
+            onClick={handleConfirm}
+            className="bottom-nav__item rounded-lg text-sm font-semibold text-[#131b2e]"
+          >
+            <span>确认修改</span>
+          </button>
+        </div>
       </div>
     </div>
   );
