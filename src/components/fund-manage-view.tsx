@@ -8,6 +8,7 @@ import dayjs from "dayjs";
 import { flushSync } from "react-dom";
 
 import { useAppState } from "@/components/app-provider";
+import { SecondaryBottomNav } from "@/components/ui/secondary-bottom-nav";
 import { getHoldingMetrics } from "@/lib/portfolio";
 import { holdingDaysInMarket, todayInMarket } from "@/lib/time";
 
@@ -164,7 +165,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
 
   if (!fund) {
     return (
-      <div className={asModal ? "detail-page bg-white text-[#131b2e]" : "-mx-3 -mt-4 min-h-[calc(100dvh-5.5rem)] bg-white text-[#131b2e] md:-mx-4 md:-mt-4"}>
+      <div className={asModal ? "detail-page bg-white text-[#131b2e]" : "-mx-3 -mt-4 min-h-full bg-white text-[#131b2e] md:-mx-4 md:-mt-4"}>
         <header className="border-b border-[#e2e7ff] bg-white">
           <div className="flex h-12 items-center justify-between px-3">
             {onBack ? (
@@ -226,7 +227,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
       className={
         asModal
           ? "detail-page flex h-[100dvh] flex-col overflow-hidden bg-white text-[#131b2e]"
-          : "-mx-3 -mb-24 -mt-4 flex h-[calc(100dvh-5.5rem)] flex-col overflow-y-auto overscroll-contain bg-white text-[#131b2e] md:-mx-4 md:-mb-24 md:-mt-4"
+          : "-mx-3 -mt-4 flex min-h-full flex-col bg-white text-[#131b2e] md:-mx-4 md:-mt-4"
       }
     >
       <header className="z-20 shrink-0 border-b border-[#e2e7ff] bg-white">
@@ -347,8 +348,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
 
       </main>
 
-      <div className="bottom-nav">
-        <div className="bottom-nav__list grid-cols-1">
+      <SecondaryBottomNav listClassName="grid-cols-1">
           <button
             type="button"
             onClick={handleConfirm}
@@ -356,8 +356,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
           >
             <span>确认修改</span>
           </button>
-        </div>
-      </div>
+      </SecondaryBottomNav>
     </div>
   );
 }

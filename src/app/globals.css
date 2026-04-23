@@ -79,6 +79,7 @@
     height: 100%;
     min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
     overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
     padding-bottom: calc(var(--bottom-nav-total-height) + 0.5rem);
@@ -517,6 +518,17 @@
 
   .bottom-nav--flash::before {
     filter: brightness(1.15) drop-shadow(0 0 3px rgba(37, 99, 235, 0.45));
+  }
+
+  .bottom-nav--secondary {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 60;
+  }
+
+  .bottom-nav--secondary::before {
+    display: none;
   }
 
   .bottom-nav__list {

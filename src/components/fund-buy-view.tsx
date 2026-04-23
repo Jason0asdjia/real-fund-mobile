@@ -8,6 +8,7 @@ import dayjs from "dayjs";
 import { flushSync } from "react-dom";
 
 import { useAppState } from "@/components/app-provider";
+import { SecondaryBottomNav } from "@/components/ui/secondary-bottom-nav";
 import { fetchFundHistoricalNavForDate } from "@/lib/fund-api";
 import { formatCurrency, formatSignedCurrency } from "@/lib/portfolio";
 import { holdingDaysInMarket, isBeforeTradeCutoffInMarket, todayInMarket } from "@/lib/time";
@@ -146,7 +147,7 @@ export function FundBuyView({ code }: FundBuyViewProps) {
 
   if (!fund) {
     return (
-      <div className="-mx-3 -mb-24 -mt-4 min-h-[calc(100dvh-5.5rem)] bg-white md:-mx-4 md:-mb-24 md:-mt-4">
+      <div className="-mx-3 -mt-4 min-h-full bg-white md:-mx-4 md:-mt-4">
         <header className="z-20 shrink-0 border-b border-[#e2e7ff] bg-white">
           <div className="relative min-h-12 px-3 py-1">
             <button
@@ -208,7 +209,7 @@ export function FundBuyView({ code }: FundBuyViewProps) {
   };
 
   return (
-    <div className="-mx-3 -mb-24 -mt-4 flex h-[calc(100dvh-5.5rem)] flex-col overflow-y-auto overscroll-contain bg-white text-[#131b2e] md:-mx-4 md:-mb-24 md:-mt-4">
+    <div className="-mx-3 -mt-4 flex min-h-full flex-col bg-white text-[#131b2e] md:-mx-4 md:-mt-4">
       <header className="z-20 shrink-0 border-b border-[#e2e7ff] bg-white">
         <div className="relative min-h-12 px-3 py-1">
           <button
@@ -359,8 +360,7 @@ export function FundBuyView({ code }: FundBuyViewProps) {
         </section>
       </main>
 
-      <div className="bottom-nav">
-        <div className="bottom-nav__list grid-cols-1">
+      <SecondaryBottomNav listClassName="grid-cols-1">
           <button
             type="button"
             onClick={handleConfirm}
@@ -369,8 +369,7 @@ export function FundBuyView({ code }: FundBuyViewProps) {
           >
             <span>{tradeNavLoading ? "加载净值中..." : "确认修改"}</span>
           </button>
-        </div>
-      </div>
+      </SecondaryBottomNav>
     </div>
   );
 }

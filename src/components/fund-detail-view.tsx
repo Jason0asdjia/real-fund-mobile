@@ -7,6 +7,7 @@ import { ArrowDownLeft, ArrowUpRight, ChevronLeft, ChevronRight, CircleMinus, Ci
 import { Area, Pie } from "@ant-design/charts";
 
 import { useAppState } from "@/components/app-provider";
+import { SecondaryBottomNav } from "@/components/ui/secondary-bottom-nav";
 import { fetchFundArchiveData, fetchFundBaseData, fetchFundHistoricalNavSeries, fetchFundPreviewData } from "@/lib/fund-api";
 import { formatCurrency, formatPercent, formatSignedCurrency } from "@/lib/portfolio";
 import type { FundSnapshot } from "@/lib/types";
@@ -405,7 +406,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
       className={
         asModal
           ? "detail-page flex h-[100dvh] flex-col overflow-hidden bg-white text-[#131b2e]"
-          : "-mx-3 -mb-24 -mt-4 flex h-[calc(100dvh-5.5rem)] flex-col overflow-y-auto overscroll-contain bg-white text-[#131b2e] md:-mx-4 md:-mb-24 md:-mt-4"
+          : "-mx-3 -mt-4 flex min-h-full flex-col bg-white text-[#131b2e] md:-mx-4 md:-mt-4"
       }
     >
       <header className="z-20 shrink-0 border-b border-[#e2e7ff] bg-white">
@@ -547,8 +548,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
 
       </main>
 
-      <nav className="bottom-nav">
-        <div className="bottom-nav__list">
+      <SecondaryBottomNav>
         <Link
           href={`/portfolio/${fund.code}/buy?from=detail`}
           onClick={(event) => {
@@ -601,8 +601,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
             <span className="text-[11px]">{isInList ? "移除持仓列表" : "添加到持仓列表"}</span>
           </button>
         )}
-        </div>
-      </nav>
+      </SecondaryBottomNav>
 
       {clearModalOpen ? (
         <div className="app-modal-backdrop" onClick={() => setClearModalOpen(false)}>
