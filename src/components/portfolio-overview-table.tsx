@@ -71,23 +71,26 @@ export function PortfolioOverviewTable({
   renderCellValue,
 }: PortfolioOverviewTableProps) {
   const touchStateRef = useRef<{
-    x: number;
-    y: number;
-    scrollLeft: number;
+    startX: number;
+    startY: number;
     axis: "x" | "y" | null;
     ignoreHorizontal: boolean;
+    lastX: number;
   } | null>(null);
+
+  const isTouchActiveRef = useRef(false);
 
   const handleTouchStart = (event: ReactTouchEvent<HTMLDivElement>) => {
     const touch = event.touches[0];
     if (!touch) return;
     touchStateRef.current = {
-      x: touch.clientX,
-      y: touch.clientY,
-      scrollLeft: event.currentTarget.scrollLeft,
+      startX: touch.clientX,
+      startY: touch.clientY,
       axis: null,
       ignoreHorizontal: Boolean((event.target as HTMLElement | null)?.closest("[data-sticky-fund-cell='true']")),
+      lastX: touch.clientX,
     };
+    isTouchActiveRef.current = true;
   };
 
   const handleTouchMove = (event: ReactTouchEvent<HTMLDivElement>) => {
@@ -95,24 +98,31 @@ export function PortfolioOverviewTable({
     const touchState = touchStateRef.current;
     if (!touch || !touchState) return;
 
-    const deltaX = touch.clientX - touchState.x;
-    const deltaY = touch.clientY - touchState.y;
+    const deltaX = touch.clientX - touchState.startX;
+    const deltaY = touch.clientY - touchState.startY;
 
-    const container = event.currentTarget;
     if (!touchState.axis) {
       touchState.axis = Math.abs(deltaX) > Math.abs(deltaY) ? "x" : "y";
     }
 
-    const maxScrollLeft = container.scrollWidth - container.clientWidth;
-    const maxScrollTop = container.scrollHeight - container.clientHeight;
+    const container = event.currentTarget;
 
-    if (!touchState.ignoreHorizontal && touchState.axis === "x" && maxScrollLeft > 0) {
+    if (touchState.axis === "x") {
       event.preventDefault();
-      const nextScrollLeft = Math.max(0, Math.min(maxScrollLeft, touchState.scrollLeft - deltaX));
-      container.scrollLeft = nextScrollLeft;
+      if (touchState.ignoreHorizontal) return;
+
+      const maxScrollLeft = container.scrollWidth - container.clientWidth;
+      if (maxScrollLeft <= 0) return;
+
+      const currentX = touch.clientX;
+      const deltaFromLast = touchState.lastX - currentX;
+      touchState.lastX = currentX;
+      const nextScrollLeft = container.scrollLeft + deltaFromLast;
+      container.scrollLeft = Math.max(0, Math.min(maxScrollLeft, nextScrollLeft));
       return;
     }
 
+    const maxScrollTop = container.scrollHeight - container.clientHeight;
     if (maxScrollTop <= 0) return;
 
     const atTopEdge = container.scrollTop <= 0;
@@ -123,31 +133,37 @@ export function PortfolioOverviewTable({
     }
   };
 
-  const clearTouchState = () => {
+  const handleTouchEnd = (event: ReactTouchEvent<HTMLDivElement>) => {
     touchStateRef.current = null;
+    isTouchActiveRef.current = false;
+    onScrollPositionChange({
+      top: event.currentTarget.scrollTop,
+      left: event.currentTarget.scrollLeft,
+    });
   };
 
   return (
     <div
       ref={scrollContainerRef}
-      className="h-full overflow-auto border border-b-0 border-slate-200 bg-white shadow-sm overscroll-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="h-full overflow-auto border border-b-0 border-slate-200 bg-white shadow-sm overscroll-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [touch-action:pan-y]"
       role="region"
       aria-label="持仓总览表格"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
-      onTouchEnd={clearTouchState}
-      onTouchCancel={clearTouchState}
-      onScroll={(event) =>
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
+      onScroll={(event) => {
+        if (isTouchActiveRef.current) return;
         onScrollPositionChange({
           top: event.currentTarget.scrollTop,
           left: event.currentTarget.scrollLeft,
-        })
-      }
+        });
+      }}
     >
       <Table className="w-max min-w-full border-separate border-spacing-0 text-left">
         <TableHeader>
           <TableRow className="bg-slate-50 hover:bg-slate-50">
-            <TableHead data-sticky-fund-cell="true" className="sticky left-0 top-0 z-20 w-[160px] min-w-[160px] max-w-[160px] border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-600 shadow-[1px_0_0_0_theme(colors.slate.200)] [touch-action:pan-y]">
+            <TableHead data-sticky-fund-cell="true" className="sticky left-0 top-0 z-20 w-[160px] min-w-[160px] max-w-[160px] border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-600 shadow-[1px_0_0_0_theme(colors.slate.200)]">
               <div className="flex items-center gap-1">
                 <button
                   type="button"
@@ -170,7 +186,7 @@ export function PortfolioOverviewTable({
         <TableBody>
           {rows.map((row) => (
             <TableRow key={row.code} className="bg-white">
-              <TableCell data-sticky-fund-cell="true" className="sticky left-0 z-[1] w-[160px] min-w-[160px] max-w-[160px] border-b border-slate-200 bg-white px-3 py-2 shadow-[1px_0_0_0_theme(colors.slate.200)] [touch-action:pan-y]">
+              <TableCell data-sticky-fund-cell="true" className="sticky left-0 z-[1] w-[160px] min-w-[160px] max-w-[160px] border-b border-slate-200 bg-white px-3 py-2 shadow-[1px_0_0_0_theme(colors.slate.200)]">
                 <Link href={`/portfolio/${row.code}`} className="block rounded-sm outline-none transition-colors hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-300" onClick={onBeforeNavigate}>
                   <div className="max-w-[160px] truncate text-sm font-semibold text-slate-900">{row.fundName}</div>
                   <div className="mt-1 max-w-[160px] truncate text-[11px] tabular-nums text-slate-500">
