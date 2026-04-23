@@ -57,7 +57,7 @@ export function FundBuyView({ code }: FundBuyViewProps) {
 
   const handleBack = () => {
     if (returnToDetail) {
-      router.back();
+      router.replace(`/portfolio/${code}`);
       return;
     }
     if (returnToHistory) {

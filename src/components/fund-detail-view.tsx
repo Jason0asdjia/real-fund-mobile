@@ -574,9 +574,9 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
           <span className="text-[11px]">减仓</span>
         </Link>
         <Link
-          href={`/portfolio/${fund.code}/manage`}
+          href={`/portfolio/${fund.code}/manage?from=detail`}
           onClick={(event) => {
-            void handleNavigateWithEnsure(`/portfolio/${fund.code}/manage`, event);
+            void handleNavigateWithEnsure(`/portfolio/${fund.code}/manage?from=detail`, event);
           }}
           className="bottom-nav__item text-slate-600"
         >

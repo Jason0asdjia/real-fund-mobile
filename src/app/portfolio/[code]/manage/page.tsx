@@ -12,13 +12,21 @@ export default function PortfolioManagePage({
   searchParams?: { from?: string };
 }) {
   const router = useRouter();
-  const redirectOnConfirm = searchParams?.from === "discover" ? "/portfolio" : null;
+  const redirectOnConfirm = searchParams?.from === "discover"
+    ? "/portfolio"
+    : searchParams?.from === "detail"
+      ? `/portfolio/${params.code}`
+      : null;
 
   return (
     <FundManageView
       code={params.code}
       redirectOnConfirm={redirectOnConfirm}
       onBack={() => {
+        if (searchParams?.from === "detail") {
+          router.replace(`/portfolio/${params.code}`);
+          return;
+        }
         if (window.history.length > 1) {
           router.back();
           return;
