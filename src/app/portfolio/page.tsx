@@ -244,6 +244,9 @@ export default function PortfolioPage() {
   const [showTodayProfitPercent, setShowTodayProfitPercent] = useState(false);
   const [showTotalProfitPercent, setShowTotalProfitPercent] = useState(false);
   const viewStateRef = useRef<PortfolioViewState>({ windowY: 0, tableTop: 0, tableLeft: 0 });
+  const pendingViewStateRef = useRef<Partial<PortfolioViewState> | null>(null);
+  const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastPersistAtRef = useRef(0);
   const tableRef = useRef<HTMLDivElement | null>(null);
   const tableRestoredRef = useRef(false);
   const columnItemRefs = useRef<Partial<Record<PortfolioOverviewColumnId, HTMLDivElement | null>>>({});
@@ -269,14 +272,69 @@ export default function PortfolioPage() {
     tableRestoredRef.current = true;
   }, [restoredState.tableLeft, restoredState.tableTop]);
 
-  const persistViewState = useCallback((next?: Partial<PortfolioViewState>) => {
+  const flushViewState = useCallback(() => {
     if (typeof window === "undefined") return;
+    if (!pendingViewStateRef.current) return;
     viewStateRef.current = {
       ...viewStateRef.current,
-      ...next,
+      ...pendingViewStateRef.current,
     };
+    pendingViewStateRef.current = null;
     window.sessionStorage.setItem(VIEW_STATE_KEY, JSON.stringify(viewStateRef.current));
   }, []);
+
+  const persistViewState = useCallback(
+    (next?: Partial<PortfolioViewState>, options?: { immediate?: boolean }) => {
+      if (typeof window === "undefined" || !next) return;
+      pendingViewStateRef.current = {
+        ...(pendingViewStateRef.current ?? {}),
+        ...next,
+      };
+
+      if (options?.immediate) {
+        if (persistTimeoutRef.current != null) {
+          clearTimeout(persistTimeoutRef.current);
+          persistTimeoutRef.current = null;
+        }
+        lastPersistAtRef.current = Date.now();
+        flushViewState();
+        return;
+      }
+
+      const THROTTLE_MS = 120;
+      const now = Date.now();
+      const elapsed = now - lastPersistAtRef.current;
+
+      if (elapsed >= THROTTLE_MS) {
+        if (persistTimeoutRef.current != null) {
+          clearTimeout(persistTimeoutRef.current);
+          persistTimeoutRef.current = null;
+        }
+        lastPersistAtRef.current = now;
+        flushViewState();
+        return;
+      }
+
+      if (persistTimeoutRef.current != null) return;
+      persistTimeoutRef.current = setTimeout(() => {
+        persistTimeoutRef.current = null;
+        lastPersistAtRef.current = Date.now();
+        flushViewState();
+      }, THROTTLE_MS - elapsed);
+    },
+    [flushViewState],
+  );
+
+  useEffect(
+    () => () => {
+      if (persistTimeoutRef.current != null) {
+        clearTimeout(persistTimeoutRef.current);
+        persistTimeoutRef.current = null;
+      }
+      flushViewState();
+    },
+    [flushViewState],
+  );
 
   useEffect(() => {
     const syncWindow = () => persistViewState({ windowY: window.scrollY });
@@ -688,7 +746,7 @@ export default function PortfolioPage() {
                     tableLeft: position.left,
                   })
                 }
-                onBeforeNavigate={() => persistViewState({ windowY: window.scrollY })}
+                onBeforeNavigate={() => persistViewState({ windowY: window.scrollY }, { immediate: true })}
                 getCellClass={getCellClass}
                 renderCellValue={renderCellValue}
               />
