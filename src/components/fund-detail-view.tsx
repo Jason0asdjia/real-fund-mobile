@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDownLeft, ArrowUpRight, ChevronLeft, ChevronRight, CircleMinus, CirclePlus, PenSquare, Trash2, X } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Check, ChevronLeft, ChevronRight, Circle, CircleMinus, CirclePlus, PenSquare, Trash2, X } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 import { SecondaryBottomNav } from "@/components/ui/secondary-bottom-nav";
@@ -12,6 +12,7 @@ import { AreaChart } from "@/components/ui/area-chart";
 import { PieChart } from "@/components/ui/pie-chart";
 import { fetchFundArchiveData, fetchFundBaseData, fetchFundHistoricalNavSeries, fetchFundPreviewData } from "@/lib/fund-api";
 import { formatCurrency, formatPercent, formatSignedCurrency, formatSignedPercent } from "@/lib/portfolio";
+import { isEstimateTimestampUsable, todayInMarket } from "@/lib/time";
 import type { FundSnapshot } from "@/lib/types";
 
 type FundDetailViewProps = {
@@ -300,8 +301,29 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
 
   const navValue = toNumber(fund.gsz ?? fund.dwjz);
   const navChange = toNumber(fund.gszzl);
-  const estimatedDailyGain = hasHolding && holdingShare != null && fund?.gsz && Number(fund.gsz) > 0 && Number(fund.dwjz) > 0
-    ? holdingShare * (Number(fund.gsz) - Number(fund.dwjz))
+  const latestNav = Number.isFinite(Number(fund.dwjz)) ? Number(fund.dwjz) : null;
+  const lastNavValue = Number(fund.lastNav);
+  const lastNavValid = Number.isFinite(lastNavValue) && lastNavValue > 0;
+  const todayDate = typeof window !== "undefined" ? todayInMarket() : "";
+  const hasTodayData = fund.jzrq === todayDate;
+  const hasTodayValuationToday = !fund.noValuation && isEstimateTimestampUsable(fund.gztime);
+  const canUseEstimateToday = !hasTodayData && hasTodayValuationToday && Number.isFinite(Number(fund.gsz));
+  const officialChangeFromNav =
+    latestNav != null && lastNavValid ? ((latestNav - lastNavValue) / lastNavValue) * 100 : null;
+  const officialChangePercent = Number.isFinite(Number(fund.zzl)) ? Number(fund.zzl) : officialChangeFromNav;
+  const estimateChangePercent =
+    !fund.noValuation && canUseEstimateToday && Number.isFinite(Number(fund.gszzl)) ? Number(fund.gszzl) : null;
+  const useOfficialForTodayProfit = officialChangePercent != null && (hasTodayData || !canUseEstimateToday);
+  const activeTodayChangePercent = useOfficialForTodayProfit ? officialChangePercent : estimateChangePercent;
+  const todayProfit = hasHolding && activeTodayChangePercent != null
+    ? lastNavValid
+      ? holdingShare * lastNavValue * (activeTodayChangePercent / 100)
+      : (() => {
+          const navForBackCalc = hasTodayData ? latestNav : (Number.isFinite(Number(fund.gsz)) ? Number(fund.gsz) : null);
+          if (navForBackCalc == null) return null;
+          const currentAmount = holdingShare * navForBackCalc;
+          return currentAmount - currentAmount / (1 + activeTodayChangePercent / 100);
+        })()
     : null;
   const latestTrades = transactions.slice(0, 5);
   const holdings = Array.isArray(fund.holdings) ? fund.holdings : [];
@@ -443,16 +465,27 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
             <CardContent className="p-0">
               <div className="flex border-b border-[#e2e7ff]/20">
                 <div className="flex-1 px-4 py-3">
-                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-[#747781]">单位净值 (NAV)</p>
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-[#747781]">单位净值(估值)</p>
                   <div className="flex items-baseline gap-2">
                     <p className="m-0 text-base font-bold leading-tight tracking-tighter tabular-nums text-[#131b2e]">{navValue.toFixed(4)}</p>
                     <span className={`text-xs font-bold ${navChange >= 0 ? "text-[#ba1a1a]" : "text-[#1b7a3d]"}`}>{formatPercent(navChange)}</span>
                   </div>
                 </div>
                 <div className="flex-1 px-4 py-3">
-                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-[#747781]">今日预估收益</p>
-                  <p className={`m-0 text-base font-bold leading-tight tracking-tighter tabular-nums ${(estimatedDailyGain || 0) >= 0 ? "text-[#ba1a1a]" : "text-[#1b7a3d]"}`}>
-                    {estimatedDailyGain != null ? formatSignedCurrency(estimatedDailyGain) : "—"}
+                  <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#747781]">
+                    <span>今日收益</span>
+                    {todayProfit != null ? (
+                      useOfficialForTodayProfit ? (
+                        <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current text-slate-500">
+                          <Check size={10} strokeWidth={3} />
+                        </span>
+                      ) : (
+                        <Circle size={12} className={(todayProfit || 0) >= 0 ? "text-[#ba1a1a]" : "text-[#1b7a3d]"} strokeWidth={2.2} />
+                      )
+                    ) : null}
+                  </div>
+                  <p className={`m-0 text-base font-bold leading-tight tracking-tighter tabular-nums ${(todayProfit || 0) >= 0 ? "text-[#ba1a1a]" : "text-[#1b7a3d]"}`}>
+                    {todayProfit != null ? formatSignedCurrency(todayProfit) : "—"}
                   </p>
                 </div>
               </div>
