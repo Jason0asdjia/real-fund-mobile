@@ -57,11 +57,19 @@ export function FundSellView({ code }: FundSellViewProps) {
 
   const handleBack = () => {
     if (returnToDetail) {
-      router.replace(`/portfolio/${code}`);
+      if (window.history.length > 1) {
+        router.back();
+      } else {
+        router.replace(`/portfolio/${code}`);
+      }
       return;
     }
     if (returnToHistory) {
-      router.replace("/history");
+      if (window.history.length > 1) {
+        router.back();
+      } else {
+        router.replace("/history");
+      }
       return;
     }
     router.replace(`/portfolio/${code}`);

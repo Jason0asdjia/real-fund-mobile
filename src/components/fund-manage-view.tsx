@@ -205,7 +205,15 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
     });
 
     if (redirectOnConfirm) {
-      router.replace(redirectOnConfirm);
+      if (redirectOnConfirm === `/portfolio/${fund.code}`) {
+        if (window.history.length > 1) {
+          router.back();
+        } else {
+          router.replace(`/portfolio/${fund.code}`);
+        }
+      } else {
+        router.replace(redirectOnConfirm);
+      }
       return;
     }
 

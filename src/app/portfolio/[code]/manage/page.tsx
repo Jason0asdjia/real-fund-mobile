@@ -24,7 +24,11 @@ export default function PortfolioManagePage({
       redirectOnConfirm={redirectOnConfirm}
       onBack={() => {
         if (searchParams?.from === "detail") {
-          router.replace(`/portfolio/${params.code}`);
+          if (window.history.length > 1) {
+            router.back();
+          } else {
+            router.replace(`/portfolio/${params.code}`);
+          }
           return;
         }
         if (window.history.length > 1) {
