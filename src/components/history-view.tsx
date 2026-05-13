@@ -85,6 +85,14 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
     };
   }, [deleteTarget]);
 
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.body.classList.add("app-page-self-scroll");
+    return () => {
+      document.body.classList.remove("app-page-self-scroll");
+    };
+  }, []);
+
   const fundFilterOptions = useMemo(() => {
     const transactionCodes = new Set(
       Object.entries(state.transactions)
@@ -208,13 +216,13 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
       style={{ height: "calc(100svh - var(--bottom-nav-total-height))" }}
       onClick={swipe.handleContainerClick}
     >
-      <header className="shrink-0 border-b border-[#e2e7ff] bg-white">
+      <header className="shrink-0 overflow-hidden border-b border-[#e2e7ff] bg-white">
         <div className="flex h-12 items-center justify-between px-3">
           <h1 className="typo-page-title">交易历史</h1>
         </div>
       </header>
 
-      <section className="shrink-0 bg-[#d7e2ff] px-3 pb-2.5 pt-2.5 text-[#001b3f]">
+      <section className="shrink-0 overflow-hidden bg-[#d7e2ff] px-3 pb-2.5 pt-2.5 text-[#001b3f]">
           <div className="flex items-end justify-between gap-2">
             <div>
               <p className="mb-1 typo-label text-[#24467c]/70">{periodLabel}成交额</p>
@@ -227,7 +235,7 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
           </div>
       </section>
 
-      <section className="shrink-0 border-b border-[#e2e7ff] bg-white px-3 py-2.5">
+      <section className="shrink-0 overflow-hidden border-b border-[#e2e7ff] bg-white px-3 py-2.5">
           <div className="flex items-center gap-2 overflow-hidden">
             <label className="sr-only" htmlFor="history-type-filter">交易类型</label>
             <TwSelect

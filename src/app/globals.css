@@ -547,6 +547,11 @@
     @apply hidden;
   }
 
+  .app-detail-open .app-main,
+  .app-page-self-scroll .app-main {
+    overflow-y: hidden;
+  }
+
   .app-modal-open {
     @apply overflow-hidden;
   }

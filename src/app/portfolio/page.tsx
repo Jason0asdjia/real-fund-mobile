@@ -337,12 +337,6 @@ export default function PortfolioPage() {
   );
 
   useEffect(() => {
-    const syncWindow = () => persistViewState({ windowY: window.scrollY });
-    window.addEventListener("scroll", syncWindow, { passive: true });
-    return () => window.removeEventListener("scroll", syncWindow);
-  }, [persistViewState]);
-
-  useEffect(() => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(COLUMN_VISIBILITY_KEY, JSON.stringify(columnVisibility));
   }, [columnVisibility]);
@@ -362,13 +356,9 @@ export default function PortfolioPage() {
 
   useEffect(() => {
     if (typeof document === "undefined") return;
-    const previousBodyOverflow = document.body.style.overflow;
-    const previousHtmlOverflow = document.documentElement.style.overflow;
-    document.body.style.overflow = "hidden";
-    document.documentElement.style.overflow = "hidden";
+    document.body.classList.add("app-page-self-scroll");
     return () => {
-      document.body.style.overflow = previousBodyOverflow;
-      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.classList.remove("app-page-self-scroll");
     };
   }, []);
 
@@ -644,8 +634,11 @@ export default function PortfolioPage() {
   const getProfitTextClass = (value: number) => getSignedValueTextClass(value);
 
   return (
-    <div className="-mx-3 -mt-4 flex h-[calc(100svh-var(--bottom-nav-total-height)-0.4rem)] w-[calc(100%+1.5rem)] max-w-none flex-col gap-0 overflow-hidden bg-white md:-mx-4 md:-mt-4 md:w-[calc(100%+2rem)]">
-      <section className="border-b border-slate-200 bg-slate-50 px-3 pb-2 pt-2 text-slate-900">
+    <div
+      className="-mx-3 -mt-4 flex flex-col gap-0 overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mt-4"
+      style={{ height: "calc(100svh - var(--bottom-nav-total-height))" }}
+    >
+      <section className="shrink-0 overflow-hidden border-b border-slate-200 bg-white px-3 pb-2 pt-2 text-slate-900">
         <header className="flex items-start justify-between gap-3 py-1">
           <div>
             <h1 className="m-0 text-[24px] font-semibold leading-none tracking-[-0.02em] text-slate-900 sm:text-[28px]">基金资产概览</h1>

@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AreaChart } from "@/components/ui/area-chart";
 import { PieChart } from "@/components/ui/pie-chart";
 import { fetchFundArchiveData, fetchFundBaseData, fetchFundHistoricalNavSeries, fetchFundPreviewData } from "@/lib/fund-api";
-import { formatCurrency, formatPercent, formatSignedCurrency } from "@/lib/portfolio";
+import { formatCurrency, formatPercent, formatSignedCurrency, formatSignedPercent } from "@/lib/portfolio";
 import type { FundSnapshot } from "@/lib/types";
 
 type FundDetailViewProps = {
@@ -54,6 +54,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
   const router = useRouter();
   const [period, setPeriod] = useState<PeriodKey>("1m");
   const [clearModalOpen, setClearModalOpen] = useState(false);
+  const [showHoldingProfitPercent, setShowHoldingProfitPercent] = useState(false);
   const [officialNavSeries, setOfficialNavSeries] = useState<Array<{ date: string; nav: number }>>([]);
   const [officialNavSeriesLoading, setOfficialNavSeriesLoading] = useState(false);
   const [remoteFund, setRemoteFund] = useState<FundSnapshot | null>(null);
@@ -282,6 +283,9 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
   const holdingProfit = hasHolding && officialNavForHolding != null && holdingCost != null
     ? (officialNavForHolding - holdingCost) * holdingShare
     : null;
+  const holdingProfitRate = hasHolding && holdingCost != null && holdingCost > 0 && holdingShare != null && holdingProfit != null
+    ? (holdingProfit / (holdingCost * holdingShare)) * 100
+    : null;
   const chartPoints = officialNavSeries.map((point) => ({
     date: point.date,
     label: point.date.slice(5).replace("-", "/"),
@@ -365,7 +369,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
       }
       style={asModal ? undefined : { height: "calc(100svh - var(--bottom-nav-total-height))" }}
     >
-        <header className="shrink-0 border-b border-[#e2e7ff] bg-white">
+        <header className="shrink-0 overflow-hidden border-b border-[#e2e7ff] bg-white">
         <div className="flex items-center h-12 px-3">
           {onBack ? (
             <button
@@ -399,9 +403,20 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
                 </div>
                 <div className="flex-1 px-4 py-3">
                   <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-[#747781]">累计收益</p>
-                  <p className={`m-0 text-2xl font-bold leading-tight tracking-tighter tabular-nums ${(holdingProfit || 0) >= 0 ? "text-[#ba1a1a]" : "text-[#1b7a3d]"}`}>
-                    {hasHolding ? formatSignedCurrency(holdingProfit) : "—"}
-                  </p>
+                  <button
+                    type="button"
+                    className="border-0 bg-transparent p-0 text-left"
+                    onClick={() => setShowHoldingProfitPercent((prev) => !prev)}
+                    aria-label="切换累计收益显示方式"
+                  >
+                    <p className={`m-0 text-2xl font-bold leading-tight tracking-tighter tabular-nums ${(holdingProfit || 0) >= 0 ? "text-[#ba1a1a]" : "text-[#1b7a3d]"}`}>
+                      {hasHolding
+                        ? showHoldingProfitPercent
+                          ? formatSignedPercent(holdingProfitRate)
+                          : formatSignedCurrency(holdingProfit)
+                        : "—"}
+                    </p>
+                  </button>
                 </div>
               </div>
             </CardContent>

@@ -211,3 +211,9 @@ export const formatSignedCurrency = (value?: number | null) => {
   const sign = value > 0 ? "+" : value < 0 ? "-" : "";
   return `${sign}${formatCurrency(Math.abs(value))}`;
 };
+
+export const formatSignedPercent = (value?: number | null) => {
+  if (value == null || !Number.isFinite(value)) return "—";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(2)}%`;
+};
