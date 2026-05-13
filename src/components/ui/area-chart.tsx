@@ -106,7 +106,7 @@ export function AreaChart({
               <ChartTooltipContent
                 indicator="line"
                 labelFormatter={(label: string) => label}
-                formatter={(value: number) => value.toFixed(4)}
+                formatter={(value) => (typeof value === "number" ? value.toFixed(4) : value)}
               />
             }
           />
