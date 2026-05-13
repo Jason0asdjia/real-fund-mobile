@@ -75,6 +75,8 @@ npm run build
 ## 目录导览
 
 ```text
+AGENTS.md       # AI coding harness 入口
+docs/           # SPEC / ARCHITECTURE / DECISIONS
 src/
   app/          # 页面与路由（App Router）
   components/   # 视图与交互组件
@@ -111,7 +113,10 @@ supabase/sql/   # Supabase 初始化 SQL
 ## 文档分工
 
 - `README.md`：给人看的项目说明（目标、功能、启动、目录）
-- `AGENT.md`：给 AI/协作者看的约束与实现规范
+- `AGENTS.md`：AI coding harness 入口、读取顺序与全局规则
+- `docs/SPEC.md`：产品目标、核心功能、数据展示口径和已知限制
+- `docs/ARCHITECTURE.md`：架构边界、存储/同步/PWA/UI 硬约束
+- `docs/DECISIONS.md`：需要长期保留的技术决策记录
 - `src/app/README.md`：页面结构、导航与持仓页展示规则
 - `src/components/README.md`：壳层、Provider、交互与状态流
 - `src/lib/README.md`：API、存储、字段语义、回退与同步策略

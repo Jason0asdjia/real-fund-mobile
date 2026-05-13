@@ -24,7 +24,7 @@
 ## 页面层约束
 
 - 页面默认按移动端优先布局
-- 字体、间距、弹窗和导航约束遵循根目录 `AGENT.md`
+- 字体、间距、弹窗和导航约束遵循根目录 `AGENTS.md` 与 `docs/ARCHITECTURE.md`
 - 页面侧只做展示编排；状态写入、刷新、同步逻辑优先复用 `components/app-provider.tsx`
 
 ## Typography
