@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDownLeft, ArrowUpRight, ChevronLeft, ChevronRight, CircleMinus, CirclePlus, PenSquare, Trash2, X } from "lucide-react";
-import { Area, Pie } from "@ant-design/charts";
 
 import { useAppState } from "@/components/app-provider";
 import { SecondaryBottomNav } from "@/components/ui/secondary-bottom-nav";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AreaChart } from "@/components/ui/area-chart";
+import { PieChart } from "@/components/ui/pie-chart";
 import { fetchFundArchiveData, fetchFundBaseData, fetchFundHistoricalNavSeries, fetchFundPreviewData } from "@/lib/fund-api";
 import { formatCurrency, formatPercent, formatSignedCurrency } from "@/lib/portfolio";
 import type { FundSnapshot } from "@/lib/types";
@@ -294,6 +296,9 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
 
   const navValue = toNumber(fund.gsz ?? fund.dwjz);
   const navChange = toNumber(fund.gszzl);
+  const estimatedDailyGain = hasHolding && holdingShare != null && fund?.gsz && Number(fund.gsz) > 0 && Number(fund.dwjz) > 0
+    ? holdingShare * (Number(fund.gsz) - Number(fund.dwjz))
+    : null;
   const latestTrades = transactions.slice(0, 5);
   const holdings = Array.isArray(fund.holdings) ? fund.holdings : [];
   const detailLoading = remoteFundLoading && !fundFromState;
@@ -305,61 +310,11 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
     .filter((item) => Number.isFinite(item.value) && item.value > 0)
     .slice(0, 10);
 
-  const areaConfig = {
-    data: filteredPoints,
-    xField: "date",
-    yField: "value",
-    smooth: true,
-    tooltip: {
-      items: [{ channel: "y", valueFormatter: (value: number) => value.toFixed(4) }],
-    },
-    axis: {
-      x: {
-        labelAutoHide: true,
-        tick: false,
-        title: false,
-        labelFormatter: (_: string, index: number) => filteredPoints[index]?.label || "",
-      },
-      y: { title: false, tick: false, grid: true, labelFormatter: (value: string) => Number(value).toFixed(2) },
-    },
-    line: {
-      style: {
-        stroke: "#2f5ce0",
-        lineWidth: 2,
-      },
-    },
-    area: {
-      style: {
-        fill: "l(270) 0:#7da5ff66 1:#ffffff00",
-      },
-    },
-    style: {
-      radiusTopLeft: 8,
-      radiusTopRight: 8,
-    },
-  };
+  const pieChartData = holdingPieData.map((item) => ({
+    name: item.type,
+    value: item.value,
+  }));
 
-  const pieConfig = {
-    data: holdingPieData,
-    angleField: "value",
-    colorField: "type",
-    radius: 0.9,
-    innerRadius: 0.55,
-    legend: {
-      color: {
-        position: "bottom" as const,
-        itemLabelFontSize: 11,
-      },
-    },
-    label: {
-      text: (d: { value: number }) => `${d.value.toFixed(2)}%`,
-      position: "spider",
-      fontSize: 11,
-    },
-    tooltip: {
-      items: [{ channel: "y", valueFormatter: (value: number) => `${value.toFixed(2)}%` }],
-    },
-  };
   const handleClearHolding = () => {
     clearHolding(fund.code);
     setClearModalOpen(false);
@@ -405,84 +360,105 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
     <div
       className={
         asModal
-          ? "detail-page flex h-[100dvh] flex-col overflow-hidden bg-white text-[#131b2e]"
-          : "-mx-3 -mt-4 flex min-h-full flex-col bg-white text-[#131b2e] md:-mx-4 md:-mt-4"
+          ? "detail-page flex h-[100dvh] flex-col overflow-hidden bg-[#faf8ff] text-[#131b2e]"
+          : "-mx-3 -mt-4 flex min-h-full flex-col bg-[#faf8ff] text-[#131b2e] md:-mx-4 md:-mt-4"
       }
     >
-      <header className="z-20 shrink-0 border-b border-[#e2e7ff] bg-white">
-        <div className="relative min-h-12 px-3 py-1">
+       <header className="z-20 shrink-0 border-b border-[#e2e7ff]/60 bg-[#faf8ff]">
+        <div className="flex items-center h-12 px-3">
           {onBack ? (
             <button
               type="button"
-              className="absolute left-3 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 text-sm font-normal text-[#24467c]"
+              className="inline-flex items-center shrink-0 text-[#24467c]"
               onClick={onBack}
             >
-              <ChevronLeft size={16} />
-              返回
+              <ChevronLeft size={20} />
             </button>
           ) : (
-            <span />
+            <span className="w-5 shrink-0" />
           )}
-          <div className="mx-auto max-w-[calc(100%-7.5rem)] px-8 text-center">
-            <h1 className="m-0 typo-fund-header-title font-normal">{fund.name}</h1>
-            <p className="m-0 typo-fund-header-code font-normal">{fund.code}</p>
-          </div>
+          <span className="ml-2 text-base font-bold text-[#131b2e]">基金详情</span>
         </div>
       </header>
 
       <main className="pb-[calc(var(--bottom-nav-total-height)+0.7rem)]">
-        {holding ? (
-          <section className="border-b border-[#e2e7ff] bg-[#d7e2ff] px-3 py-1.5 text-[#001b3f]">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex min-h-[70px] flex-col justify-center">
-                <p className="mb-0.5 typo-label text-[#24467c]/70">持仓金额</p>
-                <p className="m-0 text-[30px] font-normal leading-none tracking-tight tabular-nums">{formatCurrency(holdingAmount)}</p>
+        <section className="px-3 pt-3 pb-1">
+          <Card className="rounded-xl border-[#e2e7ff]/40 bg-white shadow-none">
+            <CardHeader className="pb-3 pt-4 px-4 space-y-0.5">
+              <CardTitle className="text-xl font-bold leading-tight tracking-tight text-[#131b2e]">{fund.name}</CardTitle>
+              <p className="m-0 text-xs font-bold text-[#747781]">{fund.code}</p>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="flex border-t border-[#e2e7ff]/20">
+                <div className="flex-1 px-4 py-3">
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-[#747781]">持仓金额</p>
+                  <p className="m-0 text-2xl font-bold leading-tight tracking-tighter tabular-nums text-[#131b2e]">
+                    {hasHolding ? formatCurrency(holdingAmount) : "—"}
+                  </p>
+                </div>
+                <div className="flex-1 px-4 py-3">
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-[#747781]">累计收益</p>
+                  <p className={`m-0 text-2xl font-bold leading-tight tracking-tighter tabular-nums ${(holdingProfit || 0) >= 0 ? "text-[#ba1a1a]" : "text-[#1b7a3d]"}`}>
+                    {hasHolding ? formatSignedCurrency(holdingProfit) : "—"}
+                  </p>
+                </div>
               </div>
-              <div className="flex min-h-[70px] flex-col items-end justify-center text-right">
-                <p className="mb-0.5 typo-label text-[#24467c]/70">累计收益</p>
-                <p className={`m-0 text-[20px] font-normal leading-none tabular-nums ${(holdingProfit || 0) >= 0 ? "text-[#24467c]" : "text-[#ba1a1a]"}`}>
-                  {formatSignedCurrency(holdingProfit)}
-                </p>
+            </CardContent>
+          </Card>
+        </section>
+
+        <div className="flex gap-2 overflow-x-auto px-3 py-3 [&::-webkit-scrollbar]:hidden">
+          {PERIOD_OPTIONS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className={`shrink-0 rounded-lg border px-4 py-1.5 text-xs font-bold ${
+                period === item.key ? "border-[#a9c3ff] bg-[#dce8ff] text-[#0f2c66]" : "border-transparent text-[#747781] hover:bg-[#f2f3ff]"
+              }`}
+              onClick={() => setPeriod(item.key)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <section className="px-3 pb-1">
+          <Card className="rounded-xl border-[#e2e7ff]/40 bg-white shadow-none">
+            <CardContent className="p-0">
+              <div className="flex border-b border-[#e2e7ff]/20">
+                <div className="flex-1 px-4 py-3">
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-[#747781]">单位净值 (NAV)</p>
+                  <div className="flex items-baseline gap-2">
+                    <p className="m-0 text-base font-bold leading-tight tracking-tighter tabular-nums text-[#131b2e]">{navValue.toFixed(4)}</p>
+                    <span className={`text-xs font-bold ${navChange >= 0 ? "text-[#ba1a1a]" : "text-[#1b7a3d]"}`}>{formatPercent(navChange)}</span>
+                  </div>
+                </div>
+                <div className="flex-1 px-4 py-3">
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-[#747781]">今日预估收益</p>
+                  <p className={`m-0 text-base font-bold leading-tight tracking-tighter tabular-nums ${(estimatedDailyGain || 0) >= 0 ? "text-[#ba1a1a]" : "text-[#1b7a3d]"}`}>
+                    {estimatedDailyGain != null ? formatSignedCurrency(estimatedDailyGain) : "—"}
+                  </p>
+                </div>
               </div>
-            </div>
-          </section>
-        ) : null}
-
-        <section className="border-b border-[#e2e7ff] px-3 py-3">
-          <div className="mb-2 flex items-start justify-between gap-3">
-            <div>
-              <p className="mb-1 typo-section-title">单位净值 (NAV)</p>
-              <p className="text-[28px] font-normal tracking-tight tabular-nums text-[#00193c]">{navValue.toFixed(4)}</p>
-            </div>
-            <div className={`text-sm tabular-nums ${navChange >= 0 ? "text-[#005bc0]" : "text-red-600"}`}>{formatPercent(navChange)}</div>
-          </div>
-
-          <div className="mb-2 flex items-center gap-1.5">
-            {PERIOD_OPTIONS.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                className={`rounded-md border px-2.5 py-1 text-[11px] font-normal ${
-                  period === item.key ? "border-[#a9c3ff] bg-[#dce8ff] text-[#0f2c66]" : "border-transparent bg-[#f2f3ff] text-[#57657a]"
-                }`}
-                onClick={() => setPeriod(item.key)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="rounded-xl border border-[#e2e7ff] bg-white p-2.5">
-            <p className="mb-1 px-1 text-[11px] font-normal tracking-[0.06em] text-[#57657a]">净值变化</p>
-            {officialNavSeriesLoading && !officialNavSeries.length ? (
-              <div className="space-y-3 px-1 py-3">
-                <div className="h-4 w-20 animate-pulse rounded bg-[#eef2fa]" />
-                <div className="h-[180px] animate-pulse rounded-lg bg-[#f6f8fc]" />
+              <div className="px-4 pt-3 pb-4">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[#747781]">净值走势</p>
+                {officialNavSeriesLoading && !officialNavSeries.length ? (
+                  <div className="space-y-3 py-2">
+                    <div className="h-4 w-20 animate-pulse rounded bg-[#eef2fa]" />
+                    <div className="h-[180px] animate-pulse rounded-lg bg-[#f6f8fc]" />
+                  </div>
+                ) : (
+                  <AreaChart
+                    data={filteredPoints}
+                    color="#2f5ce0"
+                    showGrid
+                    showYAxis
+                    height={200}
+                  />
+                )}
               </div>
-            ) : (
-              <Area key={`${period}-${filteredPoints.length}-${filteredPoints[0]?.date || "none"}-${filteredPoints.at(-1)?.date || "none"}`} {...areaConfig} height={220} />
-            )}
-          </div>
+            </CardContent>
+          </Card>
         </section>
 
         <section className="border-b border-[#e2e7ff] py-3">
@@ -497,7 +473,7 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
               </div>
             ) : holdingPieData.length ? (
               <div className="rounded-xl border border-[#e2e7ff] bg-white p-3">
-                <Pie {...pieConfig} height={240} />
+                <PieChart data={pieChartData} height={220} />
               </div>
             ) : (
               <div className="px-3 py-6 text-center text-sm text-[#747781]">暂无重仓数据</div>

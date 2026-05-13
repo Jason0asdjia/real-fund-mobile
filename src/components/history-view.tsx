@@ -214,7 +214,7 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
         </div>
       </header>
 
-      <section className="shrink-0 bg-[#d7e2ff] px-3 pb-4 pt-3 text-[#001b3f]">
+      <section className="shrink-0 bg-[#d7e2ff] px-3 pb-2.5 pt-2.5 text-[#001b3f]">
           <div className="flex items-end justify-between gap-2">
             <div>
               <p className="mb-1 typo-label text-[#24467c]/70">{periodLabel}成交额</p>

@@ -100,3 +100,39 @@
 - 专有名词、代码标识符、命令、路径、API 字段、库名和协议名可以保留英文。
 - 新增或重构 `*.md` 时，应优先使用中文标题、中文段落和中文列表项。
 - 如果引用外部英文资料，可保留原文链接或短语，但必须用中文解释其项目语义。
+
+## D009 - 卡片组件统一使用 shadcn Card
+
+决策：项目中的卡片容器统一使用 `src/components/ui/card.tsx`（shadcn Card 组件），不再手写临时卡片样式。
+
+原因：统一卡片模板可以保证圆角、边框、阴影和内边距策略在整个应用中一致，降低后续维护成本。
+
+影响：
+
+- 新增卡片类布局时，优先使用 `Card` / `CardHeader` / `CardContent` / `CardFooter` 等子组件。
+- 外观差异通过 `className` 覆写，不另起裸 `div` 模拟卡片。
+- 如有特殊需求需要独立卡片样式，须在 `DECISIONS.md` 中记录例外理由。
+
+## D010 - 面积走势图统一使用 shadcn AreaChart
+
+决策：项目中净值走势图等面积图统一使用 `src/components/ui/area-chart.tsx`（基于 Recharts + shadcn Chart 封装），不再使用 `@ant-design/charts` 中的 `Area` 组件。
+
+原因：统一图表组件可保证交互行为（tooltip、坐标轴、渐变填充）一致，同时复用 shadcn Chart 的深色模式与可访问性体系。Recharts 比 @ant-design/charts 更轻量、更易定制。
+
+影响：
+
+- 新增面积走势图时，引入 `AreaChart` 并传入 `data`、`color` 等 props。
+- `data` 格式统一为 `{ label: string; value: number }[]`。
+- 不再在业务页面中引入 `@ant-design/charts` 的 `Area`。
+
+## D011 - 饼图统一使用 shadcn PieChart
+
+决策：项目中饼图/环形图统一使用 `src/components/ui/pie-chart.tsx`（基于 Recharts + shadcn Chart 封装），不再使用 `@ant-design/charts` 的 `Pie` 组件。
+
+原因：与面积走势图决策一致，统一图表组件可保证交互行为和色调体系一致。内置图例列表比 @ant-design/charts 的 legend 更适合移动端紧凑布局。
+
+影响：
+
+- 新增饼图时，引入 `PieChart` 并传入 `data`（`{ name: string; value: number }[]`）。
+- 环形内径通过 `innerRadius`、`outerRadius` 控制，图例通过 `showLegend` 开关。
+- 不再在业务页面中引入 `@ant-design/charts` 的 `Pie`。

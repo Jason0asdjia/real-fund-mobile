@@ -12,3 +12,4 @@ pnpm-debug.log*
 !.env.example
 .codex
 tsconfig.tsbuildinfo
+opencode.json
