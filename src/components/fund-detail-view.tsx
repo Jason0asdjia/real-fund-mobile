@@ -360,11 +360,12 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
     <div
       className={
         asModal
-          ? "detail-page flex h-[100dvh] flex-col overflow-hidden bg-[#faf8ff] text-[#131b2e]"
-          : "-mx-3 -mt-4 flex min-h-full flex-col bg-[#faf8ff] text-[#131b2e] md:-mx-4 md:-mt-4"
+          ? "detail-page flex h-[100dvh] flex-col overflow-hidden bg-white text-[#131b2e]"
+          : "-mx-3 -mt-4 flex flex-col gap-0 overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mt-4"
       }
+      style={asModal ? undefined : { height: "calc(100svh - var(--bottom-nav-total-height))" }}
     >
-       <header className="z-20 shrink-0 border-b border-[#e2e7ff]/60 bg-[#faf8ff]">
+        <header className="shrink-0 border-b border-[#e2e7ff] bg-white">
         <div className="flex items-center h-12 px-3">
           {onBack ? (
             <button
@@ -381,9 +382,9 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
         </div>
       </header>
 
-      <main className="pb-[calc(var(--bottom-nav-total-height)+0.7rem)]">
-        <section className="px-3 pt-3 pb-1">
-          <Card className="rounded-xl border-[#e2e7ff]/40 bg-white shadow-none">
+      <main className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain pb-[calc(var(--bottom-nav-total-height)+0.7rem)]">
+        <section className="px-1.5 pt-3 pb-1">
+          <Card className="rounded-xl border-[#e2e7ff]/40">
             <CardHeader className="pb-3 pt-4 px-4 space-y-0.5">
               <CardTitle className="text-xl font-bold leading-tight tracking-tight text-[#131b2e]">{fund.name}</CardTitle>
               <p className="m-0 text-xs font-bold text-[#747781]">{fund.code}</p>
@@ -422,8 +423,8 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
           ))}
         </div>
 
-        <section className="px-3 pb-1">
-          <Card className="rounded-xl border-[#e2e7ff]/40 bg-white shadow-none">
+        <section className="px-1.5 pb-1">
+          <Card className="rounded-xl border-[#e2e7ff]/40">
             <CardContent className="p-0">
               <div className="flex border-b border-[#e2e7ff]/20">
                 <div className="flex-1 px-4 py-3">
@@ -466,22 +467,26 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
             <h2 className="typo-section-title">前十重仓股</h2>
             <span className="text-[10px] font-normal text-[#747781]">{fund.holdingsReportDate ? `披露日 ${fund.holdingsReportDate}` : "截至最近披露"}</span>
           </div>
-          <div className="px-3">
+          <div className="px-1.5">
             {archiveLoading && !holdingPieData.length ? (
-              <div className="rounded-xl border border-[#e2e7ff] bg-white p-3">
-                <div className="h-[240px] animate-pulse rounded-lg bg-[#f6f8fc]" />
-              </div>
+              <Card>
+                <CardContent className="p-3">
+                  <div className="h-[240px] animate-pulse rounded-lg bg-[#f6f8fc]" />
+                </CardContent>
+              </Card>
             ) : holdingPieData.length ? (
-              <div className="rounded-xl border border-[#e2e7ff] bg-white p-3">
-                <PieChart data={pieChartData} height={220} />
-              </div>
+              <Card>
+                <CardContent className="p-3">
+                  <PieChart data={pieChartData} height={220} />
+                </CardContent>
+              </Card>
             ) : (
               <div className="px-3 py-6 text-center text-sm text-[#747781]">暂无重仓数据</div>
             )}
           </div>
         </section>
 
-        <section className="pt-3">
+        <section className="pt-3 bg-white">
           <div className="mb-2 flex items-center justify-between px-3">
             <h2 className="typo-section-title">历史成交</h2>
             <Link href={`/history?fund=${fund.code}`} className="inline-flex items-center gap-1 text-[10px] font-normal text-[#24467c]">
@@ -489,13 +494,13 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
               <ChevronRight size={12} />
             </Link>
           </div>
-          <div className="divide-y divide-[#f2f3ff]">
+          <div className="divide-y divide-slate-100">
             {latestTrades.length ? (
               latestTrades.map((item) => {
                 const isBuy = item.type === "buy";
                 const amount = Number(item.share) * Number(item.price);
                 return (
-                  <article key={item.id} className="flex items-center justify-between px-3 py-3">
+                  <article key={item.id} className="flex items-center justify-between px-3 py-3 bg-white">
                     <div className="flex min-w-0 items-center gap-2.5">
                       <div
                         className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded ${

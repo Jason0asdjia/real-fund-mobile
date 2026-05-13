@@ -7,19 +7,27 @@
 - App Router 路由与页面入口
 - 全局布局、壳层挂载、页面级组合
 - 页面展示口径，尤其是持仓页指标定义
+- API 路由代理，转发东财档案数据请求
 
 ## 当前页面结构
 
 - `layout.tsx`：全局布局、Provider 挂载、PWA 元数据、全局样式
 - `page.tsx`：首页重定向到 `/portfolio`
+- `portfolio/layout.tsx`：持仓模块透传布局壳
 - `portfolio/page.tsx`：持仓总览主入口
 - `portfolio/[code]/page.tsx`：基金详情
-- `portfolio/[code]/manage|buy|sell/page.tsx`：持仓管理、买入、卖出
+- `portfolio/[code]/buy/page.tsx`：基金加仓
+- `portfolio/[code]/sell/page.tsx`：基金减仓
+- `portfolio/[code]/manage/page.tsx`：持仓管理
 - `discover/page.tsx`：基金搜索、预览、添加
 - `market/page.tsx`：指数、板块、快讯
 - `history/page.tsx`：交易历史筛选页
 - `settings/page.tsx`：刷新频率、演示数据、备份导入导出、手动云同步、账户信息
 - `dashboard/page.tsx`：旧驾驶舱页面，代码保留但不在当前主导航
+
+## API 路由
+
+- `api/fund-archives/route.ts`：代理东财 `FundArchivesDatas.aspx` 接口，支持 `jjcc`（基金持仓）和 `jbgk`（基本概况）两种档案类型，对上游 HTMLP 格式做内容解析后返回 JSON
 
 ## 页面层约束
 
@@ -34,6 +42,7 @@
 - 标签：`typo-label`
 - 主金额和主指标：`typo-value-hero`、`typo-value-emphasis`
 - 主文案和辅助信息：`typo-body-strong`、`typo-meta`、`typo-micro`
+- 基金头部：`typo-fund-header-title`、`typo-fund-header-code`
 
 ## 持仓页规则
 
@@ -71,9 +80,21 @@
 - 列显隐和列顺序使用 `localStorage`
 - 市场页自选指数使用 `localStorage`
 
+## 加仓/减仓页面规则
+
+- 支持按金额或按份额两种输入模式，可一键切换
+- 交易日期可选择历史日期（拉取对应净值）或今日
+- 支持 15:00 前/后成交节点区分
+- 支持编辑已有交易记录（通过 `editTxId` 参数）
+- 费率固定 0.15%，手续费在页面估算展示
+
 ## 相关文件
 
 - `portfolio/page.tsx`
+- `portfolio/[code]/page.tsx`
+- `portfolio/[code]/buy/page.tsx`
+- `portfolio/[code]/sell/page.tsx`
 - `market/page.tsx`
 - `settings/page.tsx`
+- `api/fund-archives/route.ts`
 - `globals.css`

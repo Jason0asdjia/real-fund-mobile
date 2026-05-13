@@ -7,7 +7,7 @@ import { buildCloudPayloadFromState, createCloudPayload, fetchCloudUserData, fet
 import { fetchFundArchiveData, fetchFundBaseData, fetchFundHistoricalNavSeries, searchFunds } from "@/lib/fund-api";
 import { applyConfirmedTransactionsToHolding, getTransactionConfirmDateInMarket, isTransactionConfirmedInMarket } from "@/lib/portfolio";
 import { APP_STATE_KEY, bumpAppStateVersion, computeAppStateContentHash, defaultAppState, loadAppState, markAppStateSynced, normalizeAppState, saveAppState, syncDataVersionFloor } from "@/lib/storage";
-import { isEstimateTimestampUsable, MARKET_OPEN_MINUTES, nowInMarket } from "@/lib/time";
+import { formatLocalTimestamp, isEstimateTimestampUsable, MARKET_OPEN_MINUTES, nowInMarket } from "@/lib/time";
 import type { AppState, FundHolding, FundSnapshot, FundTransaction, SearchFundResult, ValuationPoint } from "@/lib/types";
 import { IMPORTANT_UI_PREFERENCE_KEYS, applyImportantPreferences, readImportantPreferences } from "@/lib/user-preferences";
 import { clearValuationSeries, getAllValuationSeries, normalizeValuationSeries, recordValuation, setAllValuationSeries, VALUATION_TIMESERIES_KEY } from "@/lib/valuation-timeseries";
@@ -89,6 +89,17 @@ const markPendingCloudSync = (userId: string, payloadSignature: string) => {
     }));
   } catch {
     // ignore storage failure
+  }
+};
+
+const MANUAL_SYNC_UPLOAD_AT_KEY = "real-fund-mobile:manual-sync-upload-at";
+
+const markManualSyncUploadAt = () => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(MANUAL_SYNC_UPLOAD_AT_KEY, formatLocalTimestamp());
+  } catch {
+    // ignore
   }
 };
 
@@ -629,6 +640,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             lastCloudPayloadRef.current = JSON.stringify(latestLocalPayload);
             applySyncedState(stateRef.current, latestLocalPayload.sync.dataVersion, latestLocalPayload.sync.updatedAt);
             clearPendingCloudSync(userId);
+            markManualSyncUploadAt();
           }
           setLocalOwnerUser(userId);
           return;
@@ -653,6 +665,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           applySyncedState(stateRef.current, latestLocalPayload.sync.dataVersion, latestLocalPayload.sync.updatedAt);
           setLocalOwnerUser(userId);
           clearPendingCloudSync(userId);
+          markManualSyncUploadAt();
           return;
         }
 
@@ -703,6 +716,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             lastCloudPayloadRef.current = JSON.stringify(mergedPayload);
             setLocalOwnerUser(userId);
             clearPendingCloudSync(userId);
+            markManualSyncUploadAt();
           }
 
           setValuationSeries(getAllValuationSeries());
@@ -722,6 +736,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         setLocalOwnerUser(userId);
         clearPendingCloudSync(userId);
+        markManualSyncUploadAt();
       } catch {
         if (!active) return;
         if (!hasRuntimeChangedSinceBootstrap()) {
@@ -867,6 +882,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 : current
             ));
             clearPendingCloudSync(userId);
+            markManualSyncUploadAt();
             return;
           }
 
@@ -896,6 +912,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 : current
             ));
             clearPendingCloudSync(userId);
+            markManualSyncUploadAt();
             return;
           }
 
@@ -907,6 +924,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           lastCloudPayloadRef.current = JSON.stringify(mergedPayload);
           setLocalOwnerUser(userId);
           clearPendingCloudSync(userId);
+          markManualSyncUploadAt();
         })
         .catch(() => {
           // keep local runtime state; sync can retry on next state/preference change
@@ -940,6 +958,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setState((current) => markAppStateSynced(current, resolvedPayload.sync.dataVersion, resolvedPayload.sync.updatedAt ?? undefined));
       setLocalOwnerUser(userId);
       clearPendingCloudSync(userId);
+      markManualSyncUploadAt();
       pendingConflictRef.current = null;
       setConflictResolution({
         open: false,
@@ -975,6 +994,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setState((current) => markAppStateSynced(current, localPayload.sync.dataVersion, localPayload.sync.updatedAt ?? undefined));
         setLocalOwnerUser(userId);
         clearPendingCloudSync(userId);
+        markManualSyncUploadAt();
         return { ok: true, message: "已上传当前配置到云端" };
       }
 
@@ -993,6 +1013,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setState((current) => markAppStateSynced(current, localPayload.sync.dataVersion, localPayload.sync.updatedAt ?? undefined));
         setLocalOwnerUser(userId);
         clearPendingCloudSync(userId);
+        markManualSyncUploadAt();
         return { ok: true, message: "已上传当前配置到云端" };
       }
 
@@ -1003,6 +1024,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setState((current) => markAppStateSynced(current, mergedPayload.sync.dataVersion, mergedPayload.sync.updatedAt ?? undefined));
       setLocalOwnerUser(userId);
       clearPendingCloudSync(userId);
+      markManualSyncUploadAt();
       return { ok: true, message: "云端版本较新，已自动合并后上传" };
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : "上传云端失败";

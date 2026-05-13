@@ -7,31 +7,37 @@
 - 基金数据请求与解析
 - 持仓与收益计算
 - 本地存储、偏好、时间序列和云端同步
+- 通用工具函数
 
 ## 关键文件
 
-- `/src/lib/fund-api.ts`：基金搜索/估值/历史净值请求
-- `/src/lib/market-api.ts`：行情指数、基金板块、7x24 快讯请求
-- `/src/lib/portfolio.ts`：持仓计算与统计
-- `/src/lib/storage.ts`：本地存储读写
-- `/src/lib/user-preferences.ts`：关键 UI 偏好读写与同步白名单
-- `/src/lib/cloud-user-data.ts`：云端 payload、合并、拉取、上传
-- `/src/lib/supabase-client.ts`：Supabase 客户端
-- `/src/lib/valuation-timeseries.ts`：估值序列缓存
-- `/src/lib/time.ts`：交易时间处理
-- `/src/lib/types.ts`：业务类型定义
-- `/src/lib/demo-data.ts`：演示数据生成
+- `fund-api.ts`：基金搜索/估值/历史净值请求、档案例程
+- `market-api.ts`：行情指数、基金板块、7x24 快讯请求
+- `portfolio.ts`：持仓计算与统计（`buildRows`、`getHoldingMetrics`、格式化函数）
+- `storage.ts`：本地存储读写（`AppState` 持久化、标准化、设备 ID）
+- `user-preferences.ts`：关键 UI 偏好读写与同步白名单
+- `cloud-user-data.ts`：云端 payload、合并、拉取、上传
+- `supabase-client.ts`：Supabase 客户端
+- `valuation-timeseries.ts`：估值序列缓存
+- `time.ts`：交易时间处理（交易日判断、盘中截止时间、持有天数、日期格式化）
+- `types.ts`：业务类型定义（FundSnapshot、FundHolding、FundTransaction、ValuationPoint 等）
+- `demo-data.ts`：演示数据生成
+- `utils.ts`：通用工具函数，提供 `cn()` 用于 Tailwind CSS 类名合并（clsx + tailwind-merge）
 
 ## API 与字段
 - 基金搜索：`fundsuggest.eastmoney.com/FundSearchAPI`
 - 基金实时估值：`fundgz.1234567.com.cn/js/{code}.js`
 - 基金历史净值：`fundf10.eastmoney.com/F10DataApi.aspx?type=lsjz`
+- 基金档案：`fundf10.eastmoney.com/FundArchivesDatas.aspx`（经 `api/fund-archives/route.ts` 代理）
 - 行情指数：腾讯行情 `qt.gtimg.cn`
 - 行情快讯 / 板块：东财公开接口（见 `market-api.ts`）
 - `FundSnapshot` 当前承载：净值/估值、来源状态、基金基础资料、重仓披露信息等页面使用字段
 - `SearchFundResult` 当前承载：代码、名称、分类、基金类型、拼音等搜索结果字段
+- `FundHolding`：持仓份额、成本、首次买入日期
+- `FundTransaction`：交易记录（买入/卖出、日期、份额、价格、手续费、备注）
+- `ValuationPoint`：估值序列点（时间戳 + 净值）
 
-## 基金数据取值规则（`/src/lib/fund-api.ts`）
+## 基金数据取值规则（`fund-api.ts`）
 
 ### 1) 估值链路（双源）
 - 主源：东方财富估值脚本 `fundgz.1234567.com.cn/js/{code}.js`
@@ -72,6 +78,7 @@
   - `fetchFundBaseData`：轻量报价刷新（用于持仓页定时刷新）
   - `fetchFundArchiveData`：档案补齐（重仓/概况字段后台异步预取）
   - `fetchFundData`：兼容全量入口（base + archive）
+  - `fetchFundHistoricalNavForDate`：按日期查询历史净值（用于加仓/减仓页面）
 
 ### 5) 与页面计算直接相关的字段语义
 - `dwjz/jzrq/zzl`：官方确定值（日终口径）
@@ -80,6 +87,12 @@
 - `noValuation`：当前是否缺估值链路
 - `officialConfirmedAt/officialConfirmedForDate`：官方值首次确认时间与对应净值日
 - `officialSource/estimateSource/source`：官方来源、估值来源、当前活跃来源
+
+## 持仓计算（`portfolio.ts`）
+
+- `buildRows()`：持仓表格核心计算，合并 fund + holding + transaction 数据产出逐行指标
+- `getHoldingMetrics()`：单基金持仓指标（持有金额、当日收益、累计收益、持有收益率等）
+- `formatCurrency()` / `formatSignedCurrency()` / `formatPercent()` / `formatTradeDate()`：数值与日期格式化
 
 ## 存储与同步
 

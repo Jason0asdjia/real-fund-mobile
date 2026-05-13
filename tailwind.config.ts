@@ -17,6 +17,7 @@ const config: Config = {
       },
       boxShadow: {
         soft: "0 10px 30px rgba(18,25,38,0.08)",
+        card: "0 2px 8px rgba(18,25,38,0.06)",
       },
       borderRadius: {
         xl2: "1.25rem",

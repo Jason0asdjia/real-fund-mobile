@@ -113,10 +113,17 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setLastManualUploadAt(window.localStorage.getItem(MANUAL_SYNC_UPLOAD_AT_KEY));
-    setLastManualPullAt(window.localStorage.getItem(MANUAL_SYNC_PULL_AT_KEY));
-    setLastManualExportAt(window.localStorage.getItem(MANUAL_SYNC_EXPORT_AT_KEY));
-    setLastManualImportAt(window.localStorage.getItem(MANUAL_SYNC_IMPORT_AT_KEY));
+
+    const read = () => {
+      setLastManualUploadAt(window.localStorage.getItem(MANUAL_SYNC_UPLOAD_AT_KEY));
+      setLastManualPullAt(window.localStorage.getItem(MANUAL_SYNC_PULL_AT_KEY));
+      setLastManualExportAt(window.localStorage.getItem(MANUAL_SYNC_EXPORT_AT_KEY));
+      setLastManualImportAt(window.localStorage.getItem(MANUAL_SYNC_IMPORT_AT_KEY));
+    };
+    read();
+
+    const timer = window.setInterval(read, 1500);
+    return () => window.clearInterval(timer);
   }, []);
 
   const displayName = useMemo(() => {
