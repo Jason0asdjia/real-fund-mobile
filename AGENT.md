@@ -22,6 +22,7 @@
 
 - 不移除 PWA 关键文件：`public/manifest.webmanifest`、`public/sw.js`、`public/offline.html`
 - 不随意变更 localStorage/sessionStorage key；现有偏好键和 `AppState` 结构视为兼容面
+- 尽量使用nextjs的组件，来实现pwa的各种操作逻辑，不要手写。
 - 业务时间统一走 `src/lib/time.ts`
 - 业务逻辑不要直接依赖裸 `new Date()`、`toISOString()`、`toLocaleTimeString()`
 - 页面数据刷新必须绑定 `state.refreshMs` 或其派生流程，禁止写死轮询周期
