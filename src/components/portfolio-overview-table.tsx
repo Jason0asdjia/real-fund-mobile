@@ -71,67 +71,72 @@ export function PortfolioOverviewTable({
   getCellClass,
   renderCellValue,
 }: PortfolioOverviewTableProps) {
-  const touchStateRef = useRef<{
-    startX: number;
-    startY: number;
-    axis: "x" | "y" | null;
-    ignoreHorizontal: boolean;
-  } | null>(null);
+  const lockScrollLeftRef = useRef<number | null>(null);
+  const startXRef = useRef(0);
+  const startYRef = useRef(0);
+  const axisRef = useRef<"x" | "y" | null>(null);
+
+  const AXIS_LOCK_THRESHOLD = 8;
+  const AXIS_BIAS = 4;
 
   const handleTouchStart = (event: ReactTouchEvent<HTMLDivElement>) => {
     const touch = event.touches[0];
     if (!touch) return;
-    touchStateRef.current = {
-      startX: touch.clientX,
-      startY: touch.clientY,
-      axis: null,
-      ignoreHorizontal: Boolean(
-        (event.target as HTMLElement | null)?.closest("[data-sticky-fund-cell='true']"),
-      ),
-    };
+    startXRef.current = touch.clientX;
+    startYRef.current = touch.clientY;
+    axisRef.current = null;
+    const onStickyCell = Boolean(
+      (event.target as HTMLElement | null)?.closest("[data-sticky-fund-cell='true']"),
+    );
+    if (onStickyCell) {
+      lockScrollLeftRef.current = event.currentTarget.scrollLeft;
+    } else {
+      lockScrollLeftRef.current = null;
+    }
   };
 
   const handleTouchMove = (event: ReactTouchEvent<HTMLDivElement>) => {
+    if (lockScrollLeftRef.current != null) {
+      const container = event.currentTarget;
+      if (container.scrollLeft !== lockScrollLeftRef.current) {
+        container.scrollLeft = lockScrollLeftRef.current;
+      }
+      return;
+    }
+
     const touch = event.touches[0];
-    const touchState = touchStateRef.current;
-    if (!touch || !touchState) return;
+    if (!touch) return;
 
-    const deltaX = Math.abs(touch.clientX - touchState.startX);
-    const deltaY = Math.abs(touch.clientY - touchState.startY);
+    const deltaX = touch.clientX - startXRef.current;
+    const deltaY = touch.clientY - startYRef.current;
+    const absX = Math.abs(deltaX);
+    const absY = Math.abs(deltaY);
 
-    if (!touchState.axis) {
-      if (deltaX > 6 || deltaY > 6) {
-        touchState.axis = deltaX > deltaY ? "x" : "y";
-      } else {
-        return;
-      }
+    if (!axisRef.current) {
+      if (absX < AXIS_LOCK_THRESHOLD && absY < AXIS_LOCK_THRESHOLD) return;
+      axisRef.current = absX > absY + AXIS_BIAS ? "x" : "y";
     }
 
-    if (touchState.ignoreHorizontal && touchState.axis === "x") {
+    if (axisRef.current !== "x") return;
+
+    const maxScrollLeft =
+      event.currentTarget.scrollWidth - event.currentTarget.clientWidth;
+    if (maxScrollLeft <= 0) return;
+
+    const atLeftEdge = event.currentTarget.scrollLeft <= 0;
+    const atRightEdge = event.currentTarget.scrollLeft >= maxScrollLeft - 1;
+
+    if (
+      (atLeftEdge && deltaX > 0) ||
+      (atRightEdge && deltaX < 0)
+    ) {
       event.preventDefault();
-      return;
-    }
-
-    if (touchState.axis === "x") {
-      const maxScrollLeft =
-        event.currentTarget.scrollWidth - event.currentTarget.clientWidth;
-      if (maxScrollLeft <= 0) return;
-
-      const atLeftEdge = event.currentTarget.scrollLeft <= 0;
-      const atRightEdge = event.currentTarget.scrollLeft >= maxScrollLeft - 1;
-
-      if (
-        (atLeftEdge && touch.clientX > touchState.startX) ||
-        (atRightEdge && touch.clientX < touchState.startX)
-      ) {
-        event.preventDefault();
-      }
-      return;
     }
   };
 
   const handleTouchEnd = () => {
-    touchStateRef.current = null;
+    lockScrollLeftRef.current = null;
+    axisRef.current = null;
   };
 
   return (
