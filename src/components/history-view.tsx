@@ -157,6 +157,21 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
     return Array.from(bucket.entries());
   }, [transactions]);
 
+  const monthlyStats = useMemo(() => {
+    const stats = new Map<string, { buyAmount: number; sellAmount: number }>();
+    transactions.forEach((item) => {
+      const month = item.date.slice(0, 7);
+      const entry = stats.get(month) || { buyAmount: 0, sellAmount: 0 };
+      if (item.type === "buy") {
+        entry.buyAmount += item.amount;
+      } else {
+        entry.sellAmount += Math.abs(item.amount);
+      }
+      stats.set(month, entry);
+    });
+    return stats;
+  }, [transactions]);
+
   useEffect(() => {
     const monthKeys = grouped.map(([month]) => month);
     setExpandedMonths((prev) => {
@@ -189,16 +204,17 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
 
   return (
     <div
-      className="-mx-3 -mb-24 -mt-4 bg-white text-[#131b2e] md:-mx-4 md:-mb-24 md:-mt-4"
+      className="-mx-3 -mt-4 flex flex-col gap-0 overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mt-4"
+      style={{ height: "calc(100svh - var(--bottom-nav-total-height))" }}
       onClick={swipe.handleContainerClick}
     >
-      <header className="border-b border-[#e2e7ff] bg-white">
+      <header className="shrink-0 border-b border-[#e2e7ff] bg-white">
         <div className="flex h-12 items-center justify-between px-3">
           <h1 className="typo-page-title">交易历史</h1>
         </div>
       </header>
 
-      <section className="bg-[#d7e2ff] px-3 pb-4 pt-3 text-[#001b3f]">
+      <section className="shrink-0 bg-[#d7e2ff] px-3 pb-4 pt-3 text-[#001b3f]">
           <div className="flex items-end justify-between gap-2">
             <div>
               <p className="mb-1 typo-label text-[#24467c]/70">{periodLabel}成交额</p>
@@ -211,7 +227,7 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
           </div>
       </section>
 
-      <section className="border-b border-[#e2e7ff] bg-white px-3 py-2.5">
+      <section className="shrink-0 border-b border-[#e2e7ff] bg-white px-3 py-2.5">
           <div className="flex items-center gap-2 overflow-hidden">
             <label className="sr-only" htmlFor="history-type-filter">交易类型</label>
             <TwSelect
@@ -251,7 +267,7 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
           </div>
       </section>
 
-      <main className="pb-[calc(var(--bottom-nav-total-height)+0.7rem)]" onScroll={swipe.handleContainerScroll}>
+      <main className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain pb-[calc(var(--bottom-nav-total-height)+0.7rem)]" onScroll={swipe.handleContainerScroll}>
           {grouped.length === 0 ? (
             <div className="px-3 py-8 text-center text-sm text-[#747781]">暂无交易记录，先去持仓页录入交易。</div>
           ) : (
@@ -273,6 +289,9 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
                   }}
                 >
                   <span>{monthLabel(month)}</span>
+                  <span className="ml-auto mr-2 text-[10px] font-normal tabular-nums tracking-normal text-[#747781]">
+                    买入 {formatCurrency(monthlyStats.get(month)?.buyAmount || 0)} · 卖出 {formatCurrency(monthlyStats.get(month)?.sellAmount || 0)}
+                  </span>
                   {expandedMonths.has(month) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </button>
                 {expandedMonths.has(month) ? (
