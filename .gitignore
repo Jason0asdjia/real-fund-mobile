@@ -11,3 +11,4 @@ pnpm-debug.log*
 .env*
 !.env.example
 .codex
+tsconfig.tsbuildinfo
