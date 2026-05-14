@@ -8,6 +8,7 @@ import { Github, Loader2, ShieldAlert } from "lucide-react";
 import { useAppState } from "@/components/app-provider";
 import { useAuth } from "@/components/auth-provider";
 import { BottomNav } from "@/components/bottom-nav";
+import { Button } from "@/components/ui/button";
 
 const routeOrder = ["/portfolio", "/discover", "/market", "/history", "/settings", "/dashboard"];
 
@@ -187,36 +188,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
 
               <div className="mt-4 grid grid-cols-1 gap-2">
-                <button
-                  type="button"
-                  className="app-modal-btn-secondary"
+                <Button
+                  variant="outline"
                   disabled={conflictResolution.resolving}
                   onClick={() => {
                     void resolveDataConflict("keep_local");
                   }}
                 >
                   保留本地（覆盖云端）
-                </button>
-                <button
-                  type="button"
-                  className="app-modal-btn-secondary"
+                </Button>
+                <Button
+                  variant="outline"
                   disabled={conflictResolution.resolving}
                   onClick={() => {
                     void resolveDataConflict("keep_cloud");
                   }}
                 >
                   保留云端
-                </button>
-                <button
-                  type="button"
-                  className="app-modal-btn-primary"
+                </Button>
+                <Button
+                  variant="primary"
                   disabled={conflictResolution.resolving}
                   onClick={() => {
                     void resolveDataConflict("merge");
                   }}
                 >
                   合并（推荐）
-                </button>
+                </Button>
               </div>
             </div>
           </div>

@@ -114,6 +114,14 @@ export default function MarketPage() {
 
   useEffect(() => {
     if (typeof document === "undefined") return;
+    document.body.classList.add("app-page-self-scroll");
+    return () => {
+      document.body.classList.remove("app-page-self-scroll");
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
     document.body.classList.toggle("app-modal-open", indexModalOpen);
     return () => {
       document.body.classList.remove("app-modal-open");
@@ -282,15 +290,18 @@ export default function MarketPage() {
   };
 
   return (
-    <div className="-mx-3 -mt-4 bg-white text-[#131b2e] md:-mx-4 md:-mt-4">
-      <header className="border-b border-[#e2e7ff] bg-white">
+    <div
+      className="-mx-3 -mt-4 flex flex-col gap-0 overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mt-4"
+      style={{ height: "calc(100svh - var(--bottom-nav-total-height))" }}
+    >
+      <header className="shrink-0 overflow-hidden border-b border-[#e2e7ff] bg-white">
         <div className="flex h-12 items-center justify-between px-3">
           <h1 className="typo-page-title">行情中心</h1>
           <span />
         </div>
       </header>
 
-      <section className="flex items-stretch border-b border-[#e2e7ff] bg-white">
+      <section className="shrink-0 overflow-hidden flex items-stretch border-b border-[#e2e7ff] bg-white">
         <div className="flex flex-1 items-center gap-5 overflow-x-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {marketSnapshot.length > 0 ? marketSnapshot.map((item) => (
             <article key={item.id} className="min-w-fit shrink-0 pr-3">
@@ -307,7 +318,7 @@ export default function MarketPage() {
         </button>
       </section>
 
-      <main>
+      <main className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain pb-[calc(var(--bottom-nav-total-height)+0.7rem)]">
         <section className="border-b border-[#e2e7ff] py-3">
           <div className="mb-2 flex items-center justify-between px-3">
             <h2 className="text-sm font-bold text-[#131b2e]">热门板块</h2>

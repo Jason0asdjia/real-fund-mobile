@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEventHandler } from "r
 import { Bell, ChevronRight, CloudDownload, CloudUpload, Database, Download, HelpCircle, History, Loader2, ShieldCheck, Upload, Wallet } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { useAuth } from "@/components/auth-provider";
 import { TwSelect } from "@/components/ui/tw-select";
 import { getHoldingMetrics } from "@/lib/portfolio";
@@ -83,6 +84,7 @@ export default function SettingsPage() {
   const [importingBackup, setImportingBackup] = useState(false);
   const [uploadingCloud, setUploadingCloud] = useState(false);
   const [pullingCloud, setPullingCloud] = useState(false);
+  const [clearDataModalOpen, setClearDataModalOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const totals = useMemo(
     () =>
@@ -473,7 +475,7 @@ export default function SettingsPage() {
             </div>
             <ChevronRight size={18} className="text-[#747781]" />
           </button>
-          <button type="button" className="flex w-full items-center justify-between border-t border-[#e2e7ff] px-4 py-3.5 text-left" onClick={() => clearLocalOnly()}>
+          <button type="button" className="flex w-full items-center justify-between border-t border-[#e2e7ff] px-4 py-3.5 text-left" onClick={() => setClearDataModalOpen(true)}>
             <div className="flex items-center gap-3">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#e2e7ff] bg-white text-[#24467c]">
                 <Database size={18} />
@@ -498,6 +500,20 @@ export default function SettingsPage() {
         </button>
       </section>
       </main>
+
+      <ConfirmModal
+        open={clearDataModalOpen}
+        onClose={() => setClearDataModalOpen(false)}
+        title="确认清空本地数据"
+        confirmText="确认清空"
+        variant="danger"
+        onConfirm={() => {
+          clearLocalOnly();
+          setClearDataModalOpen(false);
+        }}
+      >
+        <p className="m-0 text-sm leading-6 text-[#57657a]">将清空所有本地持仓、交易记录、搜索历史和偏好设置。此操作无法撤销。</p>
+      </ConfirmModal>
     </div>
   );
 }

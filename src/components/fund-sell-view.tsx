@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, Info, Repeat2 } from "lucide-react";
 import { DatePicker } from "antd";
+import zhCN from "antd/locale/zh_CN";
 import dayjs from "dayjs";
 import { flushSync } from "react-dom";
 
@@ -218,7 +219,7 @@ export function FundSellView({ code }: FundSellViewProps) {
   };
 
   return (
-    <div className="-mx-3 -mt-4 flex min-h-full flex-col bg-white text-[#131b2e] md:-mx-4 md:-mt-4">
+    <div className="-mx-3 -mt-4 flex h-[100dvh] flex-col overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mt-4">
       <header className="z-20 shrink-0 border-b border-[#e2e7ff] bg-white">
         <div className="relative min-h-12 px-3 py-1">
           <button
@@ -236,7 +237,7 @@ export function FundSellView({ code }: FundSellViewProps) {
         </div>
       </header>
 
-      <main className="pb-[calc(var(--bottom-nav-total-height)+0.7rem)]">
+      <main className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain pb-[calc(var(--bottom-nav-total-height)+0.7rem)]">
         <section className="border-b border-[#e2e7ff] px-3 py-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -334,7 +335,8 @@ export function FundSellView({ code }: FundSellViewProps) {
               format="YYYY-MM-DD"
               allowClear={false}
               inputReadOnly
-              disabledDate={(current) => Boolean(current && current.endOf("day").isAfter(dayjs(today, "YYYY-MM-DD").endOf("day")))}
+              disabledDate={(current) => (current ? current.format("YYYY-MM-DD") > today : false)}
+              locale={zhCN.DatePicker}
               className="no-zoom-picker text-base font-normal text-[#131b2e]"
               style={{ width: "100%" }}
               onChange={(_, dateString) => setTradeDate(Array.isArray(dateString) ? dateString[0] || "" : dateString || "")}

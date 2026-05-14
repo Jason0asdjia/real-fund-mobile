@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDownLeft, ArrowUpRight, Check, ChevronLeft, ChevronRight, Circle, CircleMinus, CirclePlus, PenSquare, Trash2, X } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Check, ChevronLeft, ChevronRight, Circle, CircleMinus, CirclePlus, PenSquare, Trash2 } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 import { SecondaryBottomNav } from "@/components/ui/secondary-bottom-nav";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AreaChart } from "@/components/ui/area-chart";
 import { PieChart } from "@/components/ui/pie-chart";
@@ -72,13 +73,6 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
       document.body.classList.remove("app-detail-open");
     };
   }, [asModal]);
-
-  useEffect(() => {
-    document.body.classList.toggle("app-modal-open", clearModalOpen);
-    return () => {
-      document.body.classList.remove("app-modal-open");
-    };
-  }, [clearModalOpen]);
 
   useEffect(() => {
     if (fundFromState) {
@@ -632,43 +626,16 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
         )}
       </SecondaryBottomNav>
 
-      {clearModalOpen ? (
-        <div className="app-modal-backdrop" onClick={() => setClearModalOpen(false)}>
-          <div className="app-modal-sheet" onClick={(event) => event.stopPropagation()}>
-            <div className="app-modal-sheet__grabber" />
-            <div className="app-modal-sheet__header">
-            <h3 className="m-0 text-base font-normal text-[#131b2e]">确认清空持仓</h3>
-              <button
-                type="button"
-                onClick={() => setClearModalOpen(false)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[#53617a] hover:bg-slate-100"
-                aria-label="关闭清空持仓确认弹窗"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="app-modal-sheet__content">
-              <p className="m-0 text-sm leading-6 text-[#57657a]">将清空该基金的持仓金额、成本、首次买入日期和全部交易记录。此操作无法撤销。</p>
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setClearModalOpen(false)}
-                  className="app-modal-btn-secondary"
-                >
-                  取消
-                </button>
-                <button
-                  type="button"
-                  onClick={handleClearHolding}
-                  className="app-modal-btn-danger"
-                >
-                  确认清空
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <ConfirmModal
+        open={clearModalOpen}
+        onClose={() => setClearModalOpen(false)}
+        title="确认清空持仓"
+        confirmText="确认清空"
+        variant="danger"
+        onConfirm={handleClearHolding}
+      >
+        <p className="m-0 text-sm leading-6 text-[#57657a]">将清空该基金的持仓金额、成本、首次买入日期和全部交易记录。此操作无法撤销。</p>
+      </ConfirmModal>
     </div>
   );
 

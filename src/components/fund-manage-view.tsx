@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Repeat2 } from "lucide-react";
 import { DatePicker } from "antd";
+import zhCN from "antd/locale/zh_CN";
 import dayjs from "dayjs";
 import { flushSync } from "react-dom";
 
@@ -165,7 +166,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
 
   if (!fund) {
     return (
-      <div className={asModal ? "detail-page bg-white text-[#131b2e]" : "-mx-3 -mt-4 min-h-full bg-white text-[#131b2e] md:-mx-4 md:-mt-4"}>
+      <div className={asModal ? "detail-page bg-white text-[#131b2e]" : "-mx-3 -mt-4 flex h-[100dvh] flex-col overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mt-4"}>
         <header className="border-b border-[#e2e7ff] bg-white">
           <div className="flex h-12 items-center justify-between px-3">
             {onBack ? (
@@ -235,7 +236,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
       className={
         asModal
           ? "detail-page flex h-[100dvh] flex-col overflow-hidden bg-white text-[#131b2e]"
-          : "-mx-3 -mt-4 flex min-h-full flex-col bg-white text-[#131b2e] md:-mx-4 md:-mt-4"
+          : "-mx-3 -mt-4 flex h-[100dvh] flex-col overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mt-4"
       }
     >
       <header className="z-20 shrink-0 border-b border-[#e2e7ff] bg-white">
@@ -259,7 +260,7 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
         </div>
       </header>
 
-      <main className="pb-[calc(var(--bottom-nav-total-height)+0.7rem)]">
+      <main className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain pb-[calc(var(--bottom-nav-total-height)+0.7rem)]">
         <section className="border-b border-[#e2e7ff] px-3 py-4">
             <div className="mb-2 flex items-center justify-between">
               <span className="block text-[length:var(--type-body-size)] font-medium tracking-[0.12em] text-[#747781]">{mode === "amount" ? "当前持仓" : "当前份额"}</span>
@@ -326,7 +327,8 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
                   format="YYYY-MM-DD"
                   allowClear
                   inputReadOnly
-                  disabledDate={(current) => Boolean(current && current.endOf("day").isAfter(dayjs(today, "YYYY-MM-DD").endOf("day")))}
+                  disabledDate={(current) => (current ? current.format("YYYY-MM-DD") > today : false)}
+                  locale={zhCN.DatePicker}
                   className="no-zoom-picker tabular-nums w-[138px] text-right text-base font-semibold text-[#131b2e]"
                   onChange={(_, dateString) => setDateInput(Array.isArray(dateString) ? dateString[0] || "" : dateString || "")}
                 />

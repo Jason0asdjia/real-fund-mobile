@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Filter, Loader2, Minus, Plus, Search, Trash2, X } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
+import { Button } from "@/components/ui/button";
 import { fetchFundPreviewData } from "@/lib/fund-api";
 import type { FundSnapshot, SearchFundResult } from "@/lib/types";
 
@@ -38,6 +39,14 @@ export default function DiscoverPage() {
   const [addingCode, setAddingCode] = useState<string | null>(null);
   const [removeConfirmCode, setRemoveConfirmCode] = useState<string | null>(null);
   const latestSearchTokenRef = useRef(0);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.body.classList.add("app-page-self-scroll");
+    return () => {
+      document.body.classList.remove("app-page-self-scroll");
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -172,8 +181,11 @@ export default function DiscoverPage() {
   }, [results, state.funds]);
 
   return (
-    <div className="-mx-3 -mt-4 bg-white text-[#131b2e] md:-mx-4 md:-mt-4">
-      <header className="border-b border-[#f0f2f7] bg-white px-4 py-3">
+    <div
+      className="-mx-3 -mt-4 flex flex-col gap-0 overflow-hidden bg-white text-[#131b2e] md:-mx-4 md:-mt-4"
+      style={{ height: "calc(100svh - var(--bottom-nav-total-height))" }}
+    >
+      <header className="shrink-0 overflow-hidden border-b border-[#f0f2f7] bg-white px-4 py-3">
         <div className="flex items-center gap-2">
           <span
             role="link"
@@ -214,7 +226,7 @@ export default function DiscoverPage() {
         </div>
       </header>
 
-      <main className="pb-2">
+      <main className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain pb-[calc(var(--bottom-nav-total-height)+0.7rem)]">
         <section className="shrink-0 px-4 py-4">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-[10px] font-bold tracking-[0.14em] text-[#747781]">历史搜索</h2>
@@ -358,9 +370,8 @@ export default function DiscoverPage() {
                   {confirmTargetFund?.name || "该基金"} 已有持仓。你可以继续删除（会从持仓表中移除），或先进入基金详情查看后再决定。
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    className="app-modal-btn-danger"
+                  <Button
+                    variant="destructive"
                     onClick={() => {
                       setRemoveConfirmCode(null);
                       removeFund(removeConfirmCode);
@@ -368,10 +379,9 @@ export default function DiscoverPage() {
                   >
                     <span className="block leading-tight">删除基金</span>
                     <span className="mt-0.5 block text-xs font-medium leading-tight text-white/80">（含历史交易）</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="app-modal-btn-primary"
+                  </Button>
+                  <Button
+                    variant="primary"
                     onClick={() => {
                       const code = removeConfirmCode;
                       if (!code) return;
@@ -384,7 +394,7 @@ export default function DiscoverPage() {
                     }}
                   >
                     进入基金详情
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>

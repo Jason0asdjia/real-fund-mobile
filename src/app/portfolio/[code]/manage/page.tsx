@@ -1,42 +1,43 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 
 import { FundManageView } from "@/components/fund-manage-view";
 
-export default function PortfolioManagePage({
-  params,
-  searchParams,
-}: {
-  params: { code: string };
-  searchParams?: { from?: string };
-}) {
+export default function PortfolioManagePage() {
   const router = useRouter();
-  const redirectOnConfirm = searchParams?.from === "discover"
+  const params = useParams<{ code: string }>();
+  const searchParams = useSearchParams();
+  const from = searchParams.get("from");
+
+  const redirectOnConfirm = from === "discover"
     ? "/portfolio"
-    : searchParams?.from === "detail"
+    : from === "detail"
       ? `/portfolio/${params.code}`
       : null;
 
   return (
     <FundManageView
-      code={params.code}
-      redirectOnConfirm={redirectOnConfirm}
-      onBack={() => {
-        if (searchParams?.from === "detail") {
+        code={params.code}
+        redirectOnConfirm={redirectOnConfirm}
+        onBack={() => {
+          if (from === "detail") {
+            if (window.history.length > 1) {
+              router.back();
+              return;
+            }
+
+            router.replace(`/portfolio/${params.code}`);
+            return;
+          }
+
           if (window.history.length > 1) {
             router.back();
-          } else {
-            router.replace(`/portfolio/${params.code}`);
+            return;
           }
-          return;
-        }
-        if (window.history.length > 1) {
-          router.back();
-          return;
-        }
-        router.push(`/portfolio/${params.code}`);
-      }}
+
+          router.push(`/portfolio/${params.code}`);
+        }}
     />
   );
 }

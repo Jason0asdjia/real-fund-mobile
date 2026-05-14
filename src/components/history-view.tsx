@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronRight } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
@@ -76,14 +78,6 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
     axisBias: SWIPE_AXIS_BIAS,
     openRatio: 0.5,
   });
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    document.body.classList.toggle("app-modal-open", Boolean(deleteTarget));
-    return () => {
-      document.body.classList.remove("app-modal-open");
-    };
-  }, [deleteTarget]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -381,43 +375,16 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
           )}
       </main>
 
-      {deleteTarget ? (
-        <div className="app-modal-backdrop" onClick={() => setDeleteTarget(null)}>
-          <div className="app-modal-sheet" onClick={(event) => event.stopPropagation()}>
-            <div className="app-modal-sheet__grabber" />
-            <div className="app-modal-sheet__header">
-              <h3 className="m-0 text-base font-normal text-[#131b2e]">确认删除交易</h3>
-              <button
-                type="button"
-                className="rounded-full border border-[#d5dbea] bg-white px-2 py-0.5 text-sm text-[#57657a]"
-                onClick={() => setDeleteTarget(null)}
-                aria-label="关闭删除交易确认弹窗"
-              >
-                ×
-              </button>
-            </div>
-            <div className="app-modal-sheet__content">
-              <p className="m-0 text-sm leading-6 text-[#57657a]">删除后该条交易会从历史记录移除，并同步更新持仓金额与成本。此操作无法撤销。</p>
-              <div className="mt-4 flex gap-2 pb-3">
-                <button
-                  type="button"
-                  className="app-modal-btn-secondary flex-1"
-                  onClick={() => setDeleteTarget(null)}
-                >
-                  取消
-                </button>
-                <button
-                  type="button"
-                  className="app-modal-btn-danger flex-1"
-                  onClick={handleDeleteConfirm}
-                >
-                  确认删除
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <ConfirmModal
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        title="确认删除交易"
+        confirmText="确认删除"
+        variant="danger"
+        onConfirm={handleDeleteConfirm}
+      >
+        <p className="m-0 text-sm leading-6 text-[#57657a]">删除后该条交易会从历史记录移除，并同步更新持仓金额与成本。此操作无法撤销。</p>
+      </ConfirmModal>
     </div>
   );
 }

@@ -543,6 +543,10 @@
     @apply hidden;
   }
 
+  .app-modal-open .bottom-nav--secondary {
+    @apply hidden;
+  }
+
   .app-detail-open .app-primary-bottom-nav {
     @apply hidden;
   }
@@ -581,18 +585,6 @@
   .app-modal-sheet__content {
     @apply overflow-y-auto px-4 pt-1;
     padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
-  }
-
-  .app-modal-btn-primary {
-    @apply inline-flex min-h-10 items-center justify-center rounded-lg bg-[#00193c] px-3 text-sm font-semibold text-white disabled:opacity-60;
-  }
-
-  .app-modal-btn-secondary {
-    @apply inline-flex min-h-10 items-center justify-center rounded-lg border border-[#d5dbea] bg-white px-3 text-sm font-semibold text-[#131b2e] disabled:opacity-60;
-  }
-
-  .app-modal-btn-danger {
-    @apply inline-flex min-h-10 items-center justify-center rounded-lg bg-[#ba1a1a] px-3 text-sm font-semibold text-white disabled:opacity-60;
   }
 
   .no-zoom-picker .ant-picker-input > input {

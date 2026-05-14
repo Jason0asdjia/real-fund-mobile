@@ -28,6 +28,7 @@ AI coding harness 入口。修改代码前先阅读本文件，再按顺序打�
 - 产品行为必须与 `docs/SPEC.md` 保持一致，硬性约束必须与 `docs/ARCHITECTURE.md` 保持一致。
 - 修改架构、存储语义、同步行为、路由或主要 UI 模式时，如果该决策需要长期保留，必须更新 `docs/DECISIONS.md`。
 - 生成或重构 Markdown 文档时必须使用中文；除专有名词、代码标识符、命令、路径、API 字段外，不要新增英文正文。
+- 往既有文档新增内容时，优先审视能否合并到已有段落或精简表述，避免文档膨胀和重复信息。
 - 除非任务明确要求迁移，否则不要删除或重命名存储 key、PWA 文件、路由或同步字段。
 - 代码变更后，在可行时至少执行 `npm run lint`。
 
@@ -45,13 +46,27 @@ AI coding harness 入口。修改代码前先阅读本文件，再按顺序打�
 ## 弹窗规范
 
 - 弹窗开启时给 `body` 添加 `app-modal-open`，关闭或卸载时移除。
-- `app-modal-open` 生效时，背景页面禁止滚动，底部导航隐藏。
+- `app-modal-open` 生效时，背景页面禁止滚动，底部导航隐藏（含 `.app-primary-bottom-nav` 与 `.bottom-nav--secondary`）。
 - 底部弹窗统一类名：`app-modal-backdrop`、`app-modal-sheet`、`app-modal-sheet__grabber`、`app-modal-sheet__header`、`app-modal-sheet__content`。
 - 仅允许弹窗内容区自身滚动。
-- 弹窗内按钮必须使用以下语义类，禁止裸写样式：
-  - `app-modal-btn-primary`：深色主操作（`bg-[#00193c] text-white`）
-  - `app-modal-btn-secondary`：白色边框次要操作/取消（`border-[#d5dbea] bg-white text-[#131b2e]`）
-  - `app-modal-btn-danger`：红色危险操作（`bg-[#ba1a1a] text-white`，用于删除、清空等不可逆操作）
+
+## 按钮组件规范
+
+项目统一使用 `src/components/ui/button.tsx` 中的 `<Button>` 组件。禁止裸写按钮样式。颜色通过 `style` 内联注入，不受 CSS 层叠顺序影响。
+
+```tsx
+import { Button } from "@/components/ui/button";
+```
+
+三个 variant：
+
+| variant | 样式 | 用途 |
+|---------|------|------|
+| `primary` | 深色底白字 `#00193c / #fff` | 主操作 |
+| `destructive` | 红色底白字 `#ba1a1a / #fff` | 删除/清空等不可逆操作 |
+| `outline` | 白底带边框 `#fff / border #d5dbea / 文字 #131b2e` | 取消/次要操作 |
+
+支持标准 `disabled`、`onClick`、`className`、`style` 等原生 button 属性。
 
 ## 关键路径
 
