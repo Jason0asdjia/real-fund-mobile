@@ -44,7 +44,11 @@
 - 优先使用现有语义类：`screen`、`bottom-nav`、`is-up`、`is-down`。
 - 金融数值应使用 `tabular-nums`。
 - 字体排版应复用语义类：`typo-page-title`、`typo-value-hero`、`typo-value-emphasis`、`typo-body-strong`、`typo-section-title`、`typo-label`、`typo-meta`、`typo-micro`。
-- 每个页面保持一个主滚动区，除非弹窗或内容面板明确拥有自己的滚动。
+- 移动端主页面应使用视口高度容器承载布局，优先用 `100svh` 或 `100dvh` 结合 `var(--bottom-nav-total-height)` 计算可用高度，避免内容被底部导航遮挡。
+- 页面根容器使用纵向 flex 布局时，头部、摘要区、筛选区等固定区域应 `shrink-0`，内容区应 `min-h-0 flex-1`，避免子滚动区域被撑破。
+- 每个页面保持一个主滚动区，除非表格、弹窗或内容面板明确拥有自己的滚动；不要让页面滚动与列表/表格滚动形成无序双滚动。
+- 列表类页面的主滚动区应处理底部安全距离，优先使用 `pb-[calc(var(--bottom-nav-total-height)+...)]` 或等价 token。
+- 手机端横滑操作应明确触摸轴和滚动边界，例如列表项保留纵向滚动手势，横向操作区避免劫持整页滚动。
 - 固定页面头部、sticky 表头、sticky 首列和底部导航必须有明确背景。
 - 底部导航文案必须匹配路由含义。
 

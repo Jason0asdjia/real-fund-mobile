@@ -42,6 +42,17 @@ AI coding harness 入口。修改代码前先阅读本文件，再按顺序打�
 - 移动端布局保持一个主滚动区，除非弹窗或内容区域明确拥有自己的滚动。
 - 固定头部、sticky 表头、sticky 首列和底部导航必须有明确背景。
 
+## 弹窗规范
+
+- 弹窗开启时给 `body` 添加 `app-modal-open`，关闭或卸载时移除。
+- `app-modal-open` 生效时，背景页面禁止滚动，底部导航隐藏。
+- 底部弹窗统一类名：`app-modal-backdrop`、`app-modal-sheet`、`app-modal-sheet__grabber`、`app-modal-sheet__header`、`app-modal-sheet__content`。
+- 仅允许弹窗内容区自身滚动。
+- 弹窗内按钮必须使用以下语义类，禁止裸写样式：
+  - `app-modal-btn-primary`：深色主操作（`bg-[#00193c] text-white`）
+  - `app-modal-btn-secondary`：白色边框次要操作/取消（`border-[#d5dbea] bg-white text-[#131b2e]`）
+  - `app-modal-btn-danger`：红色危险操作（`bg-[#ba1a1a] text-white`，用于删除、清空等不可逆操作）
+
 ## 关键路径
 
 - `src/app/layout.tsx`

@@ -360,18 +360,18 @@ export default function DiscoverPage() {
                 <div className="mt-4 grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
+                    className="app-modal-btn-danger"
                     onClick={() => {
                       setRemoveConfirmCode(null);
                       removeFund(removeConfirmCode);
                     }}
                   >
                     <span className="block leading-tight">删除基金</span>
-                    <span className="mt-0.5 block text-xs font-medium leading-tight text-red-600">（含历史交易）</span>
+                    <span className="mt-0.5 block text-xs font-medium leading-tight text-white/80">（含历史交易）</span>
                   </button>
                   <button
                     type="button"
-                    className="rounded-lg bg-[#00193c] px-3 py-2 text-sm font-semibold !text-white"
+                    className="app-modal-btn-primary"
                     onClick={() => {
                       const code = removeConfirmCode;
                       if (!code) return;

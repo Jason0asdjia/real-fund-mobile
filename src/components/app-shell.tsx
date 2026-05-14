@@ -189,7 +189,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="mt-4 grid grid-cols-1 gap-2">
                 <button
                   type="button"
-                  className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#d5dbea] bg-white px-3 text-sm font-semibold text-[#131b2e] disabled:opacity-60"
+                  className="app-modal-btn-secondary"
                   disabled={conflictResolution.resolving}
                   onClick={() => {
                     void resolveDataConflict("keep_local");
@@ -199,7 +199,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </button>
                 <button
                   type="button"
-                  className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#d5dbea] bg-white px-3 text-sm font-semibold text-[#131b2e] disabled:opacity-60"
+                  className="app-modal-btn-secondary"
                   disabled={conflictResolution.resolving}
                   onClick={() => {
                     void resolveDataConflict("keep_cloud");
@@ -209,7 +209,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </button>
                 <button
                   type="button"
-                  className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[#00193c] px-3 text-sm font-semibold !text-white disabled:opacity-60"
+                  className="app-modal-btn-primary"
                   disabled={conflictResolution.resolving}
                   onClick={() => {
                     void resolveDataConflict("merge");

@@ -97,7 +97,7 @@ export function AreaChart({
               tickMargin={4}
               domain={yDomain}
               tickCount={5}
-              tickFormatter={(value: number) => value.toFixed(2)}
+              tickFormatter={(value) => (typeof value === "number" ? value.toFixed(2) : value)}
               width={48}
             />
           )}

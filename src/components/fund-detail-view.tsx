@@ -653,14 +653,14 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
                 <button
                   type="button"
                   onClick={() => setClearModalOpen(false)}
-                className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#d5dbea] bg-white px-3 text-sm font-normal text-[#57657a]"
+                  className="app-modal-btn-secondary"
                 >
                   取消
                 </button>
                 <button
                   type="button"
                   onClick={handleClearHolding}
-                className="inline-flex min-h-10 items-center justify-center rounded-lg bg-[#ba1a1a] px-3 text-sm font-normal !text-white"
+                  className="app-modal-btn-danger"
                 >
                   确认清空
                 </button>

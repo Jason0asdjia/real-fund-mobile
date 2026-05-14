@@ -401,14 +401,14 @@ export function HistoryView({ initialFundFilter = "all" }: { initialFundFilter?:
               <div className="mt-4 flex gap-2 pb-3">
                 <button
                   type="button"
-                  className="flex-1 rounded-lg border border-[#d5dbea] bg-white px-3 py-2 text-sm font-medium text-[#24467c]"
+                  className="app-modal-btn-secondary flex-1"
                   onClick={() => setDeleteTarget(null)}
                 >
                   取消
                 </button>
                 <button
                   type="button"
-                  className="flex-1 rounded-lg border border-[#ffdbd0] bg-[#fff1ed] px-3 py-2 text-sm font-medium text-[#ba1a1a]"
+                  className="app-modal-btn-danger flex-1"
                   onClick={handleDeleteConfirm}
                 >
                   确认删除

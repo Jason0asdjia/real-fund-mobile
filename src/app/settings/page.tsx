@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ChangeEventHandler } from "react";
-import { Bell, ChevronRight, CloudDownload, CloudUpload, Database, Download, HelpCircle, History, Loader2, ShieldCheck, Sparkles, Upload, Wallet } from "lucide-react";
+import { Bell, ChevronRight, CloudDownload, CloudUpload, Database, Download, HelpCircle, History, Loader2, ShieldCheck, Upload, Wallet } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
 import { useAuth } from "@/components/auth-provider";
@@ -72,10 +72,8 @@ const refreshSelectOptions = refreshOptions.map((item) => ({
 }));
 
 export default function SettingsPage() {
-  const { state, seeding, setRefreshMs, clearAll, clearLocalOnly, seedDemoData, valuationSeries, importBackupData, pushCloudConfig, pullCloudConfig } = useAppState();
+  const { state, seeding, setRefreshMs, clearLocalOnly, valuationSeries, importBackupData, pushCloudConfig, pushCloudConfigUploadOnly, pullCloudConfig } = useAppState();
   const { user, signOut } = useAuth();
-  const [seededAt, setSeededAt] = useState<string | null>(null);
-  const [clearingDemo, setClearingDemo] = useState(false);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
   const [cloudMessage, setCloudMessage] = useState<string | null>(null);
   const [lastManualUploadAt, setLastManualUploadAt] = useState<string | null>(null);
@@ -140,20 +138,6 @@ export default function SettingsPage() {
     return candidates.find((value): value is string => typeof value === "string" && value.trim().length > 0) || "个人中心";
   }, [user]);
 
-  const handleSeedDemoData = () => {
-    seedDemoData();
-    setSeededAt(toMarketTime(undefined, "HH:mm"));
-  };
-
-  const handleClearDemoData = async () => {
-    if (clearingDemo || seeding) return;
-    setClearingDemo(true);
-    await new Promise<void>((resolve) => window.setTimeout(resolve, 280));
-    clearLocalOnly();
-    setSeededAt(null);
-    setClearingDemo(false);
-  };
-
   const handleExportData = async () => {
     const exportedAt = toMarketTime(undefined, "YYYY-MM-DD HH:mm:ss");
     const localStorageSnapshot = readAppLocalStorageSnapshot();
@@ -178,9 +162,15 @@ export default function SettingsPage() {
 
     let syncTip = "";
     if (user?.id) {
-      const syncResult = await pushCloudConfig();
+      const syncResult = await pushCloudConfigUploadOnly();
       if (!syncResult.ok) {
         syncTip = `，云端同步失败：${syncResult.message}`;
+      } else if (syncResult.status === "uploaded" || syncResult.status === "synced") {
+        syncTip = "，已同步至云端";
+      } else if (syncResult.status === "cloud_newer") {
+        syncTip = "，云端版本更新，未执行上传，请先拉取或手动合并";
+      } else if (syncResult.status === "needs_user_resolution") {
+        syncTip = "，检测到云端有并发改动，请手动同步处理冲突";
       }
     }
 
@@ -351,42 +341,14 @@ export default function SettingsPage() {
           <button
             type="button"
             className="flex w-full items-center justify-between border-t border-[#e2e7ff] px-4 py-3.5 text-left disabled:opacity-70"
-            onClick={handleSeedDemoData}
-            disabled={seeding || clearingDemo}
-          >
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#e2e7ff] bg-white text-[#24467c]">
-                {seeding ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
-              </span>
-              <span className="text-sm font-semibold text-[#131b2e]">{seeding ? "写入中..." : "写入演示数据"}</span>
-            </div>
-            <ChevronRight size={18} className="text-[#747781]" />
-          </button>
-          <button
-            type="button"
-            className="flex w-full items-center justify-between border-t border-[#e2e7ff] px-4 py-3.5 text-left disabled:opacity-70"
-            onClick={handleClearDemoData}
-            disabled={seeding || clearingDemo}
-          >
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#e2e7ff] bg-white text-[#24467c]">
-                {clearingDemo ? <Loader2 size={18} className="animate-spin" /> : <Database size={18} />}
-              </span>
-              <span className="text-sm font-semibold text-[#131b2e]">{clearingDemo ? "删除中..." : "删除演示数据"}</span>
-            </div>
-            <ChevronRight size={18} className="text-[#747781]" />
-          </button>
-          <button
-            type="button"
-            className="flex w-full items-center justify-between border-t border-[#e2e7ff] px-4 py-3.5 text-left disabled:opacity-70"
             onClick={() => {
               void handleExportData();
             }}
-            disabled={seeding || clearingDemo || importingBackup}
+            disabled={seeding || importingBackup}
           >
             <div className="flex items-center gap-3">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#e2e7ff] bg-white text-[#24467c]">
-                <Download size={18} />
+                <Upload size={18} />
               </span>
               <span className="min-w-0">
                 <span className="block text-sm font-semibold text-[#131b2e]">导出数据</span>
@@ -401,11 +363,11 @@ export default function SettingsPage() {
             type="button"
             className="flex w-full items-center justify-between border-t border-[#e2e7ff] px-4 py-3.5 text-left disabled:opacity-70"
             onClick={handlePickImportFile}
-            disabled={seeding || clearingDemo || importingBackup}
+            disabled={seeding || importingBackup}
           >
             <div className="flex items-center gap-3">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#e2e7ff] bg-white text-[#24467c]">
-                {importingBackup ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+                {importingBackup ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
               </span>
               <span className="min-w-0">
                 <span className="block text-sm font-semibold text-[#131b2e]">{importingBackup ? "导入中..." : "导入数据"}</span>
@@ -416,24 +378,9 @@ export default function SettingsPage() {
             </div>
             <ChevronRight size={18} className="text-[#747781]" />
           </button>
-        </div>
-        {seededAt ? <p className="mt-2 px-1 text-[11px] leading-relaxed text-[#57657a]">演示数据已写入（{seededAt}）</p> : null}
-        {backupMessage ? <p className="mt-2 px-1 text-[11px] leading-relaxed text-[#57657a]">{backupMessage}</p> : null}
-        <input
-          ref={importInputRef}
-          type="file"
-          accept=".json,application/json"
-          className="hidden"
-          onChange={handleImportFile}
-        />
-      </section>
-
-      <section className="mb-5">
-        <h2 className="px-1 text-[11px] font-bold tracking-[0.15em] text-[#747781]">个人设置</h2>
-        <div className="mt-2 rounded-xl border border-[#e2e7ff] bg-white">
           <button
             type="button"
-            className="flex w-full items-center justify-between px-4 py-3.5 text-left disabled:opacity-70"
+            className="flex w-full items-center justify-between border-t border-[#e2e7ff] px-4 py-3.5 text-left disabled:opacity-70"
             onClick={() => {
               void handlePushCloud();
             }}
@@ -473,7 +420,42 @@ export default function SettingsPage() {
             </div>
             <ChevronRight size={18} className="text-[#747781]" />
           </button>
-          <button type="button" className="flex w-full items-center justify-between border-t border-[#e2e7ff] px-4 py-3.5 text-left">
+        </div>
+        {backupMessage ? <p className="mt-2 px-1 text-[11px] leading-relaxed text-[#57657a]">{backupMessage}</p> : null}
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".json,application/json"
+          className="hidden"
+          onChange={handleImportFile}
+        />
+      </section>
+
+      <section className="mb-5">
+        <h2 className="px-1 text-[11px] font-bold tracking-[0.15em] text-[#747781]">数据版本</h2>
+        <div className="mt-2 rounded-xl border border-[#e2e7ff] bg-white px-4 py-3">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-[#57657a]">本地版本</span>
+            <span className="font-semibold tabular-nums text-[#131b2e]">
+              v{state.sync.dataVersion}
+              {state.sync.updatedAt ? ` · ${state.sync.updatedAt}` : ""}
+            </span>
+          </div>
+          <div className="mt-2 flex items-center justify-between text-xs border-t border-[#e2e7ff]/40 pt-2">
+            <span className="text-[#57657a]">云端版本</span>
+            <span className="font-semibold tabular-nums text-[#131b2e]">
+              {state.sync.lastSyncedVersion > 0
+                ? `v${state.sync.lastSyncedVersion}${state.sync.lastSyncedAt ? ` · ${state.sync.lastSyncedAt}` : ""}`
+                : "未同步"}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <section className="mb-5">
+        <h2 className="px-1 text-[11px] font-bold tracking-[0.15em] text-[#747781]">个人设置</h2>
+        <div className="mt-2 rounded-xl border border-[#e2e7ff] bg-white">
+          <button type="button" className="flex w-full items-center justify-between px-4 py-3.5 text-left">
             <div className="flex items-center gap-3">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#e2e7ff] bg-white text-[#24467c]">
                 <Bell size={18} />

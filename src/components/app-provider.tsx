@@ -13,6 +13,10 @@ import { IMPORTANT_UI_PREFERENCE_KEYS, applyImportantPreferences, readImportantP
 import { clearValuationSeries, getAllValuationSeries, normalizeValuationSeries, recordValuation, setAllValuationSeries, VALUATION_TIMESERIES_KEY } from "@/lib/valuation-timeseries";
 import { buildDemoSeed } from "@/lib/demo-data";
 
+type PushCloudConfigUploadOnlyResult =
+  | { ok: true; status: "uploaded" | "synced" | "needs_user_resolution" | "cloud_newer"; message: string }
+  | { ok: false; status: "failed"; message: string };
+
 type AppContextValue = {
   state: AppState;
   hydrated: boolean;
@@ -40,6 +44,7 @@ type AppContextValue = {
   seedDemoData: () => Promise<void>;
   importBackupData: (payload: { appState: unknown; valuationSeries?: unknown }) => { ok: boolean; message: string };
   pushCloudConfig: () => Promise<{ ok: boolean; message: string }>;
+  pushCloudConfigUploadOnly: () => Promise<PushCloudConfigUploadOnlyResult>;
   pullCloudConfig: () => Promise<{ ok: boolean; message: string }>;
   conflictResolution: {
     open: boolean;
@@ -1033,6 +1038,48 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state, userId, withCloudSyncOverlay]);
 
+  const pushCloudConfigUploadOnly = useCallback(async () => {
+    if (!userId) {
+      return { ok: false, message: "请先登录后再上传", status: "failed" as const };
+    }
+
+    try {
+      suppressEmptyCloudSyncRef.current = false;
+      const localPayload = buildCloudPayloadFromState(state);
+      const cloudMeta = await fetchCloudUserMeta(userId);
+      if (cloudMeta) {
+        syncDataVersionFloor(cloudMeta.dataVersion);
+      }
+
+      if (!cloudMeta || cloudMeta.dataVersion < localPayload.sync.dataVersion) {
+        await withCloudSyncOverlay("上传当前配置", "正在把当前设备配置上传到云端...", () => upsertCloudUserData(userId, localPayload));
+        lastCloudPayloadRef.current = JSON.stringify(localPayload);
+        setState((current) => markAppStateSynced(current, localPayload.sync.dataVersion, localPayload.sync.updatedAt ?? undefined));
+        setLocalOwnerUser(userId);
+        clearPendingCloudSync(userId);
+        return { ok: true, status: "uploaded" as const, message: "已上传当前配置到云端" };
+      }
+
+      if (cloudMeta.dataVersion === localPayload.sync.dataVersion && cloudMeta.contentHash === localPayload.sync.contentHash) {
+        lastCloudPayloadRef.current = JSON.stringify(localPayload);
+        setState((current) => markAppStateSynced(current, localPayload.sync.dataVersion, cloudMeta.updatedAt ?? undefined));
+        setLocalOwnerUser(userId);
+        clearPendingCloudSync(userId);
+        return { ok: true, status: "synced" as const, message: "云端已是当前最新配置" };
+      }
+
+      if (cloudMeta.dataVersion === localPayload.sync.dataVersion && cloudMeta.contentHash !== localPayload.sync.contentHash) {
+        return { ok: true, status: "needs_user_resolution" as const, message: "检测到云端有并发改动，请手动同步处理冲突" };
+      }
+
+      return { ok: true, status: "cloud_newer" as const, message: "云端版本更新，建议先拉取或手动合并" };
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "上传云端失败";
+      setError(message);
+      return { ok: false, message, status: "failed" as const };
+    }
+  }, [state, userId, withCloudSyncOverlay]);
+
   const pullCloudConfig = useCallback(async () => {
     if (!userId) {
       return { ok: false, message: "请先登录后再拉取" };
@@ -1781,6 +1828,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       seedDemoData,
       importBackupData,
       pushCloudConfig,
+      pushCloudConfigUploadOnly,
       pullCloudConfig,
       conflictResolution,
       cloudSyncStatus,
@@ -1801,6 +1849,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       passiveRefreshAt,
       pullCloudConfig,
       pushCloudConfig,
+      pushCloudConfigUploadOnly,
       refreshFunds,
       refreshing,
       removeFund,
