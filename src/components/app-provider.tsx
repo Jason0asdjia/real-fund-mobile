@@ -1038,7 +1038,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state, userId, withCloudSyncOverlay]);
 
-  const pushCloudConfigUploadOnly = useCallback(async () => {
+  const pushCloudConfigUploadOnly = useCallback(async (): Promise<PushCloudConfigUploadOnlyResult> => {
     if (!userId) {
       return { ok: false, message: "请先登录后再上传", status: "failed" as const };
     }
