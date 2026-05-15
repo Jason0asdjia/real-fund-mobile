@@ -40,6 +40,7 @@ export function FundSellView({ code }: FundSellViewProps) {
   const [shareInput, setShareInput] = useState("");
   const [tradeDate, setTradeDate] = useState(todayInMarket());
   const [beforeClose, setBeforeClose] = useState(() => isBeforeTradeCutoffInMarket());
+  const [submitting, setSubmitting] = useState(false);
   const [selectedTradeNav, setSelectedTradeNav] = useState<number | null>(null);
   const [selectedTradeNavDate, setSelectedTradeNavDate] = useState<string | null>(null);
   const [tradeNavLoading, setTradeNavLoading] = useState(false);
@@ -47,6 +48,7 @@ export function FundSellView({ code }: FundSellViewProps) {
   const returnToHistory = searchParams.get("from") === "history";
   const editTxId = searchParams.get("editTxId");
   const didInitEditRef = useRef(false);
+  const submittingRef = useRef(false);
   const editingTransaction = useMemo(() => {
     if (!editTxId) return null;
     return (state.transactions[code] || []).find((item) => item.id === editTxId && item.type === "sell") || null;
@@ -199,7 +201,8 @@ export function FundSellView({ code }: FundSellViewProps) {
     : "暂无可用净值，无法换算";
 
   const handleConfirm = () => {
-    if (!tradePrice || amount <= 0 || share <= 0) return;
+    if (!tradePrice || amount <= 0 || share <= 0 || submittingRef.current) return;
+    if (editTxId && !editingTransaction) return;
     const payload: Omit<FundTransaction, "id"> = {
       date: tradeDate,
       type: "sell",
@@ -208,14 +211,22 @@ export function FundSellView({ code }: FundSellViewProps) {
       fee: estimatedFee,
       note: beforeClose ? "15:00前下单" : "15:00后下单",
     };
-    flushSync(() => {
-      if (editingTransaction && editTxId) {
-        updateTransaction(fund.code, editTxId, payload);
-      } else {
-        addTransaction(fund.code, payload);
-      }
-    });
-    handleBack();
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
+      flushSync(() => {
+        if (editingTransaction && editTxId) {
+          updateTransaction(fund.code, editTxId, payload);
+        } else {
+          addTransaction(fund.code, payload);
+        }
+      });
+      handleBack();
+    } catch {
+      submittingRef.current = false;
+      setSubmitting(false);
+      throw new Error("保存减仓记录失败");
+    }
   };
 
   return (
@@ -373,10 +384,10 @@ export function FundSellView({ code }: FundSellViewProps) {
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={!amount || !share || !tradePrice || maxSellAmount <= 0 || tradeNavLoading}
+            disabled={submitting || !amount || !share || !tradePrice || maxSellAmount <= 0 || tradeNavLoading}
             className="bottom-nav__item rounded-lg text-sm font-semibold text-[#131b2e] disabled:opacity-40"
           >
-            <span>{tradeNavLoading ? "加载净值中..." : "确认修改"}</span>
+            <span>{tradeNavLoading ? "加载净值中..." : submitting ? "保存中..." : "确认修改"}</span>
           </button>
       </SecondaryBottomNav>
     </div>
