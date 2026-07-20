@@ -440,23 +440,24 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
           </Card>
         </section>
 
-        <div className="flex gap-2 overflow-x-auto px-3 py-3 [&::-webkit-scrollbar]:hidden">
-          {PERIOD_OPTIONS.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              className={`shrink-0 rounded-lg border px-4 py-1.5 text-xs font-bold ${
-                period === item.key ? "border-[#a9c3ff] bg-[#dce8ff] text-[#0f2c66]" : "border-transparent text-[#747781] hover:bg-[#f2f3ff]"
-              }`}
-              onClick={() => setPeriod(item.key)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-
-        <section className="px-1.5 pb-1">
-          <FundQuoteConfigPanel fund={fund} />
+        <section className="px-1.5 pb-1 pt-3">
+          <FundQuoteConfigPanel
+            fund={fund}
+            onFundPatched={(patch) => {
+              if (fundFromState) return;
+              setRemoteFund((current) => current ? { ...current, ...patch } : current);
+            }}
+            onApplyTransientConfig={async (patch) => {
+              if (fundFromState) return;
+              const nextBase = { ...(remoteFund || fund), ...patch, code, name: (remoteFund || fund).name || code };
+              try {
+                const snapshot = await fetchFundBaseData(code, nextBase, "interactive");
+                setRemoteFund((current) => ({ ...(current || nextBase), ...snapshot, ...patch }));
+              } catch {
+                setRemoteFund((current) => current ?? nextBase);
+              }
+            }}
+          />
         </section>
 
         <section className="px-1.5 pb-1">
@@ -489,7 +490,23 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
                 </div>
               </div>
               <div className="px-4 pt-3 pb-4">
-                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[#747781]">净值走势</p>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="m-0 text-xs font-bold uppercase tracking-wider text-[#747781]">净值走势</p>
+                  <div className="flex max-w-full gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden">
+                    {PERIOD_OPTIONS.map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        className={`shrink-0 rounded-lg border px-3 py-1 text-[11px] font-bold ${
+                          period === item.key ? "border-[#a9c3ff] bg-[#dce8ff] text-[#0f2c66]" : "border-transparent text-[#747781] hover:bg-[#f2f3ff]"
+                        }`}
+                        onClick={() => setPeriod(item.key)}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 {officialNavSeriesLoading && !officialNavSeries.length ? (
                   <div className="space-y-3 py-2">
                     <div className="h-4 w-20 animate-pulse rounded bg-[#eef2fa]" />

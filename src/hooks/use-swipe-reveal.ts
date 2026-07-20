@@ -86,7 +86,9 @@ export function useSwipeReveal({
 
       if (swipeState.lockedAxis !== "x") return;
 
-      event.preventDefault();
+      if (event.cancelable) {
+        event.preventDefault();
+      }
       const nextOffset = Math.max(-actionWidth, Math.min(0, swipeState.initialOffset + deltaX));
       setDragOffset(nextOffset);
     },

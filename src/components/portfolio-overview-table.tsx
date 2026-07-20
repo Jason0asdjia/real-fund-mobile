@@ -130,7 +130,9 @@ export function PortfolioOverviewTable({
       (atLeftEdge && deltaX > 0) ||
       (atRightEdge && deltaX < 0)
     ) {
-      event.preventDefault();
+      if (event.cancelable) {
+        event.preventDefault();
+      }
     }
   };
 

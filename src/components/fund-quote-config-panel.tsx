@@ -9,13 +9,16 @@ import type { FundSnapshot } from "@/lib/types";
 type FundQuoteConfigPanelProps = {
   fund: FundSnapshot;
   className?: string;
+  onFundPatched?: (patch: Partial<FundSnapshot>) => void;
+  onApplyTransientConfig?: (patch: Partial<FundSnapshot>) => Promise<void> | void;
 };
 
-export function FundQuoteConfigPanel({ fund, className = "" }: FundQuoteConfigPanelProps) {
-  const { refreshFunds, updateFundQuoteConfig } = useAppState();
+export function FundQuoteConfigPanel({ fund, className = "", onFundPatched, onApplyTransientConfig }: FundQuoteConfigPanelProps) {
+  const { refreshFunds, state, updateFundQuoteConfig } = useAppState();
   const [qdiiEligible, setQdiiEligible] = useState(false);
   const [bestSource, setBestSource] = useState<1 | 2 | 3 | 4 | null>(null);
   const [accuracyLabel, setAccuracyLabel] = useState<string | null>(null);
+  const isFundInList = state.funds.some((item) => item.code === fund.code);
 
   useEffect(() => {
     let active = true;
@@ -44,7 +47,19 @@ export function FundQuoteConfigPanel({ fund, className = "" }: FundQuoteConfigPa
     };
   }, [fund.code, fund.jzrq, fund.zzl]);
 
-  const handleQuoteConfigChange = (next: { dataSource?: 1 | 2 | 3 | 4; autoSource?: boolean }) => {
+  const handleQuoteConfigChange = async (next: { dataSource?: 1 | 2 | 3 | 4; autoSource?: boolean }) => {
+    const patch = {
+      ...(next.dataSource !== undefined ? { dataSource: next.dataSource } : {}),
+      ...(next.autoSource !== undefined ? { autoSource: next.autoSource } : {}),
+    } satisfies Partial<FundSnapshot>;
+
+    onFundPatched?.(patch);
+
+    if (!isFundInList) {
+      await onApplyTransientConfig?.(patch);
+      return;
+    }
+
     updateFundQuoteConfig(fund.code, next);
     void refreshFunds();
   };
@@ -58,16 +73,16 @@ export function FundQuoteConfigPanel({ fund, className = "" }: FundQuoteConfigPa
 
   return (
     <div className={`rounded-xl border border-[#e2e7ff] bg-white ${className}`.trim()}>
-      <div className="px-4 py-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="m-0 text-sm font-semibold text-[#131b2e]">估值数据源</p>
-            <p className="m-0 mt-1 text-[11px] text-[#57657a]">
-              {fund.autoSource ? "自动选择最佳源" : `当前手动源：${fund.dataSource ?? 1} 号`}
-              {bestSource ? `，预计算最佳源：${bestSource} 号` : ""}
-              {accuracyLabel ? `，${accuracyLabel}` : ""}
-            </p>
-          </div>
+      <div className="px-4 py-3.5">
+        <div className="flex items-center justify-between gap-3">
+          <p className="m-0 shrink-0 text-sm font-semibold text-[#131b2e]">估值数据源</p>
+          <p className="m-0 min-w-0 text-right text-[11px] text-[#57657a]">
+            {fund.autoSource ? "自动选择最佳源" : `当前手动源：${fund.dataSource ?? 1} 号`}
+            {bestSource ? `，预计算最佳源：${bestSource} 号` : ""}
+            {accuracyLabel ? `，${accuracyLabel}` : ""}
+          </p>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             type="button"
             className={`inline-flex shrink-0 items-center rounded-md border px-3 py-1.5 text-[11px] font-semibold ${fund.autoSource ? "border-[#bfd4ff] bg-[#edf4ff] text-[#005bc0]" : "border-[#d5dbea] bg-white text-[#24467c]"}`}
@@ -75,8 +90,6 @@ export function FundQuoteConfigPanel({ fund, className = "" }: FundQuoteConfigPa
           >
             自动
           </button>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
           {quoteSourceOptions.map((option) => {
             const active = !fund.autoSource && (fund.dataSource ?? 1) === option.id;
             return (

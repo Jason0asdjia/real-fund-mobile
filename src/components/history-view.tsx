@@ -23,7 +23,7 @@ type TxItem = FundTransaction & {
 const SWIPE_ACTION_WIDTH = 128;
 const SWIPE_LOCK_THRESHOLD = 8;
 const SWIPE_AXIS_BIAS = 4;
-const SWIPE_EDGE_TRIGGER_WIDTH = 72;
+const SWIPE_EDGE_TRIGGER_WIDTH = 160;
 
 const txOrderToken = (item: TxItem) => {
   const idPrefix = String(item.id || "").split("-")[0];

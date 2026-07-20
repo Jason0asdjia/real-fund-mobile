@@ -66,6 +66,26 @@ const getSourceLabel = (source?: FundSnapshot["source"]) => {
   return "未知";
 };
 
+const getEstimateSourceLabel = (fund: FundSnapshot) => {
+  if (fund.noValuation) return "无";
+
+  if (fund.valuationSource === "fundgz") return "东方财富";
+  if (fund.valuationSource === "sina_ds2") return "新浪2";
+  if (fund.valuationSource === "sina_ds3") return "新浪3";
+  if (fund.valuationSource === "supabase_qdii") return "QDII";
+  if (fund.valuationSource === "fallback") return "备用源";
+
+  if (fund.estimateSource) return getSourceLabel(fund.estimateSource);
+  if (fund.quoteStatus === "estimated" && fund.source) return getSourceLabel(fund.source);
+
+  if (fund.dataSource === 1) return "东方财富";
+  if (fund.dataSource === 2) return "新浪2";
+  if (fund.dataSource === 3) return "新浪3";
+  if (fund.dataSource === 4) return "QDII";
+
+  return "--";
+};
+
 const numberFormatter = new Intl.NumberFormat("zh-CN", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -168,9 +188,7 @@ const buildRows = (
     const currentValueUpdatedAt = useOfficialForTodayProfit ? officialConfirmedUpdatedAt : canUseEstimate ? estimateUpdatedAt : officialUpdatedAt;
     const estimatedProfitUpdatedAt = estimateNav != null ? estimateUpdatedAt : "—";
     const officialSourceLabel = getSourceLabel(fund.officialSource ?? (fund.quoteStatus === "official" ? fund.source : undefined));
-    const estimateSourceLabel = fund.noValuation
-      ? "无"
-      : getSourceLabel(fund.estimateSource ?? (fund.quoteStatus === "estimated" ? fund.source : undefined));
+    const estimateSourceLabel = getEstimateSourceLabel(fund);
     const activeSourceLabel = useOfficialForTodayProfit ? officialSourceLabel : canUseEstimate ? estimateSourceLabel : officialSourceLabel;
     const debugSourceTag = `来源：${activeSourceLabel}`;
 
