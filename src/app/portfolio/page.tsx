@@ -60,6 +60,7 @@ const getSourceLabel = (source?: FundSnapshot["source"]) => {
   if (source === "eastmoney") return "东方财富";
   if (source === "tencent") return "腾讯";
   if (source === "sina") return "新浪";
+  if (source === "supabase") return "Supabase";
   if (source === "danjuan") return "蛋卷(历史)";
   if (source === "fallback") return "备用源";
   return "未知";

@@ -136,3 +136,16 @@
 - 新增饼图时，引入 `PieChart` 并传入 `data`（`{ name: string; value: number }[]`）。
 - 环形内径通过 `innerRadius`、`outerRadius` 控制，图例通过 `showLegend` 开关。
 - 不再在业务页面中引入 `@ant-design/charts` 的 `Pie`。
+
+## D012 - 基金级估值源配置进入核心状态
+
+决策：每只基金的 `dataSource` 与 `autoSource` 进入核心 `FundSnapshot` 状态，并随本地持久化与云同步 payload 一起保存。
+
+原因：上游估值链路已经不是单一 `fundgz` 回退模型，而是基金级别的多源选择：`fundgz`、新浪两种估值口径、QDII 特殊源，以及基于云端预计算结果的自动最佳源。仅把它当作 UI 偏好会导致跨设备、刷新和预览链路不一致。
+
+影响：
+
+- `src/lib/storage.ts` 必须对旧数据做兼容归一化，缺省回退到 `dataSource = 1`、`autoSource = false`。
+- `src/lib/cloud-user-data.ts` 的 `coreState.funds` 需要同步 `code`、`name`、`dataSource`、`autoSource`。
+- `src/lib/fund-api.ts` 在预览、添加和刷新基金时，应依据基金自身估值源配置决定实时估值抓取链路。
+- `supabase/sql` 中需要配套 `gs_qdii`、`fund_best_source` 以及 `get_fund_best_source` RPC，供自动最佳源和 QDII 估值使用。

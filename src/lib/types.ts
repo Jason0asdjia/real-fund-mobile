@@ -7,6 +7,8 @@ export type FundHolding = {
 export type FundSnapshot = {
   code: string;
   name: string;
+  dataSource?: 1 | 2 | 3 | 4;
+  autoSource?: boolean;
   dwjz?: string | null;
   gsz?: number | null;
   gztime?: string | null;
@@ -15,9 +17,10 @@ export type FundSnapshot = {
   zzl?: number | null;
   lastNav?: string | null;
   noValuation?: boolean;
-  source?: "eastmoney" | "tencent" | "sina" | "danjuan" | "fallback";
+  source?: "eastmoney" | "tencent" | "sina" | "danjuan" | "fallback" | "supabase";
   officialSource?: "eastmoney" | "tencent" | "sina" | "fallback";
-  estimateSource?: "eastmoney" | "tencent" | "sina" | "fallback";
+  estimateSource?: "eastmoney" | "tencent" | "sina" | "fallback" | "supabase";
+  valuationSource?: "fundgz" | "sina_ds2" | "sina_ds3" | "supabase_qdii" | "fallback" | null;
   quoteStatus?: "estimated" | "official";
   officialConfirmedAt?: string | null;
   officialConfirmedForDate?: string | null;

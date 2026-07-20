@@ -9,7 +9,7 @@ import type { AppState, FundSnapshot } from "@/lib/types";
 export const USER_APP_DATA_TABLE = "user_app_data";
 
 export type CloudCoreState = {
-  funds: Array<Pick<FundSnapshot, "code" | "name">>;
+  funds: Array<Pick<FundSnapshot, "code" | "name" | "dataSource" | "autoSource">>;
   holdings: AppState["holdings"];
   transactions: AppState["transactions"];
   refreshMs: number;
@@ -35,14 +35,23 @@ export type CloudUserDataMeta = CloudUserDataPayload["sync"] & {
 
 const buildPayloadContentHash = (coreState: CloudCoreState, preferences: Partial<ImportantPreferenceMap>) => JSON.stringify({ coreState, preferences });
 
+const normalizeCloudFundEntry = (
+  fund: Pick<FundSnapshot, "code" | "name" | "dataSource" | "autoSource">,
+): Pick<FundSnapshot, "code" | "name" | "dataSource" | "autoSource"> => ({
+  code: fund.code,
+  name: fund.name || fund.code,
+  dataSource: fund.dataSource === 2 || fund.dataSource === 3 || fund.dataSource === 4 ? fund.dataSource : 1,
+  autoSource: fund.autoSource === true,
+});
+
 export const createCloudPayload = (state: AppState, preferences: Partial<ImportantPreferenceMap>): CloudUserDataPayload => ({
-  schemaVersion: 2,
+  schemaVersion: 3,
   sync: {
     dataVersion: Math.max(state.sync.dataVersion, 1),
     updatedAt: state.sync.updatedAt ?? state.lastUpdatedAt,
     deviceId: state.sync.deviceId,
     contentHash: buildPayloadContentHash({
-      funds: state.funds.map((fund) => ({ code: fund.code, name: fund.name || fund.code })),
+      funds: state.funds.map((fund) => normalizeCloudFundEntry(fund)),
       holdings: state.holdings,
       transactions: state.transactions,
       refreshMs: state.refreshMs,
@@ -51,7 +60,7 @@ export const createCloudPayload = (state: AppState, preferences: Partial<Importa
     }, preferences),
   },
   coreState: {
-    funds: state.funds.map((fund) => ({ code: fund.code, name: fund.name || fund.code })),
+    funds: state.funds.map((fund) => normalizeCloudFundEntry(fund)),
     holdings: state.holdings,
     transactions: state.transactions,
     refreshMs: state.refreshMs,
@@ -88,7 +97,7 @@ export const hasMeaningfulCloudData = (payload: CloudUserDataPayload): boolean =
 };
 
 const mergeFunds = (localFunds: CloudCoreState["funds"], cloudFunds: CloudCoreState["funds"]) => {
-  const mergedMap = new Map<string, Pick<FundSnapshot, "code" | "name">>();
+  const mergedMap = new Map<string, Pick<FundSnapshot, "code" | "name" | "dataSource" | "autoSource">>();
 
   [...cloudFunds, ...localFunds].forEach((fund) => {
     if (!fund?.code) return;
@@ -96,6 +105,8 @@ const mergeFunds = (localFunds: CloudCoreState["funds"], cloudFunds: CloudCoreSt
     mergedMap.set(fund.code, {
       code: fund.code,
       name: fund.name || existing?.name || fund.code,
+      dataSource: fund.dataSource ?? existing?.dataSource ?? 1,
+      autoSource: fund.autoSource ?? existing?.autoSource ?? false,
     });
   });
 
@@ -149,7 +160,7 @@ export const mergeCloudPayloads = (localPayload: CloudUserDataPayload, cloudPayl
   const deviceId = localPayload.sync.deviceId || cloudPayload.sync.deviceId || "";
 
   return {
-    schemaVersion: Math.max(localPayload.schemaVersion || 1, cloudPayload.schemaVersion || 1, 2),
+    schemaVersion: Math.max(localPayload.schemaVersion || 1, cloudPayload.schemaVersion || 1, 3),
     sync: {
       dataVersion,
       updatedAt,
@@ -190,7 +201,7 @@ const parseCloudPayload = (rawPayload: unknown): CloudUserDataPayload | null => 
   const sync = rawPayload.sync;
   const normalizedCoreState = isPlainObject(coreState)
     ? {
-        funds: Array.isArray(coreState.funds) ? (coreState.funds as Array<Pick<FundSnapshot, "code" | "name">>) : [],
+        funds: Array.isArray(coreState.funds) ? coreState.funds.map((fund) => normalizeCloudFundEntry(fund as Pick<FundSnapshot, "code" | "name" | "dataSource" | "autoSource">)) : [],
         holdings: isPlainObject(coreState.holdings) ? (coreState.holdings as CloudCoreState["holdings"]) : {},
         transactions: isPlainObject(coreState.transactions) ? (coreState.transactions as CloudCoreState["transactions"]) : {},
         refreshMs: Number(coreState.refreshMs) || defaultAppState.refreshMs,

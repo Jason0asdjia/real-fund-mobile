@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowDownLeft, ArrowUpRight, Check, ChevronLeft, ChevronRight, Circle, CircleMinus, CirclePlus, PenSquare, Trash2 } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
+import { FundQuoteConfigPanel } from "@/components/fund-quote-config-panel";
 import { SecondaryBottomNav } from "@/components/ui/secondary-bottom-nav";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -453,6 +454,10 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
             </button>
           ))}
         </div>
+
+        <section className="px-1.5 pb-1">
+          <FundQuoteConfigPanel fund={fund} />
+        </section>
 
         <section className="px-1.5 pb-1">
           <Card className="rounded-xl border-[#e2e7ff]/40">

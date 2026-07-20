@@ -97,7 +97,12 @@ export const syncDataVersionFloor = (version: number) => {
 };
 
 const buildStateContentForHash = (state: AppState) => ({
-  funds: state.funds.map((fund) => ({ code: fund.code, name: fund.name || fund.code })),
+  funds: state.funds.map((fund) => ({
+    code: fund.code,
+    name: fund.name || fund.code,
+    dataSource: fund.dataSource ?? 1,
+    autoSource: fund.autoSource ?? false,
+  })),
   holdings: state.holdings,
   transactions: state.transactions,
   favorites: state.favorites,
@@ -157,7 +162,14 @@ const normalizeFund = (value: unknown): FundSnapshot | null => {
   const code = typeof value.code === "string" ? value.code.trim() : "";
   if (!code) return null;
   const name = typeof value.name === "string" && value.name.trim() ? value.name.trim() : code;
-  return { ...(value as FundSnapshot), code, name };
+  const dataSource = Number(value.dataSource);
+  return {
+    ...(value as FundSnapshot),
+    code,
+    name,
+    dataSource: dataSource === 2 || dataSource === 3 || dataSource === 4 ? dataSource : 1,
+    autoSource: value.autoSource === true,
+  };
 };
 
 const normalizeHolding = (value: unknown): FundHolding | null => {

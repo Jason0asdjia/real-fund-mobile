@@ -1,5 +1,6 @@
 import type { FundHoldingStock, FundSnapshot, SearchFundResult } from "@/lib/types";
-import { nowInMarket, toMarketDay } from "@/lib/time";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase-client";
+import { formatMarketDate, nowInMarket, toMarketDay } from "@/lib/time";
 
 const FUND_GZ_TIMEOUT_MS = 8000;
 const OFFICIAL_SOURCE_TIMEOUT_MS = 8000;
@@ -28,6 +29,7 @@ type HistoricalNavCoverageRange = {
 const holdingsCache = new Map<string, CachedData<{ holdings: FundHoldingStock[]; holdingsReportDate: string | null; holdingsIsLastQuarter: boolean }>>();
 const profileCache = new Map<string, CachedData<Pick<FundSnapshot, "fundType" | "riskLevel" | "fundManager" | "fundCompany" | "fundScale" | "trackingTarget" | "inceptionDate">>>();
 const estimateCache = new Map<string, CachedData<FundSnapshot>>();
+const pingzhongdataCache = new Map<string, CachedData<PingzhongdataSnapshot>>();
 const sourceLastRequestAt = new Map<keyof typeof SOURCE_MIN_INTERVAL_MS, number>();
 const sourceQueue = new Map<keyof typeof SOURCE_MIN_INTERVAL_MS, Promise<void>>();
 const previewInFlight = new Map<string, Promise<FundSnapshot>>();
@@ -47,6 +49,26 @@ type OfficialQuoteSnapshot = {
   previousNav: number | null;
   name?: string | null;
   source: "history" | "tencent" | "sina";
+};
+
+type PingzhongdataNetWorthPoint = {
+  x?: number;
+  y?: number;
+  equityReturn?: number;
+  unitMoney?: string;
+};
+
+type PingzhongdataSnapshot = {
+  fundName?: string;
+  dataNetWorthTrend: PingzhongdataNetWorthPoint[];
+};
+
+type BestValuationSourceResult = {
+  bestSource: 1 | 2 | 3 | 4 | null;
+  isYesterdayAccuracy: boolean;
+  isTodayAccuracy: boolean;
+  diffs?: Record<string, number>;
+  diff?: number;
 };
 
 const parseSinaDate = (value: string) => {
@@ -209,6 +231,11 @@ const hasValidEstimateFields = (snapshot: Pick<FundSnapshot, "gsz" | "gszzl" | "
   const estimateGrowth = toFiniteNumber(snapshot.gszzl);
   const estimateTime = typeof snapshot.gztime === "string" ? snapshot.gztime.trim() : "";
   return estimateNav != null && estimateGrowth != null && Boolean(estimateTime);
+};
+
+const normalizeValuationDataSource = (value?: number | null): 1 | 2 | 3 | 4 => {
+  if (value === 2 || value === 3 || value === 4) return value;
+  return 1;
 };
 
 const loadScript = (url: string) =>
@@ -673,6 +700,7 @@ const mapEstimateSource = (
   if (source === "eastmoney") return "eastmoney";
   if (source === "tencent") return "tencent";
   if (source === "sina") return "sina";
+  if (source === "supabase") return "supabase";
   return "fallback";
 };
 
@@ -864,6 +892,228 @@ const fetchFundProfile = async (code: string): Promise<Pick<FundSnapshot, "fundT
   return data;
 };
 
+const fetchFundPingzhongdata = async (code: string): Promise<PingzhongdataSnapshot> => {
+  const cached = pingzhongdataCache.get(code);
+  if (cached && Date.now() - cached.ts < HOLDINGS_CACHE_MS) {
+    return cached.data;
+  }
+
+  const data = await new Promise<PingzhongdataSnapshot>((resolve, reject) => {
+    if (typeof document === "undefined" || !document.body) {
+      reject(new Error("No browser environment"));
+      return;
+    }
+
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.style.display = "none";
+
+    let timer: number | null = null;
+    let settled = false;
+
+    const done = (callback: (value: any) => void, payload: any) => {
+      if (settled) return;
+      settled = true;
+      if (timer !== null) window.clearTimeout(timer);
+      if (document.body.contains(iframe)) document.body.removeChild(iframe);
+      callback(payload);
+    };
+
+    iframe.onload = () => {
+      const frameWindow = iframe.contentWindow;
+      const frameDocument = iframe.contentDocument || frameWindow?.document;
+      if (!frameWindow || !frameDocument) {
+        done(reject, new Error("Pingzhongdata iframe init failed"));
+        return;
+      }
+
+      frameDocument.open();
+      frameDocument.write("<!doctype html><html><body></body></html>");
+      frameDocument.close();
+
+      const script = frameDocument.createElement("script");
+      script.src = `https://fund.eastmoney.com/pingzhongdata/${code}.js?v=${Date.now()}`;
+      script.async = true;
+      script.onerror = () => done(reject, new Error("Pingzhongdata load failed"));
+      script.onload = () => {
+        try {
+          const dataNetWorthTrend = Array.isArray((frameWindow as any).Data_netWorthTrend)
+            ? JSON.parse(JSON.stringify((frameWindow as any).Data_netWorthTrend)) as PingzhongdataNetWorthPoint[]
+            : [];
+          const fundName = typeof (frameWindow as any).fS_name === "string" ? (frameWindow as any).fS_name as string : undefined;
+          if (dataNetWorthTrend.length === 0) {
+            done(reject, new Error("Pingzhongdata missing trend"));
+            return;
+          }
+          done(resolve, { fundName, dataNetWorthTrend });
+        } catch (error) {
+          done(reject, error instanceof Error ? error : new Error("Pingzhongdata parse failed"));
+        }
+      };
+
+      frameDocument.body.appendChild(script);
+    };
+
+    document.body.appendChild(iframe);
+    timer = window.setTimeout(() => done(reject, new Error("Pingzhongdata timeout")), OFFICIAL_SOURCE_TIMEOUT_MS);
+  });
+
+  pingzhongdataCache.set(code, { data, ts: Date.now() });
+  return data;
+};
+
+const fetchNavMetricsFromTrendFallback = async (code: string) => {
+  const pingzhongdata = await fetchFundPingzhongdata(code);
+  const valid = pingzhongdata.dataNetWorthTrend
+    .filter((item) => item && Number.isFinite(Number(item.x)) && Number.isFinite(Number(item.y)))
+    .sort((a, b) => Number(a.x) - Number(b.x));
+
+  if (valid.length === 0) return null;
+
+  const latest = valid.at(-1) || null;
+  const previous = valid.length > 1 ? valid.at(-2) || null : null;
+  const latestNav = latest ? toFiniteNumber(latest.y) : null;
+  if (!latest || latestNav == null) return null;
+
+  return {
+    fundName: pingzhongdata.fundName || null,
+    dwjz: String(latestNav),
+    jzrq: formatMarketDate(Number(latest.x), "YYYY-MM-DD"),
+    zzl: toFiniteNumber(latest.equityReturn),
+    lastNav: previous?.y != null && Number.isFinite(Number(previous.y)) ? String(previous.y) : null,
+    yesterdayZzl: previous?.equityReturn != null && Number.isFinite(Number(previous.equityReturn)) ? Number(previous.equityReturn) : null,
+    yesterdayNavDelta: previous?.y != null && latest.y != null && Number.isFinite(Number(previous.y)) && Number.isFinite(Number(latest.y))
+      ? Number(latest.y) - Number(previous.y)
+      : null,
+  };
+};
+
+const fetchQdiiValuationFromSupabase = async (code: string) => {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const normalized = code.trim();
+  if (!normalized) return null;
+
+  const { data, error } = await supabase.from("gs_qdii").select("gztime, gszzl, gzstatus").eq("fund_code", normalized).maybeSingle();
+  if (error || !data) return null;
+
+  return {
+    code: normalized,
+    name: normalized,
+    gsz: null,
+    gztime: typeof data.gztime === "string" ? data.gztime : null,
+    gszzl: toFiniteNumber(data.gszzl),
+    valuationSource: "supabase_qdii" as const,
+    source: "supabase" as const,
+    quoteStatus: "estimated" as const,
+  } satisfies FundSnapshot;
+};
+
+export const isQdiiFund = async (code: string) => {
+  if (!isSupabaseConfigured || !supabase) return false;
+  const normalized = code.trim();
+  if (!normalized) return false;
+  const { data, error } = await supabase.from("gs_qdii").select("fund_code").eq("fund_code", normalized).maybeSingle();
+  return !error && Boolean(data);
+};
+
+export const fetchFundBestSource = async (code: string): Promise<1 | 2 | 3 | 4 | null> => {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const normalized = code.trim();
+  if (!normalized) return null;
+  const { data, error } = await supabase.rpc("get_fund_best_source", { p_fund_code: normalized });
+  const source = Array.isArray(data) ? data[0]?.source : data?.source;
+  if (!error && typeof source === "string") {
+    if (source === "sina_ds2") return 2;
+    if (source === "sina_ds3") return 3;
+    if (source === "supabase_qdii") return 4;
+    return 1;
+  }
+
+  const qdii = await isQdiiFund(normalized).catch(() => false);
+  if (qdii) return 4;
+
+  return error ? null : 1;
+};
+
+export const fetchFundsBestSources = async (codes: string[]): Promise<Record<string, 1 | 2 | 3 | 4>> => {
+  if (!isSupabaseConfigured || !supabase || codes.length === 0) return {};
+  const normalizedCodes = codes.map((code) => code.trim()).filter(Boolean);
+  if (normalizedCodes.length === 0) return {};
+
+  const { data, error } = await supabase.rpc("get_fund_best_source", { p_fund_codes: normalizedCodes });
+  const mapped = !error && data && typeof data === "object"
+    ? Object.entries(data as Record<string, string>).reduce<Record<string, 1 | 2 | 3 | 4>>((acc, [nextCode, source]) => {
+      acc[nextCode] = source === "sina_ds2" ? 2 : source === "sina_ds3" ? 3 : source === "supabase_qdii" ? 4 : 1;
+      return acc;
+    }, {})
+    : {};
+
+  const missingCodes = normalizedCodes.filter((code) => !(code in mapped));
+  if (missingCodes.length === 0) return mapped;
+
+  const { data: qdiiRows } = await supabase.from("gs_qdii").select("fund_code").in("fund_code", missingCodes);
+  const qdiiCodes = new Set(Array.isArray(qdiiRows) ? qdiiRows.map((row) => String(row.fund_code)) : []);
+
+  return missingCodes.reduce<Record<string, 1 | 2 | 3 | 4>>((acc, code) => {
+    if (qdiiCodes.has(code)) {
+      acc[code] = 4;
+    }
+    return acc;
+  }, { ...mapped });
+};
+
+export const fetchBestValuationSource = async (code: string, jzrq: string, actualZzl: number): Promise<BestValuationSourceResult | null> => {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const normalized = code.trim();
+  if (!normalized || !jzrq || !Number.isFinite(actualZzl)) return null;
+
+  const { data, error } = await supabase.functions.invoke("best-valuation-source", {
+    body: { code: normalized, jzrq, actualZzl },
+  });
+  if (error || !data?.success) return null;
+  return data.data as BestValuationSourceResult;
+};
+
+const fetchSinaEstimateNetworthResponse = (code: string) =>
+  new Promise<any>((resolve, reject) => {
+    if (typeof document === "undefined" || !document.body) {
+      reject(new Error("No browser environment"));
+      return;
+    }
+
+    const callbackName = `jsonp_sina_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const script = document.createElement("script");
+    let timer: number | null = null;
+
+    const cleanup = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      try {
+        delete (window as any)[callbackName];
+      } catch {
+        // ignore
+      }
+      if (document.body.contains(script)) document.body.removeChild(script);
+    };
+
+    (window as any)[callbackName] = (payload: any) => {
+      cleanup();
+      resolve(payload);
+    };
+
+    script.src = `https://stock.finance.sina.com.cn/fundInfo/api/openapi.php/FdFundService.getEstimateNetworthPic?symbol=${code}&callback=${callbackName}`;
+    script.async = true;
+    script.onerror = () => {
+      cleanup();
+      reject(new Error("Sina estimate load failed"));
+    };
+
+    document.body.appendChild(script);
+    timer = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("Sina estimate timeout"));
+    }, FUND_GZ_TIMEOUT_MS);
+  });
+
 const requestFundEstimateData = (code: string, priority: "high" | "normal" | "interactive" = "normal") =>
   runWithSourcePriority("eastmoneyEstimate", async () => {
     const cached = estimateCache.get(code);
@@ -971,6 +1221,67 @@ const requestTencentEstimateData = async (
   };
 };
 
+const requestSinaEstimateData = async (
+  code: string,
+  dataSource: 2 | 3,
+  previousFund?: FundSnapshot | null,
+  priority: "high" | "normal" | "interactive" = "normal",
+): Promise<FundSnapshot> => {
+  const response = await runWithSourcePriority("sinaQuote", () => fetchSinaEstimateNetworthResponse(code), priority);
+  const networth = Array.isArray(response?.result?.data?.networth) ? response.result.data.networth : [];
+  const lastPoint = networth.at(-1);
+  if (!lastPoint) {
+    throw new Error("Sina estimate empty");
+  }
+
+  const navKey = dataSource === 2 ? "pre_nav" : "pre_nav2";
+  const growthKey = dataSource === 2 ? "growthrate" : "growthrate2";
+  const estimateNav = toFiniteNumber(lastPoint[navKey]);
+  const rawGrowth = toFiniteNumber(lastPoint[growthKey]);
+  const estimateGrowth = rawGrowth == null ? null : Math.abs(rawGrowth) <= 1 ? rawGrowth * 100 : rawGrowth;
+  const date = typeof lastPoint.pre_date === "string" ? normalizeDate(lastPoint.pre_date) : null;
+  const minTime = typeof lastPoint.min_time === "string" ? lastPoint.min_time : null;
+  if (estimateNav == null || estimateGrowth == null || !date || !minTime) {
+    throw new Error("Sina estimate missing fields");
+  }
+
+  return {
+    code,
+    name: previousFund?.name || code,
+    dataSource,
+    autoSource: previousFund?.autoSource ?? false,
+    dwjz: previousFund?.dwjz ?? null,
+    gsz: estimateNav,
+    gztime: `${date} ${minTime}`,
+    jzrq: previousFund?.jzrq ?? date,
+    gszzl: estimateGrowth,
+    source: "sina",
+    estimateSource: "sina",
+    valuationSource: dataSource === 2 ? "sina_ds2" : "sina_ds3",
+    quoteStatus: "estimated",
+  };
+};
+
+const requestEstimateSecondaryFallback = async (
+  code: string,
+  previousFund?: FundSnapshot | null,
+  priority: "high" | "normal" | "interactive" = "normal",
+) => {
+  try {
+    return await requestSinaEstimateData(code, 2, previousFund, priority);
+  } catch {
+    // fallback to next estimate provider
+  }
+
+  try {
+    return await requestSinaEstimateData(code, 3, previousFund, priority);
+  } catch {
+    // fallback to next estimate provider
+  }
+
+  return requestTencentEstimateData(code, previousFund, priority);
+};
+
 const requestFundEstimateWithFallback = async (
   code: string,
   previousFund?: FundSnapshot | null,
@@ -983,17 +1294,65 @@ const requestFundEstimateWithFallback = async (
     // fallback to secondary estimate provider
   }
 
-  return requestTencentEstimateData(code, previousFund, priority);
+  return requestEstimateSecondaryFallback(code, previousFund, priority);
+};
+
+export const fetchFundValuationBySource = async (
+  code: string,
+  dataSource = 1,
+  previousFund?: FundSnapshot | null,
+  priority: "high" | "normal" | "interactive" = "normal",
+): Promise<FundSnapshot> => {
+  const normalizedSource = normalizeValuationDataSource(dataSource);
+
+  if (normalizedSource === 4) {
+    const qdii = await fetchQdiiValuationFromSupabase(code);
+    if (!qdii) throw new Error("QDII valuation unavailable");
+    return {
+      ...(previousFund || {}),
+      ...qdii,
+      code,
+      name: previousFund?.name || code,
+      dataSource: 4,
+      autoSource: previousFund?.autoSource ?? false,
+    };
+  }
+
+  if (normalizedSource === 2 || normalizedSource === 3) {
+    return requestSinaEstimateData(code, normalizedSource, previousFund, priority);
+  }
+
+  try {
+    const primary = await requestFundEstimateData(code, priority);
+    if (hasValidEstimateFields(primary)) {
+      return {
+        ...primary,
+        dataSource: 1,
+        autoSource: previousFund?.autoSource ?? false,
+        valuationSource: "fundgz",
+      };
+    }
+  } catch {
+    // fallback to next provider
+  }
+
+  return requestEstimateSecondaryFallback(code, previousFund, priority);
 };
 
 export const fetchFundPreviewData = async (code: string, previousFund?: FundSnapshot | null): Promise<FundSnapshot> => {
   return withInFlightDedup(previewInFlight, code, async () => {
-    const estimate = await requestFundEstimateWithFallback(code, previousFund, "interactive");
+    const autoSource = previousFund?.autoSource === true;
+    const sourceId = autoSource
+      ? await fetchFundBestSource(code) ?? previousFund?.dataSource ?? 1
+      : previousFund?.dataSource ?? 1;
+    const estimate = await fetchFundValuationBySource(code, sourceId, previousFund, "interactive");
     const preview = {
       ...(previousFund || {}),
       ...estimate,
       code,
       name: estimate.name || previousFund?.name || code,
+      dataSource: normalizeValuationDataSource(sourceId),
+      autoSource,
     };
     return preview;
   });
@@ -1003,14 +1362,26 @@ export const fetchFundBaseData = async (
   code: string,
   previousFund?: FundSnapshot | null,
   mode: RequestMode = "throttled",
+  preferredSourceOverride?: 1 | 2 | 3 | 4 | null,
 ): Promise<FundSnapshot> => {
   const skipOfficialRefresh = shouldSkipOfficialRefresh(previousFund);
   const previousOfficial = skipOfficialRefresh ? buildOfficialQuoteFromPreviousFund(previousFund) : null;
+  const autoSource = previousFund?.autoSource === true;
+  const preferredSource = preferredSourceOverride ?? (autoSource
+    ? await fetchFundBestSource(code) ?? previousFund?.dataSource ?? 1
+    : previousFund?.dataSource ?? 1);
+  const estimatePriority = mode === "interactive" ? "interactive" : "normal";
 
   const [officialResult, estimate] = await Promise.allSettled([
     previousOfficial ? Promise.resolve(previousOfficial) : fetchOfficialQuoteWithFallback(code, mode),
-    requestFundEstimateWithFallback(code, previousFund, mode === "interactive" ? "interactive" : "normal"),
+    fetchFundValuationBySource(code, preferredSource, previousFund, estimatePriority),
   ]);
+
+  const officialResolved = officialResult.status === "fulfilled" ? officialResult.value.official : null;
+  const shouldUseTrendFallback = officialResult.status === "rejected"
+    || !officialResolved?.latestDate
+    || officialResolved.latestNav == null;
+  const trendFallbackResult = shouldUseTrendFallback ? await fetchNavMetricsFromTrendFallback(code).catch(() => null) : null;
 
   const historyList = officialResult.status === "fulfilled" ? officialResult.value.historyList : [];
   const officialQuote = officialResult.status === "fulfilled" ? officialResult.value.official : null;
@@ -1020,12 +1391,20 @@ export const fetchFundBaseData = async (
       date: officialQuote.latestDate,
       growth: officialQuote.latestGrowth,
     }
-    : historyList.at(-1) || null;
+    : historyList.at(-1) || (trendFallbackResult?.dwjz && trendFallbackResult.jzrq
+      ? {
+          nav: Number(trendFallbackResult.dwjz),
+          date: trendFallbackResult.jzrq,
+          growth: trendFallbackResult.zzl,
+        }
+      : null);
   const previousNav = officialQuote?.previousNav != null
     ? { nav: officialQuote.previousNav }
     : historyList.length > 1
       ? historyList.at(-2)
-      : null;
+      : trendFallbackResult?.lastNav != null && Number.isFinite(Number(trendFallbackResult.lastNav))
+        ? { nav: Number(trendFallbackResult.lastNav) }
+        : null;
   const resolvedOfficialSource = officialQuote ? mapOfficialSource(officialQuote.source) : (previousFund?.officialSource ?? "fallback");
 
   if (estimate.status === "fulfilled") {
@@ -1103,7 +1482,9 @@ export const fetchFundBaseData = async (
       ...(previousFund || {}),
       ...estimate.value,
       code,
-      name: estimate.value.name || officialQuote?.name || previousFund?.name || "",
+      name: estimate.value.name || officialQuote?.name || trendFallbackResult?.fundName || previousFund?.name || "",
+      dataSource: normalizeValuationDataSource(preferredSource),
+      autoSource,
       dwjz: effectiveLatestNav != null ? String(effectiveLatestNav) : estimate.value.dwjz,
       jzrq: effectiveLatestDate,
       zzl: effectiveOfficialGrowth,
@@ -1115,6 +1496,13 @@ export const fetchFundBaseData = async (
       source: estimate.value.source ?? resolvedOfficialSource,
       quoteStatus: "estimated",
     };
+    if ((snapshot.valuationSource === "supabase_qdii" || (snapshot.gsz == null && snapshot.gszzl != null)) && snapshot.dwjz) {
+      const officialNav = toFiniteNumber(snapshot.dwjz);
+      const estimateGrowth = toFiniteNumber(snapshot.gszzl);
+      if (officialNav != null && estimateGrowth != null) {
+        snapshot.gsz = officialNav * (1 + estimateGrowth / 100);
+      }
+    }
     return snapshot;
   }
 
@@ -1131,7 +1519,9 @@ export const fetchFundBaseData = async (
     const snapshot: FundSnapshot = {
       ...(previousFund || {}),
       code,
-      name: officialQuote?.name || previousFund?.name || `基金 ${code}`,
+      name: officialQuote?.name || trendFallbackResult?.fundName || previousFund?.name || `基金 ${code}`,
+      dataSource: normalizeValuationDataSource(preferredSource),
+      autoSource,
       dwjz: String(latest.nav),
       gsz: null,
       gztime: null,
@@ -1148,6 +1538,30 @@ export const fetchFundBaseData = async (
       quoteStatus: "official",
     };
     return snapshot;
+  }
+
+  const fallback = await fetchNavMetricsFromTrendFallback(code).catch(() => null);
+  if (fallback?.dwjz && fallback.jzrq) {
+    return {
+      ...(previousFund || {}),
+      code,
+      name: fallback.fundName || previousFund?.name || `基金 ${code}`,
+      dataSource: normalizeValuationDataSource(preferredSource),
+      autoSource,
+      dwjz: fallback.dwjz,
+      gsz: null,
+      gztime: null,
+      jzrq: fallback.jzrq,
+      zzl: fallback.zzl,
+      gszzl: null,
+      lastNav: fallback.lastNav,
+      noValuation: true,
+      valuationSource: "fallback",
+      officialSource: previousFund?.officialSource ?? "fallback",
+      estimateSource: previousFund?.estimateSource ?? "fallback",
+      source: "fallback",
+      quoteStatus: "official",
+    };
   }
 
   throw new Error(`Unable to fetch fund base data for ${code}`);

@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { useAuth } from "@/components/auth-provider";
 import { buildCloudPayloadFromState, createCloudPayload, fetchCloudUserData, fetchCloudUserMeta, hasMeaningfulCloudData, hydrateAppStateFromCloudPayload, mergeCloudPayloads, upsertCloudUserData } from "@/lib/cloud-user-data";
-import { fetchFundArchiveData, fetchFundBaseData, fetchFundHistoricalNavSeries, searchFunds } from "@/lib/fund-api";
+import { fetchFundArchiveData, fetchFundBaseData, fetchFundHistoricalNavSeries, fetchFundsBestSources, searchFunds } from "@/lib/fund-api";
 import { applyConfirmedTransactionsToHolding, getTransactionConfirmDateInMarket, isTransactionConfirmedInMarket } from "@/lib/portfolio";
 import { APP_STATE_KEY, bumpAppStateVersion, computeAppStateContentHash, defaultAppState, loadAppState, markAppStateSynced, normalizeAppState, saveAppState, syncDataVersionFloor } from "@/lib/storage";
 import { formatLocalTimestamp, isEstimateTimestampUsable, MARKET_OPEN_MINUTES, nowInMarket } from "@/lib/time";
@@ -32,6 +32,7 @@ type AppContextValue = {
   removeFund: (code: string) => void;
   clearHolding: (code: string) => void;
   updateHolding: (code: string, next: FundHolding) => void;
+  updateFundQuoteConfig: (code: string, next: { dataSource?: 1 | 2 | 3 | 4; autoSource?: boolean }) => void;
   addTransaction: (code: string, next: Omit<FundTransaction, "id">) => void;
   updateTransaction: (code: string, id: string, next: Omit<FundTransaction, "id">) => void;
   removeTransaction: (code: string, id: string) => void;
@@ -523,8 +524,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const hydrateCloudFundsForView = useCallback(async (funds: FundSnapshot[]) => {
     if (funds.length === 0) return { funds, refreshedCount: 0 };
 
+    const autoSourceCodes = funds.filter((fund) => fund.autoSource).map((fund) => fund.code);
+    const bestSourceByCode = autoSourceCodes.length > 0 ? await fetchFundsBestSources(autoSourceCodes) : {};
+
     const hydratedResults = await Promise.allSettled(
-      funds.map((fund) => fetchFundBaseData(fund.code, { code: fund.code, name: fund.name || fund.code }, "interactive")),
+      funds.map((fund) => fetchFundBaseData(
+        fund.code,
+        fund,
+        "interactive",
+        fund.autoSource ? (bestSourceByCode[fund.code] ?? null) : null,
+      )),
     );
 
     let refreshedCount = 0;
@@ -1127,12 +1136,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const token = ++refreshTokenRef.current;
     refreshingRef.current = true;
     setRefreshing(true);
-    setError("");
+      setError("");
 
     try {
+      const currentFunds = fundsRef.current;
+      const autoSourceCodes = currentFunds.filter((fund) => fund.autoSource).map((fund) => fund.code);
+      const bestSourceByCode = autoSourceCodes.length > 0 ? await fetchFundsBestSources(autoSourceCodes) : {};
+
       const refreshedResults = await Promise.allSettled(
-        fundsRef.current.map(async (fund) => {
-          const nextFund = await fetchFundBaseData(fund.code, fund);
+        currentFunds.map(async (fund) => {
+          const nextFund = await fetchFundBaseData(
+            fund.code,
+            fund,
+            "throttled",
+            fund.autoSource ? (bestSourceByCode[fund.code] ?? null) : null,
+          );
           recordValuation(nextFund.code, { gsz: nextFund.gsz, gztime: nextFund.gztime });
           return nextFund;
         }),
@@ -1463,6 +1481,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ...current.holdings,
         [code]: next,
       },
+    }));
+    persistRuntimeState(nextState);
+  }, [applyUserDataMutation, persistRuntimeState]);
+
+  const updateFundQuoteConfig = useCallback((code: string, next: { dataSource?: 1 | 2 | 3 | 4; autoSource?: boolean }) => {
+    const nextState = applyUserDataMutation((current) => ({
+      ...current,
+      funds: current.funds.map((fund) => fund.code === code
+        ? {
+            ...fund,
+            dataSource: next.dataSource ?? fund.dataSource ?? 1,
+            autoSource: next.autoSource ?? fund.autoSource ?? false,
+          }
+        : fund),
     }));
     persistRuntimeState(nextState);
   }, [applyUserDataMutation, persistRuntimeState]);
@@ -1816,6 +1848,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       removeFund,
       clearHolding,
       updateHolding,
+      updateFundQuoteConfig,
       addTransaction,
       updateTransaction,
       removeTransaction,
@@ -1864,6 +1897,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       state,
       refreshFromLocalState,
       toggleFavorite,
+      updateFundQuoteConfig,
       updateHolding,
       valuationSeries,
     ],
