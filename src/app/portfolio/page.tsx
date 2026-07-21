@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Check, Circle, GripVertical, Search, X } from "lucide-react";
+import { Check, Circle, GripVertical, RefreshCw, Search, X } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
+import { Button } from "@/components/ui/button";
 import {
   PORTFOLIO_OVERVIEW_COLUMN_OPTIONS,
   PortfolioOverviewTable,
@@ -252,7 +253,7 @@ const readColumnOrder = (): PortfolioOverviewColumnId[] => {
 };
 
 export default function PortfolioPage() {
-  const { state } = useAppState();
+  const { state, refreshing, refreshFunds } = useAppState();
   const [restoredState, setRestoredState] = useState<PortfolioViewState>({ windowY: 0, tableTop: 0, tableLeft: 0 });
   const [columnVisibility, setColumnVisibility] = useState<Record<PortfolioOverviewColumnId, boolean>>(() => readColumnVisibility());
   const [columnOrder, setColumnOrder] = useState<PortfolioOverviewColumnId[]>(() => readColumnOrder());
@@ -663,13 +664,25 @@ export default function PortfolioPage() {
             <h1 className="m-0 text-[24px] font-semibold leading-none tracking-[-0.02em] text-slate-900 sm:text-[28px]">基金资产概览</h1>
             <p className="mt-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">Portfolio Summary</p>
           </div>
-          <Link
-            href="/discover"
-            aria-label="搜索基金"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
-          >
-            <Search size={18} />
-          </Link>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => refreshFunds()}
+              disabled={refreshing}
+              aria-label="刷新基金估值"
+              className="h-9 w-9 min-h-9 min-w-0 p-0"
+              style={{ borderRadius: "0.375rem" }}
+            >
+              <RefreshCw size={18} className={refreshing ? "is-spinning" : ""} />
+            </Button>
+            <Link
+              href="/discover"
+              aria-label="搜索基金"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+            >
+              <Search size={18} />
+            </Link>
+          </div>
         </header>
 
         <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">

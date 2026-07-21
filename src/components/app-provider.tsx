@@ -1136,7 +1136,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const token = ++refreshTokenRef.current;
     refreshingRef.current = true;
     setRefreshing(true);
-      setError("");
+    setError("");
 
     try {
       const currentFunds = fundsRef.current;
@@ -1166,6 +1166,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       if (token === refreshTokenRef.current) {
         if (successCount > 0) {
+          setPassiveRefreshAt(Date.now());
           setState((current) => ({
             ...current,
             funds: refreshed,

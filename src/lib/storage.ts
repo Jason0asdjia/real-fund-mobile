@@ -245,7 +245,12 @@ export const normalizeAppState = (value: unknown): AppState => {
     : [];
 
   const refreshMsCandidate = Number(value.refreshMs);
-  const refreshMs = Number.isFinite(refreshMsCandidate) && refreshMsCandidate >= 5000 ? refreshMsCandidate : defaultAppState.refreshMs;
+  const refreshMs = (() => {
+    if (!Number.isFinite(refreshMsCandidate) || refreshMsCandidate < 5000) return defaultAppState.refreshMs;
+    // 旧的 15 秒档位已下线，迁移到新的最低档 30 秒
+    if (refreshMsCandidate === 15000) return 30000;
+    return refreshMsCandidate;
+  })();
   const lastUpdatedAt = typeof value.lastUpdatedAt === "string" ? value.lastUpdatedAt : null;
   const baseState = {
     ...defaultAppState,

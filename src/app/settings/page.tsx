@@ -61,10 +61,10 @@ const tryParseJson = (raw: string) => {
 };
 
 const refreshOptions = [
-  { label: "15 秒", value: 15000 },
   { label: "30 秒", value: 30000 },
   { label: "60 秒", value: 60000 },
   { label: "120 秒", value: 120000 },
+  { label: "5 分钟", value: 300000 },
 ];
 
 const refreshSelectOptions = refreshOptions.map((item) => ({
