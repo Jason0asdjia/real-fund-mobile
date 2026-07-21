@@ -7,7 +7,7 @@ import { buildCloudPayloadFromState, createCloudPayload, fetchCloudUserData, fet
 import { fetchFundArchiveData, fetchFundBaseData, fetchFundHistoricalNavSeries, fetchFundsBestSources, searchFunds } from "@/lib/fund-api";
 import { applyConfirmedTransactionsToHolding, getTransactionConfirmDateInMarket, isTransactionConfirmedInMarket } from "@/lib/portfolio";
 import { APP_STATE_KEY, bumpAppStateVersion, computeAppStateContentHash, defaultAppState, loadAppState, markAppStateSynced, normalizeAppState, saveAppState, syncDataVersionFloor } from "@/lib/storage";
-import { formatLocalTimestamp, isEstimateTimestampUsable, MARKET_OPEN_MINUTES, nowInMarket } from "@/lib/time";
+import { formatLocalTimestamp, isEstimateTimestampDisplayable, isEstimateTimestampUsable, MARKET_OPEN_MINUTES, nowInMarket } from "@/lib/time";
 import type { AppState, FundHolding, FundSnapshot, FundTransaction, SearchFundResult, ValuationPoint } from "@/lib/types";
 import { IMPORTANT_UI_PREFERENCE_KEYS, applyImportantPreferences, readImportantPreferences } from "@/lib/user-preferences";
 import { clearValuationSeries, getAllValuationSeries, normalizeValuationSeries, recordValuation, setAllValuationSeries, VALUATION_TIMESERIES_KEY } from "@/lib/valuation-timeseries";
@@ -28,7 +28,7 @@ type AppContextValue = {
   search: (keyword: string) => Promise<SearchFundResult[]>;
   recordSearchHistory: (keyword: string) => void;
   addFund: (input: SearchFundResult) => Promise<FundSnapshot | null>;
-  refreshFunds: () => Promise<void>;
+  refreshFunds: (mode?: "auto" | "manual") => Promise<void>;
   removeFund: (code: string) => void;
   clearHolding: (code: string) => void;
   updateHolding: (code: string, next: FundHolding) => void;
@@ -67,6 +67,7 @@ const PENDING_CLOUD_SYNC_KEY = "real-fund-mobile:pending-cloud-sync";
 const OFFICIAL_NAV_HISTORY_CACHE_KEY = "real-fund-mobile:official-nav-history";
 const MAX_ARCHIVE_PREFETCH_CONCURRENCY = 3;
 const MAX_HISTORY_PREFETCH_CONCURRENCY = 2;
+const MANUAL_REFRESH_FOREGROUND_WAIT_MS = 6000;
 
 const readPendingCloudSync = () => {
   if (typeof window === "undefined") return null;
@@ -338,21 +339,22 @@ const dedupeFundsByCode = (funds: FundSnapshot[]) => {
 
 const mergeQuoteWithIntradayFallback = (previous: FundSnapshot, next: FundSnapshot): FundSnapshot => {
   const previousEstimateTime = previous.gztime;
-  const previousEstimateIsToday = isEstimateTimestampUsable(previousEstimateTime);
+  const previousEstimateIsDisplayable = isEstimateTimestampDisplayable(previousEstimateTime, { allowPreviousCloseCarry: true });
   const previousEstimateNav = toFiniteNumber(previous.gsz);
   const previousEstimateGrowth = toFiniteNumber(previous.gszzl);
 
   const nextEstimateTime = next.gztime;
-  const nextEstimateIsToday = isEstimateTimestampUsable(nextEstimateTime);
+  const nextEstimateIsDisplayable = isEstimateTimestampDisplayable(nextEstimateTime, { allowPreviousCloseCarry: true });
   const nextEstimateNav = toFiniteNumber(next.gsz);
   const nextEstimateGrowth = toFiniteNumber(next.gszzl);
-  const nextEstimateMissing = !nextEstimateIsToday || nextEstimateNav == null || nextEstimateGrowth == null;
+  const nextEstimateMissing = !nextEstimateIsDisplayable || nextEstimateNav == null || nextEstimateGrowth == null;
 
-  const shouldKeepPreviousEstimate = previousEstimateIsToday && previousEstimateNav != null && previousEstimateGrowth != null && nextEstimateMissing;
+  const shouldKeepPreviousEstimate = previousEstimateIsDisplayable && previousEstimateNav != null && previousEstimateGrowth != null && nextEstimateMissing;
 
   if (!shouldKeepPreviousEstimate) {
     return {
       ...next,
+      noValuation: nextEstimateMissing ? next.noValuation : false,
       zzl: toFiniteNumber(next.zzl) ?? toFiniteNumber(previous.zzl) ?? null,
       lastNav: toFiniteNumber(next.lastNav) != null ? next.lastNav : previous.lastNav ?? null,
     };
@@ -524,7 +526,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const hydrateCloudFundsForView = useCallback(async (funds: FundSnapshot[]) => {
     if (funds.length === 0) return { funds, refreshedCount: 0 };
 
-    const autoSourceCodes = funds.filter((fund) => fund.autoSource).map((fund) => fund.code);
+    const autoSourceCodes = funds.map((fund) => fund.code);
     const bestSourceByCode = autoSourceCodes.length > 0 ? await fetchFundsBestSources(autoSourceCodes) : {};
 
     const hydratedResults = await Promise.allSettled(
@@ -532,7 +534,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         fund.code,
         fund,
         "interactive",
-        fund.autoSource ? (bestSourceByCode[fund.code] ?? null) : null,
+        bestSourceByCode[fund.code] ?? null,
       )),
     );
 
@@ -1129,7 +1131,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [hydrateCloudFundsForView, userId, withCloudSyncOverlay]);
 
-  const refreshFunds = useCallback(async () => {
+  const refreshFunds = useCallback(async (mode: "auto" | "manual" = "auto") => {
     if (refreshingRef.current || fundsRef.current.length === 0) return;
     if (typeof window !== "undefined" && window.location.pathname.startsWith("/discover")) return;
 
@@ -1140,53 +1142,91 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const currentFunds = fundsRef.current;
-      const autoSourceCodes = currentFunds.filter((fund) => fund.autoSource).map((fund) => fund.code);
+      const autoSourceCodes = currentFunds.map((fund) => fund.code);
       const bestSourceByCode = autoSourceCodes.length > 0 ? await fetchFundsBestSources(autoSourceCodes) : {};
+      let successCount = 0;
+      let failedCount = 0;
+      let settledCount = 0;
+      let firstSuccessApplied = false;
+      let foregroundFinished = false;
+      let finalized = false;
 
-      const refreshedResults = await Promise.allSettled(
-        currentFunds.map(async (fund) => {
+      let resolveForegroundWait: (() => void) | null = null;
+      const foregroundWait = new Promise<void>((resolve) => {
+        resolveForegroundWait = resolve;
+      });
+
+      const finishForeground = () => {
+        if (foregroundFinished || token !== refreshTokenRef.current) return;
+        foregroundFinished = true;
+        refreshingRef.current = false;
+        setRefreshing(false);
+        resolveForegroundWait?.();
+      };
+
+      const finalizeRefresh = () => {
+        if (finalized || token !== refreshTokenRef.current) return;
+        finalized = true;
+        setValuationSeries(getAllValuationSeries());
+        if (failedCount > 0) {
+          setError(failedCount === currentFunds.length ? "刷新失败" : `部分基金刷新失败（${failedCount}/${currentFunds.length}）`);
+        }
+      };
+
+      const refreshPromises = currentFunds.map(async (fund) => {
+        try {
           const nextFund = await fetchFundBaseData(
             fund.code,
             fund,
-            "throttled",
-            fund.autoSource ? (bestSourceByCode[fund.code] ?? null) : null,
+            mode === "manual" ? "interactive" : "throttled",
+            bestSourceByCode[fund.code] ?? null,
           );
           recordValuation(nextFund.code, { gsz: nextFund.gsz, gztime: nextFund.gztime });
-          return nextFund;
-        }),
-      );
+          successCount += 1;
 
-      const refreshed = refreshedResults.map((result, index) => {
-        const previousFund = fundsRef.current[index];
-        if (result.status !== "fulfilled") return previousFund;
-        return mergeQuoteWithIntradayFallback(previousFund, result.value);
+          if (token === refreshTokenRef.current) {
+            const mergedFund = mergeQuoteWithIntradayFallback(fund, nextFund);
+            if (!firstSuccessApplied) {
+              firstSuccessApplied = true;
+              setPassiveRefreshAt(Date.now());
+            }
+            setState((current) => ({
+              ...current,
+              funds: current.funds.map((item) => (item.code === fund.code ? mergedFund : item)),
+              lastUpdatedAt: nowInMarket().format("YYYY-MM-DD HH:mm:ss"),
+            }));
+          }
+        } catch {
+          failedCount += 1;
+        } finally {
+          settledCount += 1;
+          if (settledCount === currentFunds.length) {
+            finishForeground();
+            finalizeRefresh();
+          }
+        }
       });
-      const successCount = refreshedResults.filter((item) => item.status === "fulfilled").length;
-      const failedCount = refreshedResults.length - successCount;
 
-      if (token === refreshTokenRef.current) {
-        if (successCount > 0) {
-          setPassiveRefreshAt(Date.now());
-          setState((current) => ({
-            ...current,
-            funds: refreshed,
-            lastUpdatedAt: nowInMarket().format("YYYY-MM-DD HH:mm:ss"),
-          }));
-          setValuationSeries(getAllValuationSeries());
-        }
+      const allSettledPromise = Promise.allSettled(refreshPromises).then(() => {
+        finishForeground();
+        finalizeRefresh();
+      });
 
-        if (failedCount > 0) {
-          setError(failedCount === refreshedResults.length ? "刷新失败" : `部分基金刷新失败（${failedCount}/${refreshedResults.length}）`);
-        }
+      if (mode === "manual") {
+        const manualWaitTimer = window.setTimeout(() => {
+          finishForeground();
+        }, MANUAL_REFRESH_FOREGROUND_WAIT_MS);
+
+        await Promise.race([foregroundWait, allSettledPromise]);
+        window.clearTimeout(manualWaitTimer);
+      } else {
+        await allSettledPromise;
       }
     } catch (nextError) {
       if (token === refreshTokenRef.current) {
-        setError(nextError instanceof Error ? nextError.message : "刷新失败");
-      }
-    } finally {
-      if (token === refreshTokenRef.current) {
         refreshingRef.current = false;
         setRefreshing(false);
+        setError(nextError instanceof Error ? nextError.message : "刷新失败");
       }
     }
   }, []);
@@ -1208,6 +1248,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     refreshFunds();
   }, [hydrated, state.funds.length, refreshFunds]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!state.funds.some((fund) => fund.autoSource === false)) return;
+
+    const nextState = applyUserDataMutation((current) => ({
+      ...current,
+      funds: current.funds.map((fund) => (
+        fund.autoSource === false
+          ? { ...fund, autoSource: true }
+          : fund
+      )),
+    }));
+    persistRuntimeState(nextState);
+  }, [applyUserDataMutation, hydrated, persistRuntimeState, state.funds]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -1493,7 +1548,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ? {
             ...fund,
             dataSource: next.dataSource ?? fund.dataSource ?? 1,
-            autoSource: next.autoSource ?? fund.autoSource ?? false,
+            autoSource: next.autoSource ?? fund.autoSource ?? true,
           }
         : fund),
     }));

@@ -128,9 +128,41 @@ export const isEstimateTimestampUsable = (value?: string | null, options: Estima
   const today = now.format("YYYY-MM-DD");
   if (estimateDate === today) {
     const nowMinutes = now.hour() * 60 + now.minute();
-    if (nowMinutes < MARKET_ESTIMATE_START_MINUTES) return false;
+    if (nowMinutes < MARKET_ESTIMATE_START_MINUTES || nowMinutes > MARKET_TRADE_CUTOFF_MINUTES) return false;
     return true;
   }
+
+  if (!options.allowPreviousCloseCarry) return false;
+
+  const nowMinutes = now.hour() * 60 + now.minute();
+  if (nowMinutes >= MARKET_ESTIMATE_START_MINUTES) return false;
+
+  const previousTradingDate = getPreviousLikelyTradingDay(now).format("YYYY-MM-DD");
+  return estimateDate === previousTradingDate;
+};
+
+export const isEstimateTimestampDisplayable = (value?: string | null, options: EstimateTimestampOptions = {}) => {
+  if (!value) return false;
+
+  const estimateTime = toMarketDay(value);
+  if (!estimateTime.isValid()) return false;
+
+  const now = nowInMarket();
+  if (estimateTime.isAfter(now.add(2, "minute"))) return false;
+
+  const estimateMinutes = estimateTime.hour() * 60 + estimateTime.minute();
+  if (estimateMinutes < MARKET_ESTIMATE_START_MINUTES) return false;
+
+  const estimateDate = estimateTime.format("YYYY-MM-DD");
+  const today = now.format("YYYY-MM-DD");
+  if (estimateDate === today) {
+    const nowMinutes = now.hour() * 60 + now.minute();
+    if (nowMinutes < MARKET_ESTIMATE_START_MINUTES) return false;
+    if (estimateMinutes <= MARKET_TRADE_CUTOFF_MINUTES) return true;
+    return nowMinutes > MARKET_TRADE_CUTOFF_MINUTES;
+  }
+
+  if (estimateMinutes > MARKET_TRADE_CUTOFF_MINUTES) return false;
 
   if (!options.allowPreviousCloseCarry) return false;
 

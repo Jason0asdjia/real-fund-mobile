@@ -41,7 +41,7 @@ const normalizeCloudFundEntry = (
   code: fund.code,
   name: fund.name || fund.code,
   dataSource: fund.dataSource === 2 || fund.dataSource === 3 || fund.dataSource === 4 ? fund.dataSource : 1,
-  autoSource: fund.autoSource === true,
+  autoSource: true,
 });
 
 export const createCloudPayload = (state: AppState, preferences: Partial<ImportantPreferenceMap>): CloudUserDataPayload => ({
@@ -102,12 +102,12 @@ const mergeFunds = (localFunds: CloudCoreState["funds"], cloudFunds: CloudCoreSt
   [...cloudFunds, ...localFunds].forEach((fund) => {
     if (!fund?.code) return;
     const existing = mergedMap.get(fund.code);
-    mergedMap.set(fund.code, {
-      code: fund.code,
-      name: fund.name || existing?.name || fund.code,
-      dataSource: fund.dataSource ?? existing?.dataSource ?? 1,
-      autoSource: fund.autoSource ?? existing?.autoSource ?? false,
-    });
+      mergedMap.set(fund.code, {
+        code: fund.code,
+        name: fund.name || existing?.name || fund.code,
+        dataSource: fund.dataSource ?? existing?.dataSource ?? 1,
+        autoSource: true,
+      });
   });
 
   return Array.from(mergedMap.values());

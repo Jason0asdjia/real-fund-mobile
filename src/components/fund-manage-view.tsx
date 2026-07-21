@@ -9,7 +9,6 @@ import dayjs from "dayjs";
 import { flushSync } from "react-dom";
 
 import { useAppState } from "@/components/app-provider";
-import { FundQuoteConfigPanel } from "@/components/fund-quote-config-panel";
 import { SecondaryBottomNav } from "@/components/ui/secondary-bottom-nav";
 import { getHoldingMetrics } from "@/lib/portfolio";
 import { holdingDaysInMarket, todayInMarket } from "@/lib/time";
@@ -338,9 +337,6 @@ export function FundManageView({ code, onBack, asModal = false, redirectOnConfir
         </section>
 
         <section className="divide-y divide-[#e2e7ff]">
-          <div className="px-3 py-4">
-            <FundQuoteConfigPanel fund={fund} />
-          </div>
           <div className="flex items-center justify-between px-3 py-4">
             <div>
               <span className="block text-[length:var(--type-body-size)] font-medium tracking-[0.12em] text-[#747781]">最新净值</span>

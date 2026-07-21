@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { ArrowDownLeft, ArrowUpRight, Check, ChevronLeft, ChevronRight, Circle, CircleMinus, CirclePlus, PenSquare, Trash2 } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
-import { FundQuoteConfigPanel } from "@/components/fund-quote-config-panel";
 import { SecondaryBottomNav } from "@/components/ui/secondary-bottom-nav";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +13,7 @@ import { AreaChart } from "@/components/ui/area-chart";
 import { PieChart } from "@/components/ui/pie-chart";
 import { fetchFundArchiveData, fetchFundBaseData, fetchFundHistoricalNavSeries, fetchFundPreviewData } from "@/lib/fund-api";
 import { formatCurrency, formatPercent, formatSignedCurrency, formatSignedPercent } from "@/lib/portfolio";
-import { isEstimateTimestampUsable, todayInMarket } from "@/lib/time";
+import { isBeforeTradeCutoffInMarket, isEstimateTimestampDisplayable, isEstimateTimestampUsable, todayInMarket } from "@/lib/time";
 import type { FundSnapshot } from "@/lib/types";
 
 type FundDetailViewProps = {
@@ -302,7 +301,11 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
   const todayDate = typeof window !== "undefined" ? todayInMarket() : "";
   const hasTodayData = fund.jzrq === todayDate;
   const hasTodayValuationToday = !fund.noValuation && isEstimateTimestampUsable(fund.gztime);
-  const canUseEstimateToday = !hasTodayData && hasTodayValuationToday && Number.isFinite(Number(fund.gsz));
+  const hasEstimateForDisplay = !fund.noValuation && isEstimateTimestampDisplayable(fund.gztime, { allowPreviousCloseCarry: true });
+  const afterTradeCutoff = !isBeforeTradeCutoffInMarket();
+  const canUseEstimateToday = !hasTodayData && Number.isFinite(Number(fund.gsz)) && (
+    hasTodayValuationToday || (afterTradeCutoff && hasEstimateForDisplay)
+  );
   const officialChangeFromNav =
     latestNav != null && lastNavValid ? ((latestNav - lastNavValue) / lastNavValue) * 100 : null;
   const officialChangePercent = Number.isFinite(Number(fund.zzl)) ? Number(fund.zzl) : officialChangeFromNav;
@@ -438,26 +441,6 @@ export function FundDetailView({ code, onBack, asModal = false }: FundDetailView
               </div>
             </CardContent>
           </Card>
-        </section>
-
-        <section className="px-1.5 pb-1 pt-3">
-          <FundQuoteConfigPanel
-            fund={fund}
-            onFundPatched={(patch) => {
-              if (fundFromState) return;
-              setRemoteFund((current) => current ? { ...current, ...patch } : current);
-            }}
-            onApplyTransientConfig={async (patch) => {
-              if (fundFromState) return;
-              const nextBase = { ...(remoteFund || fund), ...patch, code, name: (remoteFund || fund).name || code };
-              try {
-                const snapshot = await fetchFundBaseData(code, nextBase, "interactive");
-                setRemoteFund((current) => ({ ...(current || nextBase), ...snapshot, ...patch }));
-              } catch {
-                setRemoteFund((current) => current ?? nextBase);
-              }
-            }}
-          />
         </section>
 
         <section className="px-1.5 pb-1">

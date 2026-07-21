@@ -101,7 +101,7 @@ const buildStateContentForHash = (state: AppState) => ({
     code: fund.code,
     name: fund.name || fund.code,
     dataSource: fund.dataSource ?? 1,
-    autoSource: fund.autoSource ?? false,
+    autoSource: fund.autoSource ?? true,
   })),
   holdings: state.holdings,
   transactions: state.transactions,
@@ -168,7 +168,7 @@ const normalizeFund = (value: unknown): FundSnapshot | null => {
     code,
     name,
     dataSource: dataSource === 2 || dataSource === 3 || dataSource === 4 ? dataSource : 1,
-    autoSource: value.autoSource === true,
+    autoSource: true,
   };
 };
 

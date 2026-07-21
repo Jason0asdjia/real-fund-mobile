@@ -13,7 +13,7 @@ import {
   type PortfolioOverviewRow,
 } from "@/components/portfolio-overview-table";
 import { formatCurrency, formatSignedCurrency } from "@/lib/portfolio";
-import { holdingDaysInMarket, isEstimateTimestampUsable, toMarketDay, todayInMarket } from "@/lib/time";
+import { holdingDaysInMarket, isBeforeTradeCutoffInMarket, isEstimateTimestampDisplayable, isEstimateTimestampUsable, toMarketDay, todayInMarket } from "@/lib/time";
 import type { FundHolding, FundSnapshot, FundTransaction } from "@/lib/types";
 
 const VIEW_STATE_KEY = "real-fund-mobile:portfolio-view-state";
@@ -86,6 +86,14 @@ const getEstimateSourceLabel = (fund: FundSnapshot) => {
   return "--";
 };
 
+const getConfiguredSourceLabel = (fund: FundSnapshot) => {
+  if (fund.dataSource === 1) return "东方财富";
+  if (fund.dataSource === 2) return "新浪2";
+  if (fund.dataSource === 3) return "新浪3";
+  if (fund.dataSource === 4) return "QDII";
+  return "--";
+};
+
 const numberFormatter = new Intl.NumberFormat("zh-CN", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -101,6 +109,28 @@ const formatNav = (value?: string | number | null) => {
   const nav = Number(value);
   if (!Number.isFinite(nav)) return "—";
   return nav.toFixed(4);
+};
+
+const resolveClosingEstimate = (fund: FundSnapshot, today: string, series: Array<{ date: string; time: string; value: number }> = []) => {
+  const point = [...series]
+    .filter((item) => item.date === today && item.time <= "15:00" && Number.isFinite(item.value))
+    .sort((a, b) => a.time.localeCompare(b.time))
+    .at(-1);
+
+  if (!point) return null;
+
+  const previousNav = Number(fund.lastNav);
+  const growth = Number.isFinite(previousNav) && previousNav > 0
+    ? ((point.value - previousNav) / previousNav) * 100
+    : Number.isFinite(Number(fund.gszzl))
+      ? Number(fund.gszzl)
+      : null;
+
+  return {
+    nav: point.value,
+    growth,
+    gztime: `${today} 15:00:00`,
+  };
 };
 
 const resolveTodayProfitStatus = (hasOfficialToday: boolean, todayProfit: number | null): PortfolioOverviewRow["todayProfitStatus"] => {
@@ -128,8 +158,8 @@ const buildRows = (
     const normalizedOfficialDate = fund.jzrq ? toMarketDay(`${fund.jzrq}T00:00:00`).format("YYYY-MM-DD") : null;
     const hasTodayData = normalizedOfficialDate === today;
     const hasTodayValuation = !fund.noValuation && isEstimateTimestampUsable(fund.gztime);
-    const hasEstimateForDisplay = !fund.noValuation && isEstimateTimestampUsable(fund.gztime, { allowPreviousCloseCarry: true });
-    const canUseEstimate = !hasTodayData && hasTodayValuation && Number.isFinite(Number(fund.gsz));
+    const hasEstimateForDisplay = !fund.noValuation && isEstimateTimestampDisplayable(fund.gztime, { allowPreviousCloseCarry: true });
+    const afterTradeCutoff = !isBeforeTradeCutoffInMarket();
     const hasTodayEstimate = hasEstimateForDisplay;
     const estimateNav = hasTodayEstimate && Number.isFinite(Number(fund.gsz)) ? Number(fund.gsz) : null;
     const latestNav = Number.isFinite(Number(fund.dwjz)) ? Number(fund.dwjz) : null;
@@ -139,6 +169,9 @@ const buildRows = (
       : hasEstimateForDisplay && Number.isFinite(Number(fund.gszzl))
         ? Number(fund.gszzl)
         : null;
+    const canUseEstimate = !hasTodayData && estimateNav != null && estimateChangePercent != null && (
+      hasTodayValuation || (afterTradeCutoff && hasEstimateForDisplay)
+    );
     const officialChangePercentFromNav =
       latestNav != null && Number.isFinite(lastNav) && lastNav > 0
         ? ((latestNav - lastNav) / lastNav) * 100
@@ -183,14 +216,19 @@ const buildRows = (
         ? toMarketDay(fund.officialConfirmedAt).format("MM-DD HH:mm")
         : officialUpdatedAt;
     const yesterdayChangeUpdatedAt = officialUpdatedAt;
-    const estimateUpdatedAt = hasEstimateForDisplay && fund.gztime ? toMarketDay(fund.gztime).format("MM-DD HH:mm") : "—";
+    const estimateTime = afterTradeCutoff && fund.gztime && toMarketDay(fund.gztime).format("YYYY-MM-DD") === today
+      ? `${today} 15:00:00`
+      : fund.gztime;
+    const estimateUpdatedAt = hasTodayEstimate && estimateTime ? toMarketDay(estimateTime).format("MM-DD HH:mm") : "—";
+    const estimateRealtimeUpdatedAt = hasTodayEstimate && fund.gztime ? toMarketDay(fund.gztime).format("MM-DD HH:mm") : estimateUpdatedAt;
     const holdingAmountUpdatedAt = officialConfirmedUpdatedAt;
-    const currentValueUpdatedAt = useOfficialForTodayProfit ? officialConfirmedUpdatedAt : canUseEstimate ? estimateUpdatedAt : officialUpdatedAt;
+    const currentValueUpdatedAt = useOfficialForTodayProfit ? officialConfirmedUpdatedAt : canUseEstimate ? estimateRealtimeUpdatedAt : officialUpdatedAt;
     const estimatedProfitUpdatedAt = estimateNav != null ? estimateUpdatedAt : "—";
     const officialSourceLabel = getSourceLabel(fund.officialSource ?? (fund.quoteStatus === "official" ? fund.source : undefined));
     const estimateSourceLabel = getEstimateSourceLabel(fund);
     const activeSourceLabel = useOfficialForTodayProfit ? officialSourceLabel : canUseEstimate ? estimateSourceLabel : officialSourceLabel;
-    const debugSourceTag = `来源：${activeSourceLabel}`;
+    const configuredSourceLabel = getConfiguredSourceLabel(fund);
+    const debugSourceTag = `使用：${activeSourceLabel} | 配置：${configuredSourceLabel} | 自动：${fund.autoSource === false ? "关" : "开"}`;
 
     return {
       code: fund.code,
@@ -666,7 +704,7 @@ export default function PortfolioPage() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => refreshFunds()}
+              onClick={() => refreshFunds("manual")}
               disabled={refreshing}
               aria-label="刷新基金估值"
               className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"

@@ -238,6 +238,26 @@ const normalizeValuationDataSource = (value?: number | null): 1 | 2 | 3 | 4 => {
   return 1;
 };
 
+const AUTO_VALUATION_SOURCE_ORDER: Array<1 | 2 | 3 | 4> = [2, 3, 4, 1];
+
+const buildAutoValuationSourceOrder = (preferredSource?: 1 | 2 | 3 | 4 | null, previousFund?: FundSnapshot | null) => {
+  const candidates = [preferredSource, previousFund?.dataSource ?? null, ...AUTO_VALUATION_SOURCE_ORDER];
+  return candidates.reduce<Array<1 | 2 | 3 | 4>>((acc, item) => {
+    if (item == null) return acc;
+    const normalized = normalizeValuationDataSource(item);
+    if (!acc.includes(normalized)) acc.push(normalized);
+    return acc;
+  }, []);
+};
+
+const resolveEstimateDataSource = (estimate: FundSnapshot, fallbackSource: 1 | 2 | 3 | 4) => {
+  if (estimate.dataSource != null) return normalizeValuationDataSource(estimate.dataSource);
+  if (estimate.valuationSource === "sina_ds2") return 2;
+  if (estimate.valuationSource === "sina_ds3") return 3;
+  if (estimate.valuationSource === "supabase_qdii") return 4;
+  return normalizeValuationDataSource(fallbackSource);
+};
+
 const loadScript = (url: string) =>
   new Promise<any>((resolve, reject) => {
     if (typeof document === "undefined" || !document.body) {
@@ -1117,7 +1137,7 @@ const fetchSinaEstimateNetworthResponse = (code: string) =>
 const requestFundEstimateData = (code: string, priority: "high" | "normal" | "interactive" = "normal") =>
   runWithSourcePriority("eastmoneyEstimate", async () => {
     const cached = estimateCache.get(code);
-    if (cached && Date.now() - cached.ts < ESTIMATE_CACHE_MS) {
+    if (priority !== "interactive" && cached && Date.now() - cached.ts < ESTIMATE_CACHE_MS) {
       return cached.data;
     }
 
@@ -1249,7 +1269,7 @@ const requestSinaEstimateData = async (
     code,
     name: previousFund?.name || code,
     dataSource,
-    autoSource: previousFund?.autoSource ?? false,
+    autoSource: previousFund?.autoSource !== false,
     dwjz: previousFund?.dwjz ?? null,
     gsz: estimateNav,
     gztime: `${date} ${minTime}`,
@@ -1314,7 +1334,7 @@ export const fetchFundValuationBySource = async (
       code,
       name: previousFund?.name || code,
       dataSource: 4,
-      autoSource: previousFund?.autoSource ?? false,
+      autoSource: previousFund?.autoSource !== false,
     };
   }
 
@@ -1328,7 +1348,7 @@ export const fetchFundValuationBySource = async (
       return {
         ...primary,
         dataSource: 1,
-        autoSource: previousFund?.autoSource ?? false,
+        autoSource: previousFund?.autoSource !== false,
         valuationSource: "fundgz",
       };
     }
@@ -1339,19 +1359,37 @@ export const fetchFundValuationBySource = async (
   return requestEstimateSecondaryFallback(code, previousFund, priority);
 };
 
+const fetchFundValuationAutomatically = async (
+  code: string,
+  previousFund?: FundSnapshot | null,
+  priority: "high" | "normal" | "interactive" = "normal",
+  preferredSourceOverride?: 1 | 2 | 3 | 4 | null,
+) => {
+  const sourceOrder = buildAutoValuationSourceOrder(preferredSourceOverride, previousFund);
+  let lastError: Error | null = null;
+
+  for (const sourceId of sourceOrder) {
+    try {
+      return await fetchFundValuationBySource(code, sourceId, previousFund, priority);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(`Valuation source ${sourceId} failed`);
+    }
+  }
+
+  throw lastError ?? new Error(`Unable to fetch valuation for ${code}`);
+};
+
 export const fetchFundPreviewData = async (code: string, previousFund?: FundSnapshot | null): Promise<FundSnapshot> => {
   return withInFlightDedup(previewInFlight, code, async () => {
-    const autoSource = previousFund?.autoSource === true;
-    const sourceId = autoSource
-      ? await fetchFundBestSource(code) ?? previousFund?.dataSource ?? 1
-      : previousFund?.dataSource ?? 1;
-    const estimate = await fetchFundValuationBySource(code, sourceId, previousFund, "interactive");
+    const autoSource = previousFund?.autoSource !== false;
+    const sourceId = await fetchFundBestSource(code).catch(() => null);
+    const estimate = await fetchFundValuationAutomatically(code, previousFund, "interactive", sourceId);
     const preview = {
       ...(previousFund || {}),
       ...estimate,
       code,
       name: estimate.name || previousFund?.name || code,
-      dataSource: normalizeValuationDataSource(sourceId),
+      dataSource: resolveEstimateDataSource(estimate, sourceId ?? previousFund?.dataSource ?? 2),
       autoSource,
     };
     return preview;
@@ -1366,15 +1404,13 @@ export const fetchFundBaseData = async (
 ): Promise<FundSnapshot> => {
   const skipOfficialRefresh = shouldSkipOfficialRefresh(previousFund);
   const previousOfficial = skipOfficialRefresh ? buildOfficialQuoteFromPreviousFund(previousFund) : null;
-  const autoSource = previousFund?.autoSource === true;
-  const preferredSource = preferredSourceOverride ?? (autoSource
-    ? await fetchFundBestSource(code) ?? previousFund?.dataSource ?? 1
-    : previousFund?.dataSource ?? 1);
+  const autoSource = previousFund?.autoSource !== false;
+  const preferredSource = preferredSourceOverride ?? await fetchFundBestSource(code).catch(() => null) ?? previousFund?.dataSource ?? 2;
   const estimatePriority = mode === "interactive" ? "interactive" : "normal";
 
   const [officialResult, estimate] = await Promise.allSettled([
     previousOfficial ? Promise.resolve(previousOfficial) : fetchOfficialQuoteWithFallback(code, mode),
-    fetchFundValuationBySource(code, preferredSource, previousFund, estimatePriority),
+    fetchFundValuationAutomatically(code, previousFund, estimatePriority, preferredSource),
   ]);
 
   const officialResolved = officialResult.status === "fulfilled" ? officialResult.value.official : null;
@@ -1483,7 +1519,7 @@ export const fetchFundBaseData = async (
       ...estimate.value,
       code,
       name: estimate.value.name || officialQuote?.name || trendFallbackResult?.fundName || previousFund?.name || "",
-      dataSource: normalizeValuationDataSource(preferredSource),
+      dataSource: resolveEstimateDataSource(estimate.value, preferredSource),
       autoSource,
       dwjz: effectiveLatestNav != null ? String(effectiveLatestNav) : estimate.value.dwjz,
       jzrq: effectiveLatestDate,
@@ -1494,6 +1530,7 @@ export const fetchFundBaseData = async (
       officialSource: resolvedOfficialSource,
       estimateSource: mapEstimateSource(estimate.value.source ?? previousFund?.estimateSource),
       source: estimate.value.source ?? resolvedOfficialSource,
+      noValuation: false,
       quoteStatus: "estimated",
     };
     if ((snapshot.valuationSource === "supabase_qdii" || (snapshot.gsz == null && snapshot.gszzl != null)) && snapshot.dwjz) {
