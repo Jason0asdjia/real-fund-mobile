@@ -5,7 +5,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Check, Circle, GripVertical, RefreshCw, Search, X } from "lucide-react";
 
 import { useAppState } from "@/components/app-provider";
-import { Button } from "@/components/ui/button";
 import {
   PORTFOLIO_OVERVIEW_COLUMN_OPTIONS,
   PortfolioOverviewTable,
@@ -665,16 +664,15 @@ export default function PortfolioPage() {
             <p className="mt-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">Portfolio Summary</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
+            <button
+              type="button"
               onClick={() => refreshFunds()}
               disabled={refreshing}
               aria-label="刷新基金估值"
-              className="h-9 w-9 min-h-9 min-w-0 p-0"
-              style={{ borderRadius: "0.375rem" }}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
             >
               <RefreshCw size={18} className={refreshing ? "is-spinning" : ""} />
-            </Button>
+            </button>
             <Link
               href="/discover"
               aria-label="搜索基金"
