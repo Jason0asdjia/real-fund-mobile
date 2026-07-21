@@ -729,7 +729,7 @@ export default function PortfolioPage() {
             </p>
           </div>
           <div className="shrink-0 pt-0.5 text-right">
-            <p className="m-0 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-500">最近更新</p>
+            <p className="m-0 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-500">最近刷新</p>
             <p className="mt-1.5 text-sm font-medium tabular-nums text-slate-700">{totalUpdatedAt}</p>
           </div>
         </div>
