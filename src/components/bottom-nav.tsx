@@ -17,26 +17,26 @@ const items = [
 
 export function BottomNav({ className }: { className?: string }) {
   const pathname = usePathname();
-  const { state, passiveRefreshAt } = useAppState();
+  const { state, autoRefreshCycleStartedAt, manualRefreshInProgress } = useAppState();
   const [flashActive, setFlashActive] = useState(false);
   const [progress, setProgress] = useState(0);
-  const lastPassiveRefreshRef = useRef<number | null>(passiveRefreshAt);
-  const cycleStartRef = useRef<number | null>(passiveRefreshAt);
+  const lastCycleStartRef = useRef<number | null>(autoRefreshCycleStartedAt);
+  const cycleStartRef = useRef<number | null>(autoRefreshCycleStartedAt);
 
   useEffect(() => {
-    if (!passiveRefreshAt) return;
+    if (!autoRefreshCycleStartedAt) return;
 
-    const isNewPassiveRefresh = lastPassiveRefreshRef.current !== null && lastPassiveRefreshRef.current !== passiveRefreshAt;
-    lastPassiveRefreshRef.current = passiveRefreshAt;
-    cycleStartRef.current = passiveRefreshAt;
-    setProgress(Math.min(Math.max((Date.now() - passiveRefreshAt) / Math.max(state.refreshMs, 1), 0), 1));
+    const isNewCycle = lastCycleStartRef.current !== null && lastCycleStartRef.current !== autoRefreshCycleStartedAt;
+    lastCycleStartRef.current = autoRefreshCycleStartedAt;
+    cycleStartRef.current = autoRefreshCycleStartedAt;
+    setProgress(Math.min(Math.max((Date.now() - autoRefreshCycleStartedAt) / Math.max(state.refreshMs, 1), 0), 1));
 
-    if (!isNewPassiveRefresh) return;
+    if (!isNewCycle || manualRefreshInProgress) return;
 
     setFlashActive(true);
     const timer = window.setTimeout(() => setFlashActive(false), 900);
     return () => window.clearTimeout(timer);
-  }, [passiveRefreshAt, state.refreshMs]);
+  }, [autoRefreshCycleStartedAt, manualRefreshInProgress, state.refreshMs]);
 
   useEffect(() => {
     let frameId = 0;
@@ -56,7 +56,13 @@ export function BottomNav({ className }: { className?: string }) {
 
     frameId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frameId);
-  }, [passiveRefreshAt, state.refreshMs]);
+  }, [autoRefreshCycleStartedAt, state.refreshMs]);
+
+  useEffect(() => {
+    if (!manualRefreshInProgress) return;
+    setProgress(0);
+    setFlashActive(false);
+  }, [manualRefreshInProgress]);
 
   return (
     <Tabs05
@@ -64,7 +70,7 @@ export function BottomNav({ className }: { className?: string }) {
       pathname={pathname}
       className={clsx(className, flashActive && "bottom-nav--flash")}
       style={{
-        ["--bottom-nav-progress" as string]: progress.toString(),
+        ["--bottom-nav-progress" as string]: manualRefreshInProgress ? "0" : progress.toString(),
       }}
     />
   );

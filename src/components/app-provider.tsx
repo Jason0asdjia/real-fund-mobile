@@ -21,9 +21,10 @@ type AppContextValue = {
   state: AppState;
   hydrated: boolean;
   refreshing: boolean;
+  manualRefreshInProgress: boolean;
   seeding: boolean;
   error: string;
-  passiveRefreshAt: number | null;
+  autoRefreshCycleStartedAt: number | null;
   valuationSeries: Record<string, ValuationPoint[]>;
   search: (keyword: string) => Promise<SearchFundResult[]>;
   recordSearchHistory: (keyword: string) => void;
@@ -399,10 +400,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppState>(initialRuntime.state);
   const [hydrated, setHydrated] = useState(initialRuntime.hydrated);
   const [refreshing, setRefreshing] = useState(false);
+  const [manualRefreshInProgress, setManualRefreshInProgress] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [error, setError] = useState("");
   const [cloudSyncRetryTick, setCloudSyncRetryTick] = useState(0);
-  const [passiveRefreshAt, setPassiveRefreshAt] = useState<number | null>(null);
+  const [autoRefreshCycleStartedAt, setAutoRefreshCycleStartedAt] = useState<number | null>(null);
   const [valuationSeries, setValuationSeries] = useState<Record<string, ValuationPoint[]>>(initialRuntime.valuationSeries);
   const hydratedRef = useRef(initialRuntime.hydrated);
   const fundsRef = useRef<FundSnapshot[]>(initialRuntime.state.funds);
@@ -1138,6 +1140,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const token = ++refreshTokenRef.current;
     refreshingRef.current = true;
     setRefreshing(true);
+    if (mode === "manual") {
+      setManualRefreshInProgress(true);
+    }
     setError("");
 
     try {
@@ -1161,6 +1166,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         foregroundFinished = true;
         refreshingRef.current = false;
         setRefreshing(false);
+        if (mode === "manual") {
+          setManualRefreshInProgress(false);
+          setAutoRefreshCycleStartedAt(Date.now());
+        }
         resolveForegroundWait?.();
       };
 
@@ -1188,7 +1197,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             const mergedFund = mergeQuoteWithIntradayFallback(fund, nextFund);
             if (!firstSuccessApplied) {
               firstSuccessApplied = true;
-              setPassiveRefreshAt(Date.now());
             }
             setState((current) => ({
               ...current,
@@ -1226,6 +1234,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (token === refreshTokenRef.current) {
         refreshingRef.current = false;
         setRefreshing(false);
+        if (mode === "manual") {
+          setManualRefreshInProgress(false);
+          setAutoRefreshCycleStartedAt(Date.now());
+        }
         setError(nextError instanceof Error ? nextError.message : "刷新失败");
       }
     }
@@ -1241,7 +1253,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (didInitialRefreshRef.current) return;
 
     didInitialRefreshRef.current = true;
-    setPassiveRefreshAt((current) => current ?? Date.now());
+    setAutoRefreshCycleStartedAt((current) => current ?? Date.now());
     if (skipNextInitialRefreshRef.current) {
       skipNextInitialRefreshRef.current = false;
       return;
@@ -1325,17 +1337,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!hydrated) return;
     if (state.refreshMs < 5000) return;
     if (state.funds.length === 0) return;
+    if (manualRefreshInProgress) return;
 
-    setPassiveRefreshAt((current) => current ?? Date.now());
+    const cycleStart = autoRefreshCycleStartedAt ?? Date.now();
+    if (autoRefreshCycleStartedAt == null) {
+      setAutoRefreshCycleStartedAt(cycleStart);
+    }
 
-    const timer = window.setInterval(() => {
+    const dueAt = cycleStart + state.refreshMs;
+    const delay = Math.max(0, dueAt - Date.now());
+    const timer = window.setTimeout(() => {
       console.info(`[refresh-ms] trigger: interval=${state.refreshMs}ms at=${nowInMarket().format("YYYY-MM-DD HH:mm:ss")} CST`);
-      setPassiveRefreshAt(Date.now());
-      refreshFunds();
-    }, state.refreshMs);
+      setAutoRefreshCycleStartedAt(Date.now());
+      void refreshFunds("auto");
+    }, delay);
 
-    return () => window.clearInterval(timer);
-  }, [hydrated, refreshFunds, state.funds.length, state.refreshMs]);
+    return () => window.clearTimeout(timer);
+  }, [autoRefreshCycleStartedAt, hydrated, manualRefreshInProgress, refreshFunds, state.funds.length, state.refreshMs]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -1801,10 +1819,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     refreshingRef.current = false;
     seedingRef.current = false;
     setRefreshing(false);
+    setManualRefreshInProgress(false);
     setSeeding(false);
     setError("");
     didInitialRefreshRef.current = false;
-    setPassiveRefreshAt(null);
+    setAutoRefreshCycleStartedAt(null);
     const clearedState = markAppStateSynced(defaultAppState, defaultAppState.sync.lastSyncedVersion);
     setState(clearedState);
     setValuationSeries({});
@@ -1839,6 +1858,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     refreshTokenRef.current += 1;
     refreshingRef.current = false;
     setRefreshing(false);
+    setManualRefreshInProgress(false);
     setError("");
     const seed = buildDemoSeed();
     const nextSeedState = bumpAppStateVersion(normalizeAppState(seed.state));
@@ -1870,10 +1890,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       refreshingRef.current = false;
       seedingRef.current = false;
       setRefreshing(false);
+      setManualRefreshInProgress(false);
       setSeeding(false);
       setError("");
       didInitialRefreshRef.current = nextState.funds.length > 0;
-      setPassiveRefreshAt(null);
+      setAutoRefreshCycleStartedAt(nextState.funds.length > 0 ? Date.now() : null);
       setState(nextState);
       setValuationSeries(nextSeries);
       fundsRef.current = nextState.funds;
@@ -1893,9 +1914,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       state,
       hydrated,
       refreshing,
+      manualRefreshInProgress,
       seeding,
       error,
-      passiveRefreshAt,
+      autoRefreshCycleStartedAt,
       valuationSeries,
       search,
       recordSearchHistory,
@@ -1935,7 +1957,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       error,
       hydrated,
       importBackupData,
-      passiveRefreshAt,
+      autoRefreshCycleStartedAt,
+      manualRefreshInProgress,
       pullCloudConfig,
       pushCloudConfig,
       pushCloudConfigUploadOnly,
