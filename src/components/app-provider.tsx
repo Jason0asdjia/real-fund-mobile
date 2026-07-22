@@ -1166,9 +1166,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         foregroundFinished = true;
         refreshingRef.current = false;
         setRefreshing(false);
+        setAutoRefreshCycleStartedAt(Date.now());
         if (mode === "manual") {
           setManualRefreshInProgress(false);
-          setAutoRefreshCycleStartedAt(Date.now());
         }
         resolveForegroundWait?.();
       };
@@ -1234,9 +1234,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (token === refreshTokenRef.current) {
         refreshingRef.current = false;
         setRefreshing(false);
+        setAutoRefreshCycleStartedAt(Date.now());
         if (mode === "manual") {
           setManualRefreshInProgress(false);
-          setAutoRefreshCycleStartedAt(Date.now());
         }
         setError(nextError instanceof Error ? nextError.message : "刷新失败");
       }
@@ -1248,18 +1248,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (state.funds.length === 0) {
       didInitialRefreshRef.current = false;
       skipNextInitialRefreshRef.current = false;
+      setAutoRefreshCycleStartedAt(null);
       return;
     }
     if (didInitialRefreshRef.current) return;
 
     didInitialRefreshRef.current = true;
-    setAutoRefreshCycleStartedAt((current) => current ?? Date.now());
     if (skipNextInitialRefreshRef.current) {
       skipNextInitialRefreshRef.current = false;
+      setAutoRefreshCycleStartedAt((current) => current ?? Date.now());
       return;
     }
     refreshFunds();
   }, [hydrated, state.funds.length, refreshFunds]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (state.funds.length === 0) return;
+    if (autoRefreshCycleStartedAt != null) return;
+    if (refreshingRef.current || seedingRef.current || manualRefreshInProgress) return;
+
+    setAutoRefreshCycleStartedAt(Date.now());
+  }, [autoRefreshCycleStartedAt, hydrated, manualRefreshInProgress, state.funds.length]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -1338,22 +1348,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (state.refreshMs < 5000) return;
     if (state.funds.length === 0) return;
     if (manualRefreshInProgress) return;
+    if (refreshing) return;
+    if (autoRefreshCycleStartedAt == null) return;
 
-    const cycleStart = autoRefreshCycleStartedAt ?? Date.now();
-    if (autoRefreshCycleStartedAt == null) {
-      setAutoRefreshCycleStartedAt(cycleStart);
-    }
-
-    const dueAt = cycleStart + state.refreshMs;
+    const dueAt = autoRefreshCycleStartedAt + state.refreshMs;
     const delay = Math.max(0, dueAt - Date.now());
     const timer = window.setTimeout(() => {
       console.info(`[refresh-ms] trigger: interval=${state.refreshMs}ms at=${nowInMarket().format("YYYY-MM-DD HH:mm:ss")} CST`);
-      setAutoRefreshCycleStartedAt(Date.now());
       void refreshFunds("auto");
     }, delay);
 
     return () => window.clearTimeout(timer);
-  }, [autoRefreshCycleStartedAt, hydrated, manualRefreshInProgress, refreshFunds, state.funds.length, state.refreshMs]);
+  }, [autoRefreshCycleStartedAt, hydrated, manualRefreshInProgress, refreshFunds, refreshing, state.funds.length, state.refreshMs]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -1508,6 +1514,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         };
       });
       didInitialRefreshRef.current = true;
+      setAutoRefreshCycleStartedAt(Date.now());
       return snapshot;
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "添加基金失败");
@@ -1863,6 +1870,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const seed = buildDemoSeed();
     const nextSeedState = bumpAppStateVersion(normalizeAppState(seed.state));
     didInitialRefreshRef.current = true;
+    setAutoRefreshCycleStartedAt(nextSeedState.funds.length > 0 ? Date.now() : null);
     setState(nextSeedState);
     setValuationSeries(seed.valuationSeries);
     fundsRef.current = nextSeedState.funds;

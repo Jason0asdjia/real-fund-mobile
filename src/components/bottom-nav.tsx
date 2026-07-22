@@ -17,7 +17,7 @@ const items = [
 
 export function BottomNav({ className }: { className?: string }) {
   const pathname = usePathname();
-  const { state, autoRefreshCycleStartedAt, manualRefreshInProgress } = useAppState();
+  const { state, autoRefreshCycleStartedAt, manualRefreshInProgress, refreshing } = useAppState();
   const [flashActive, setFlashActive] = useState(false);
   const [progress, setProgress] = useState(0);
   const lastCycleStartRef = useRef<number | null>(autoRefreshCycleStartedAt);
@@ -31,12 +31,12 @@ export function BottomNav({ className }: { className?: string }) {
     cycleStartRef.current = autoRefreshCycleStartedAt;
     setProgress(Math.min(Math.max((Date.now() - autoRefreshCycleStartedAt) / Math.max(state.refreshMs, 1), 0), 1));
 
-    if (!isNewCycle || manualRefreshInProgress) return;
+    if (!isNewCycle || refreshing) return;
 
     setFlashActive(true);
     const timer = window.setTimeout(() => setFlashActive(false), 900);
     return () => window.clearTimeout(timer);
-  }, [autoRefreshCycleStartedAt, manualRefreshInProgress, state.refreshMs]);
+  }, [autoRefreshCycleStartedAt, refreshing, state.refreshMs]);
 
   useEffect(() => {
     let frameId = 0;
@@ -59,10 +59,10 @@ export function BottomNav({ className }: { className?: string }) {
   }, [autoRefreshCycleStartedAt, state.refreshMs]);
 
   useEffect(() => {
-    if (!manualRefreshInProgress) return;
+    if (!refreshing) return;
     setProgress(0);
     setFlashActive(false);
-  }, [manualRefreshInProgress]);
+  }, [refreshing]);
 
   return (
     <Tabs05
@@ -70,7 +70,7 @@ export function BottomNav({ className }: { className?: string }) {
       pathname={pathname}
       className={clsx(className, flashActive && "bottom-nav--flash")}
       style={{
-        ["--bottom-nav-progress" as string]: manualRefreshInProgress ? "0" : progress.toString(),
+        ["--bottom-nav-progress" as string]: refreshing ? "0" : progress.toString(),
       }}
     />
   );

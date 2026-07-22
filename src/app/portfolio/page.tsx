@@ -290,7 +290,7 @@ const readColumnOrder = (): PortfolioOverviewColumnId[] => {
 };
 
 export default function PortfolioPage() {
-  const { state, refreshing, refreshFunds } = useAppState();
+  const { state, refreshing, manualRefreshInProgress, refreshFunds } = useAppState();
   const [restoredState, setRestoredState] = useState<PortfolioViewState>({ windowY: 0, tableTop: 0, tableLeft: 0 });
   const [columnVisibility, setColumnVisibility] = useState<Record<PortfolioOverviewColumnId, boolean>>(() => readColumnVisibility());
   const [columnOrder, setColumnOrder] = useState<PortfolioOverviewColumnId[]>(() => readColumnOrder());
@@ -709,7 +709,7 @@ export default function PortfolioPage() {
               aria-label="刷新基金估值"
               className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
             >
-              <RefreshCw size={18} className={refreshing ? "is-spinning" : ""} />
+              <RefreshCw size={18} className={manualRefreshInProgress ? "is-spinning" : ""} />
             </button>
             <Link
               href="/discover"
